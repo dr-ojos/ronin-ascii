@@ -1080,7 +1080,7 @@ function update(dt) {
           en.knock.copy(tmp.normalize()).multiplyScalar((spin ? 12 : 8) / (en.big ? 3 : 1));
           if (en.state === 'windup' && !en.big) { en.state = 'recover'; en.t = 0.5; }
           burst(new THREE.Vector3(en.g.position.x, 1.3 * en.scale, en.g.position.z), 0xffffff, 18, 5, 0.12);
-          sparkBurst(spTmp.set(en.g.position.x, 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(1.25), 0.35), spin ? 14 : 9, spin ? 5.5 : 4.5);
+          sparkBurst(new THREE.Vector3(en.g.position.x, 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(1.25), 0.35), spin ? 14 : 9, spin ? 5.5 : 4.5);
         }
       }
       if (hits) { hitStop = spin ? 0.09 : 0.06; shake = Math.max(shake, spin ? 0.35 : 0.2); sfx.hit({ heavy: spin, pan: hitPan / hits, count: hits }); }
