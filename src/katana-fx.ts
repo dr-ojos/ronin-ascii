@@ -65,70 +65,92 @@ const bladeBase = new THREE.Vector3(), bladeTip = new THREE.Vector3(), prevTip =
 const prevBase = new THREE.Vector3();
 
 // ---------------------------------------------------------------- katana trail
-// a ribbon of light that follows the edge while it moves, then breaks into grains and drifts off like vapour
-const TRAIL_N = 48, TRAIL_LIFE = 0.34;
+// Two ribbons follow the edge of every cut, in the blade's own colour:
+// · the streak: a narrow, bright band hugging the edge. White-hot where the blade is now, it cools
+//   into the weapon's colour, thins towards the tip like a comet and is gone in a fraction of a second.
+// · the vapour: wider and fainter, it lingers, rises, spreads and breaks into twinkling grains.
+// Drawn with different glyph ramps in the ASCII pass: the streak with the bright light ramp, the vapour with
+// the sky ramp ( . ' ` * + ), so a cut reads as a sharp stroke dissolving into dust.
+const TRAIL_N = 160, STREAK_LIFE = 0.2, VAPOUR_LIFE = 0.6;
 let trailK = 1;
-const trail: { b: THREE.Vector3; t: THREE.Vector3; age: number; k: number }[] = [];   // newest first: { b, t, age, k }
-const trPos = new Float32Array(TRAIL_N * 6), trCol = new Float32Array(TRAIL_N * 6);
-const trGeo = new THREE.BufferGeometry();
-trGeo.setAttribute('position', new THREE.BufferAttribute(trPos, 3));
-trGeo.setAttribute('color', new THREE.BufferAttribute(trCol, 3));
-{ const idx = []; for (let i = 0; i < TRAIL_N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } trGeo.setIndex(idx); }
-trGeo.setDrawRange(0, 0);
-const trailU = { uT: { value: 0 } };
-const trailMat = new THREE.MeshBasicMaterial({
+interface TrailPt { b: THREE.Vector3; t: THREE.Vector3; age: number; k: number }
+const trail: TrailPt[] = [];   // newest first
+const blend = {
   vertexColors: true, side: THREE.DoubleSide, transparent: true, depthWrite: false, fog: false,
   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
   blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.ZeroFactor
-});
-trailMat.userData.cls = CLS.sky;   // drawn with the sky ramp ( . ' ` * + ): a dotted, vaporous haze
-trailMat.onBeforeCompile = sh => {
-  sh.uniforms.uT = trailU.uT;
-  sh.fragmentShader = 'uniform float uT;\n' + sh.fragmentShader
-    .replace('#include <color_fragment>', `#include <color_fragment>
-      { // vapour: the fainter the ribbon, the more it breaks into twinkling grains
-        float f = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
-        vec2 g = floor(gl_FragCoord.xy / 3.0);
-        float h = fract(sin(dot(g + floor(uT * 24.0) * vec2(7.13, 3.71), vec2(12.9898, 78.233))) * 43758.5453);
-        if (f < 0.02 || h > f * 4.0) discard;
-        diffuseColor.rgb *= 0.55 + 0.9 * h; }`)
-    .replace(/}\s*$/, `  gl_FragColor.a = ${CLS.sky.toFixed(2)};\n}`);
-};
-const trailMesh = new THREE.Mesh(trGeo, trailMat);
-trailMesh.frustumCulled = false; scene.add(trailMesh);
+} as const;
+const trailU = { uT: { value: 0 } };
+function ribbon(cls: number, grains: boolean) {
+  const pos = new Float32Array(TRAIL_N * 6), col = new Float32Array(TRAIL_N * 6), geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const idx: number[] = []; for (let i = 0; i < TRAIL_N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  geo.setIndex(idx); geo.setDrawRange(0, 0);
+  const mat = new THREE.MeshBasicMaterial(blend);
+  mat.userData.cls = cls;
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uT = trailU.uT;
+    sh.fragmentShader = 'uniform float uT;\n' + sh.fragmentShader
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        { float f = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
+          ${grains ? `// vapour: the fainter the ribbon, the more it breaks into twinkling grains
+          vec2 g = floor(gl_FragCoord.xy / 3.0);
+          float h = fract(sin(dot(g + floor(uT * 24.0) * vec2(7.13, 3.71), vec2(12.9898, 78.233))) * 43758.5453);
+          if (f < 0.015 || h > f * 3.5) discard;
+          diffuseColor.rgb *= 0.55 + 0.9 * h;` : `if (f < 0.02) discard;`} }`)
+      .replace(/}\s*$/, `  gl_FragColor.a = ${cls.toFixed(2)};\n}`);
+  };
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false; scene.add(mesh);
+  return { pos, col, geo };
+}
+const streak = ribbon(CLS.light, false), vapour = ribbon(CLS.sky, true);
+const HOT = new THREE.Color(), tmpC = new THREE.Color();
 function pushTrail(b: THREE.Vector3, t: THREE.Vector3, age: number, k: number) {
   trail.unshift({ b: b.clone(), t: t.clone(), age, k });
   if (trail.length > TRAIL_N) trail.pop();
 }
 function updateTrail(dt: number, emit: boolean) {
   trailU.uT.value += dt;
+  const vLife = VAPOUR_LIFE * (0.7 + 0.3 * trailK), sLife = STREAK_LIFE * (0.8 + 0.2 * trailK);
   for (const s of trail) s.age += dt;
-  while (trail.length && trail[trail.length - 1].age > TRAIL_LIFE) trail.pop();
-  if (emit && swingS > 0.16) {
+  while (trail.length && trail[trail.length - 1].age > vLife) trail.pop();
+  if (emit && swingS > 0.12) {
     // sub-steps between last frame's blade and this one, so fast cuts draw a smooth arc
-    const steps = trail.length ? Math.min(5, Math.max(1, Math.ceil(prevTip.distanceTo(bladeTip) / 0.1))) : 1;
+    const steps = trail.length ? Math.min(10, Math.max(1, Math.ceil(prevTip.distanceTo(bladeTip) / 0.06))) : 1;
     for (let k = 1; k <= steps; k++) {
       const f = k / steps;
       pushTrail(spTmp.lerpVectors(prevBase, bladeBase, f), new THREE.Vector3().lerpVectors(prevTip, bladeTip, f), dt * (1 - f), swingS);
     }
   }
+  HOT.copy(CG).lerp(tmpC.set(0xffffff), 0.4);
   const n = trail.length;
   for (let i = 0; i < n; i++) {
-    const s = trail[i], j = i * 6, a = s.age / TRAIL_LIFE;
-    // drift: rises, spreads away from the hilt and wobbles as it dissipates
-    const rise = s.age * 0.9, spread = s.age * 0.7, wob = Math.sin(s.age * 18 + i * 0.7) * s.age * 0.25;
-    const dx = s.t.x - s.b.x, dz = s.t.z - s.b.z;
-    trPos[j] = s.b.x + wob; trPos[j + 1] = s.b.y + rise * 0.5; trPos[j + 2] = s.b.z - wob;
-    trPos[j + 3] = s.t.x + dx * spread + wob; trPos[j + 4] = s.t.y + rise; trPos[j + 5] = s.t.z + dz * spread - wob;
-    const fade = Math.pow(Math.max(0, 1 - a), 1.7) * Math.min(1, s.k * 1.3) * (i === 0 ? 0.6 : 1);
-    // the weapon's colour at the edge, faint near the hilt
-    const tb = 0.48 * fade * trailK;
-    trCol[j] = CG.r * tb * 0.15; trCol[j + 1] = CG.g * tb * 0.15; trCol[j + 2] = CG.b * tb * 0.15;
-    trCol[j + 3] = CG.r * tb; trCol[j + 4] = CG.g * tb; trCol[j + 5] = CG.b * tb;
+    const s = trail[i], j = i * 6, dx = s.t.x - s.b.x, dy = s.t.y - s.b.y, dz = s.t.z - s.b.z;
+    const end = i === 0 || i === n - 1 ? 0.3 : 1, kk = Math.min(1, s.k * 1.4) * end;
+    // streak: from 55 % of the blade to just past the tip; its inner edge slides out as it ages (a thinning crescent)
+    const as = Math.min(1, s.age / sLife), inner = 0.74 + 0.24 * as, outer = 1.03;
+    streak.pos[j] = s.b.x + dx * inner; streak.pos[j + 1] = s.b.y + dy * inner; streak.pos[j + 2] = s.b.z + dz * inner;
+    streak.pos[j + 3] = s.b.x + dx * outer; streak.pos[j + 4] = s.b.y + dy * outer; streak.pos[j + 5] = s.b.z + dz * outer;
+    const fs = Math.pow(1 - as, 2.4) * kk * (0.3 + 0.1 * trailK);
+    tmpC.copy(HOT).lerp(CG, Math.min(1, as * 4));                     // white-hot → the blade's colour
+    streak.col[j] = tmpC.r * fs * 0.25; streak.col[j + 1] = tmpC.g * fs * 0.25; streak.col[j + 2] = tmpC.b * fs * 0.25;
+    streak.col[j + 3] = tmpC.r * fs; streak.col[j + 4] = tmpC.g * fs; streak.col[j + 5] = tmpC.b * fs;
+    // vapour: the whole blade's sweep, rising, spreading away from the hilt and wobbling as it dissipates
+    const av = s.age / vLife, rise = s.age * 0.9, spread = s.age * 0.8, wob = Math.sin(s.age * 16 + i * 0.5) * s.age * 0.22;
+    vapour.pos[j] = s.b.x + dx * 0.25 + wob; vapour.pos[j + 1] = s.b.y + dy * 0.25 + rise * 0.5; vapour.pos[j + 2] = s.b.z + dz * 0.25 - wob;
+    vapour.pos[j + 3] = s.t.x + dx * spread + wob; vapour.pos[j + 4] = s.t.y + rise; vapour.pos[j + 5] = s.t.z + dz * spread - wob;
+    const fv = Math.pow(Math.max(0, 1 - av), 1.6) * kk * 0.3 * (0.6 + 0.4 * trailK) * Math.min(1, s.age / 0.06 + 0.25);
+    vapour.col[j] = CG.r * fv * 0.1; vapour.col[j + 1] = CG.g * fv * 0.1; vapour.col[j + 2] = CG.b * fv * 0.1;
+    vapour.col[j + 3] = CG.r * fv; vapour.col[j + 4] = CG.g * fv; vapour.col[j + 5] = CG.b * fv;
   }
-  trGeo.attributes.position.needsUpdate = true;
-  trGeo.attributes.color.needsUpdate = true;
-  trGeo.setDrawRange(0, Math.max(0, n - 1) * 6);
+  // the streak only needs its young part
+  let ns = 0; while (ns < n && trail[ns].age < sLife) ns++;
+  for (const [r, count] of [[streak, ns], [vapour, n]] as const) {
+    r.geo.attributes.position.needsUpdate = true; r.geo.attributes.color.needsUpdate = true;
+    r.geo.setDrawRange(0, Math.max(0, count - 1) * 6);
+  }
 }
 function spawnSpark(p: THREE.Vector3, vx: number, vy: number, vz: number, life: number) {
   const i = spNext; spNext = (spNext + 1) % SPARKS;
@@ -201,9 +223,9 @@ export function updateSparks(dt: number, emit: boolean) {
   bladeLight.intensity = (0.5 + swingS * 4 + bladeHeat * 1.5) * fl * (0.8 + w.fx.halo * 0.4);
   // the halo breathes at rest and flares with the cut
   const hk = Math.min(1, swingS * 1.2 + bladeHeat * 0.5);
-  haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 + hk * 0.55;
-  haloCore.opacity = 0.08 + hk * 0.45;
-  halo.scale.set(1 + hk * 0.8, 1 + hk * 0.8, 1 + hk * 0.06);
+  haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 + hk * 0.2;
+  haloCore.opacity = 0.08 + hk * 0.25;
+  halo.scale.set(1 + hk * 0.25, 1 + hk * 0.25, 1);
   halo.visible = sam.root.visible;
   // each blade's own flourish
   if (emit && w.fx.extra) flourish(w.fx.extra, dt, hk);
