@@ -26,7 +26,7 @@ const SLOTS = {
   rain:       { wet: 0.15, gain: 0.35, loop: true, pitch: 0 },
   wind:       { wet: 0.25, gain: 0.3,  loop: true, pitch: 0 },
 };
-const SOUND_DIR = new URL('sounds/', import.meta.url);
+const SOUND_DIR = new URL('../sounds/', import.meta.url);
 
 // Download the manifest and the raw file bytes straight away (no AudioContext needed yet),
 // so the samples are usually ready by the time the player clicks to start.

@@ -1,0 +1,22 @@
+// Shared, mutable game state. Modules import these objects and read / write their fields
+// (an imported `let` can't be reassigned from another module, so loose variables live in `state`).
+import * as THREE from 'three';
+
+export const player = {
+  pos: new THREE.Vector3(0, 0, 4), face: Math.PI, hp: 100, attackT: -1, attackDur: 0.3, combo: 0, lastAttackEnd: -9,
+  hitDone: false, dashT: 0, dashCd: 0, dashDir: new THREE.Vector3(), invuln: 0, walk: 0, moving: 0
+};
+
+export const state = {
+  // camera
+  yaw: 0, pitch: 0.92, camDistUser: 21, photoDist: 3.2,
+  // match
+  wave: 0, kills: 0, waveTimer: 1.5, playing: false, dead: false,
+  // feel
+  shake: 0, hitStop: 0, time: 0,
+  // toggles
+  asciiOn: true, colorMode: 0, photo: false, raining: true
+};
+
+/** keys currently held, by KeyboardEvent.code */
+export const keys = {};
