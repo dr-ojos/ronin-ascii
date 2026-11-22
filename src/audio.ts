@@ -62,7 +62,7 @@ function prefetchSamples(): Promise<[SlotName, SlotSettings & { raw: RawFile[] }
 export function createAudio() {
   // the WebAudio graph is built by init() on the first click; every sound checks ok() before using it
   let ctx!: AudioContext, master!: GainNode, verb!: ConvolverNode, verbSend!: GainNode, noise!: AudioBuffer;
-  let amb: Ambience | null = null, muted = false, scale = 1, ready: Promise<Record<string, number>> | null = null;
+  let amb: Ambience | null = null, rainLevel = 1, muted = false, scale = 1, ready: Promise<Record<string, number>> | null = null;
   const rnd = (a: number, b: number) => a + Math.random() * (b - a);
   const prefetch = prefetchSamples();
   const slots: Record<string, Slot> = {}; // name -> { buffers: AudioBuffer[], gain, wet, pitch, layer, loop, last }

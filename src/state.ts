@@ -20,8 +20,10 @@ export const state = {
   special: 0,
   // feel
   shake: 0, hitStop: 0, time: 0,
+  // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes
+  raining: true, rainAmt: 1, rainT: 30 + Math.random() * 30,
   // toggles
-  asciiOn: true, colorMode: 0, photo: false, raining: true, bigMap: false
+  asciiOn: true, colorMode: 0, photo: false, bigMap: false
 };
 
 /** keys currently held, by KeyboardEvent.code */

@@ -7,6 +7,7 @@ import { reset } from './encounters';
 import { tryOpen } from './loot';
 import { tryLightning } from './special';
 import { sfx } from './sfx';
+import { toggleRain } from './world';
 import { showMsg, overlay } from './hud';
 import { state, keys } from './state';
 
@@ -20,7 +21,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyC') state.colorMode = (state.colorMode + 1) % 4;
   if (e.code === 'KeyT') state.asciiOn = !state.asciiOn;
   if (e.code === 'KeyM') sfx.setMuted(!sfx.muted);
-  if (e.code === 'KeyR') { state.raining = !state.raining; sfx.setRain(state.raining); }
+  if (e.code === 'KeyR') toggleRain();
   if (e.code === 'KeyN') state.bigMap = !state.bigMap;
   if (e.code === 'KeyF') { state.photo = !state.photo; showMsg(state.photo ? 'MODO FOTO · F para volver' : '', state.photo ? 2 : 0.01); }
   if (e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd') changeDensity(-1);

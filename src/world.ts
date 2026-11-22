@@ -13,6 +13,7 @@ import { buildMasks } from './map';
 import { buildLandmarks } from './landmarks';
 import { player, state } from './state';
 import { rnd } from './utils';
+import { sfx } from './sfx';
 
 /** objects of the clearing the camera pulls in front of (the rest of the world: structures.ts / chunks.ts) */
 const camBlockers: THREE.Object3D[] = [];
@@ -235,7 +236,7 @@ petals.frustumCulled = false; scene.add(petals);
 
 tagTree(scene, CLS.ground); // anything left untagged
 
-// rain: streaks that follow the player (toggle with R)
+// rain: streaks that follow the player. Showers come and go on their own (R forces a change).
 const RAIN = 2600;
 const rainPos = new Float32Array(RAIN * 6), rainSpd = new Float32Array(RAIN);
 for (let i = 0; i < RAIN; i++) {
@@ -245,9 +246,28 @@ for (let i = 0; i < RAIN; i++) {
 const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
 const rain = new THREE.LineSegments(rainGeo, tagMat(new THREE.LineBasicMaterial({ color: 0x9fb2d8, transparent: true, opacity: 0.55, depthWrite: false }), CLS.fx));
 rain.frustumCulled = false; scene.add(rain);
+const SHOWER = [40, 90], DRY = [60, 150], FADE = 10; // seconds: a shower, a dry spell, easing in / out
+let rainSent = -1;
+function toggleWeather() { // the cycle's own change: eases in / out instead of snapping
+  state.raining = !state.raining;
+  state.rainT = state.raining ? rnd(SHOWER[0], SHOWER[1]) : rnd(DRY[0], DRY[1]);
+}
+/** R key: start or stop the rain right away, then the cycle carries on from there */
+export function toggleRain() {
+  state.raining = !state.raining; state.rainAmt = state.raining ? 1 : 0;
+  state.rainT = state.raining ? rnd(SHOWER[0], SHOWER[1]) : rnd(DRY[0], DRY[1]);
+}
 export function updateRain(dt: number) {
-  rain.visible = state.raining; if (!state.raining) return;
-  for (let i = 0; i < RAIN; i++) {
+  state.rainT -= dt;
+  if (state.rainT <= 0) toggleWeather();
+  const target = state.raining ? 1 : 0, step = dt / FADE;
+  state.rainAmt = state.rainAmt < target ? Math.min(target, state.rainAmt + step) : Math.max(target, state.rainAmt - step);
+  if (Math.abs(state.rainAmt - rainSent) > 0.01 || (state.rainAmt === target && rainSent !== target)) { rainSent = state.rainAmt; sfx.setRain(rainSent); }
+  // fewer streaks in a drizzle: only the first `count` are drawn and moved
+  const count = Math.round(RAIN * state.rainAmt);
+  rain.visible = count > 0; if (!count) return;
+  rainGeo.setDrawRange(0, count * 2);
+  for (let i = 0; i < count; i++) {
     const j = i * 6; let y = rainPos[j + 1] - rainSpd[i] * dt;
     let x = rainPos[j] - 0.9 * dt, z = rainPos[j + 2];
     if (y < player.pos.y - 4 || Math.abs(x - player.pos.x) > 22 || Math.abs(z - player.pos.z) > 22) { x = player.pos.x + rnd(-22, 22); z = player.pos.z + rnd(-22, 22); y = player.pos.y + rnd(10, 16); }
