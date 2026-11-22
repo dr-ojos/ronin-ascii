@@ -16,6 +16,8 @@ import { toggleRain } from './world';
 import { showMsg, overlay } from './hud';
 import { state, keys } from './state';
 
+/** camera heading when photo mode was switched on */
+let photoYaw = 0;
 addEventListener('keydown', e => {
   if (menuKey(e)) return;   // an open menu takes the keys
   keys[e.code] = true;
@@ -33,7 +35,10 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') sfx.setMuted(!sfx.muted);
   if (e.code === 'KeyR') toggleRain();
   if (e.code === 'KeyN') state.bigMap = !state.bigMap;
-  if (e.code === 'KeyF') { state.photo = !state.photo; showMsg(state.photo ? 'MODO FOTO · F para volver' : '', state.photo ? 2 : 0.01); }
+  if (e.code === 'KeyF') {
+    // photo mode orbits the camera; leaving it puts the camera (and the minimap's north) back where it was
+    if (state.photo) state.yaw = photoYaw; else photoYaw = state.yaw;
+    state.photo = !state.photo; showMsg(state.photo ? 'MODO FOTO · F para volver' : '', state.photo ? 2 : 0.01); }
   if (e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd') changeDensity(-1);
   if (e.key === '-' || e.code === 'Minus' || e.code === 'NumpadSubtract') changeDensity(1);
 });
