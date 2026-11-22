@@ -55,13 +55,13 @@ const RAMPS = (() => {
 
 // The font atlas is rasterised at the exact on-screen glyph size and read with texelFetch
 // (1 atlas texel = 1 screen pixel), so characters stay sharp: no scaling, no mipmap blur.
-function buildAtlas(gw: number, gh: number) {
+function buildAtlas(gw: number, gh: number, actor: boolean) {
   const a = document.createElement('canvas'); a.width = gw * N; a.height = gh * ROWS;
   const x = a.getContext('2d')!;
   x.fillStyle = '#000'; x.fillRect(0, 0, a.width, a.height);
-  const size = Math.max(6, Math.floor(Math.min(gh * 0.95, gw / 0.6)));   // Courier advance = 0.6em
+  const size = Math.max(actor ? 5 : 6, Math.floor(Math.min(gh * 0.95, gw / 0.6)));   // Courier advance = 0.6em
   x.fillStyle = '#fff'; x.font = `bold ${size}px ${FONT_FAMILY}`; x.textAlign = 'center'; x.textBaseline = 'middle';
-  const put = (c: string, col: number, row: number) => x.fillText(c, col * gw + gw / 2, row * gh + gh / 2 + 1);
+  const put = (c: string, col: number, row: number) => x.fillText(c, col * gw + gw / 2, row * gh + gh / 2 + (actor ? 0 : 1));
   RAMPS.forEach((ramp, r) => ramp.forEach((c, i) => put(c, i, r)));
   [...EDGE_CHARS].forEach((c, i) => put(c, i, EDGE_ROW));
   const t = new THREE.CanvasTexture(a);
@@ -72,8 +72,8 @@ function buildAtlas(gw: number, gh: number) {
 const DENSITY = [[2.5, 4.5], [3, 5.5], [3.5, 6.5], [4, 7.5], [5, 9], [6, 11], [8, 14]];
 let densityIdx = 2;
 
-// actor mask: samurai + oni rendered flat white, so the ASCII pass can outline and boost them
-const maskRT = new THREE.WebGLRenderTarget(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE);
+// Full-resolution, single-channel silhouettes keep thin features on the finer actor grid.
+const maskRT = new THREE.WebGLRenderTarget(bufSize.x, bufSize.y, { format: THREE.RedFormat });
 const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
 export const ACTOR_LAYER = 1;
 
@@ -81,8 +81,8 @@ export const ACTOR_LAYER = 1;
 const cellOpts = { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false };
 const cellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);
 const actorCellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);   // finer grid, actors only
-// samurai + oni get characters ACTOR_SCALE times smaller (more detail), overlapping a bit less
-const ACTOR_SCALE = 0.5, ACTOR_OVERLAP = 1.45;
+// Characters use a finer grid with enough overlap for narrow ASCII strokes to stay legible.
+const ACTOR_SCALE = 0.36, ACTOR_OVERLAP = 1.65;
 interface Grid { cw: number; ch: number; gw: number; gh: number; cols: number; rows: number; font: THREE.CanvasTexture }
 const grids: { env: Grid | null; actor: Grid | null } = { env: null, actor: null };
 export const cellMat = new THREE.ShaderMaterial({
@@ -106,7 +106,7 @@ export const cellMat = new THREE.ShaderMaterial({
       return (texture2D(tScene, uv).rgb * 2.0 + texture2D(tScene, uv + o).rgb + texture2D(tScene, uv - o).rgb
         + texture2D(tScene, uv + vec2(o.x, -o.y)).rgb + texture2D(tScene, uv + vec2(-o.x, o.y)).rgb) / 6.0;
     }
-    float L(vec2 uv, vec2 cs, float x, float y){ return luma(grade(cellCol(uv + vec2(x, y) * cs, cs))); }
+    float L(vec2 uv, vec2 cs, float x, float y){ return luma(grade(texture2D(tScene, uv + vec2(x, y) * cs).rgb)); }
     float M(vec2 uv, vec2 cs, float x, float y){ return Mk(uv + vec2(x, y) * cs); }
     // gradient direction -> stroke along the edge:  0 '|'  1 '\\'  2 '-'  3 '/'
     float bin(vec2 gr){
@@ -128,22 +128,27 @@ export const cellMat = new THREE.ShaderMaterial({
       vec2 uv = min((cell + 0.5) * uCell / uRes, vec2(0.999));
       vec2 cs = uCell / uRes;
       vec3 hurt = vec3(1.0, 0.12, 0.08);
-      float mk = (Mk(uv) * 2.0 + M(uv, cs, 0.3, 0.) + M(uv, cs, -0.3, 0.) + M(uv, cs, 0., 0.3) + M(uv, cs, 0., -0.3)) / 6.0;
       float row, idx; vec3 c;
-      // two grids: the environment pass leaves actor cells blank, the (finer) actor pass leaves the rest blank
-      if ((mk > 0.35) != (uActor > 0.5)) { gl_FragColor = vec4(0.0); return; }
-      if (mk > 0.35) {
+      vec2 dx = vec2(cs.x * 0.3, 0.0), dy = vec2(0.0, cs.y * 0.3);
+      float center = Mk(uv);
+      vec4 sides = vec4(Mk(uv + dx), Mk(uv - dx), Mk(uv + dy), Mk(uv - dy));
+      float coverage = center * 2.0 + dot(sides, vec4(1.0));
+      if (uActor > 0.5) {
+        if (coverage < 1.0) { gl_FragColor = vec4(0.0); return; }
         // ---- actors: silhouette drawn with | \\ - / strokes, creases too, body filled with the actor ramp
-        vec3 ac = grade(cellCol(uv, cs));
+        // Sample actor colours only, so a narrow horn or blade keeps its colour at the edge.
+        vec3 ac = grade((texture2D(tScene, uv).rgb * (2.0 * center)
+          + texture2D(tScene, uv + dx).rgb * sides.x + texture2D(tScene, uv - dx).rgb * sides.y
+          + texture2D(tScene, uv + dy).rgb * sides.z + texture2D(tScene, uv - dy).rgb * sides.w) / coverage);
         float al = clamp(pow(luma(ac) * 2.7, 0.72), 0.0, 0.999);
-        vec2 e = cs * 1.5;   // edges measured over a slightly wider span than one (small) cell
+        vec2 e = cs;
         float m0 = M(uv, e, -1., 1.), m1 = M(uv, e, 0., 1.), m2 = M(uv, e, 1., 1.), m3 = M(uv, e, -1., 0.);
         float m5 = M(uv, e, 1., 0.), m6 = M(uv, e, -1., -1.), m7 = M(uv, e, 0., -1.), m8 = M(uv, e, 1., -1.);
         vec2 mg = vec2((m2 + 2.*m5 + m8) - (m0 + 2.*m3 + m6), (m0 + 2.*m1 + m2) - (m6 + 2.*m7 + m8));
         float a0 = L(uv, e, -1., 1.), a1 = L(uv, e, 0., 1.), a2 = L(uv, e, 1., 1.), a3 = L(uv, e, -1., 0.);
         float a5 = L(uv, e, 1., 0.), a6 = L(uv, e, -1., -1.), a7 = L(uv, e, 0., -1.), a8 = L(uv, e, 1., -1.);
         vec2 gl = vec2((a2 + 2.*a5 + a8) - (a0 + 2.*a3 + a6), (a0 + 2.*a1 + a2) - (a6 + 2.*a7 + a8));
-        bool outline = length(mg) > 1.8 && Mk(uv) > 0.5;
+        bool outline = length(mg) > 1.8;
         if (outline) { row = uEdgeRow; idx = bin(mg); }
         else if (length(gl) > 0.7) { row = uEdgeRow; idx = bin(gl); }
         else { row = 6.0; idx = max(floor(al * uN), 4.0); }   // never blank: actors always read as text
@@ -166,6 +171,7 @@ export const cellMat = new THREE.ShaderMaterial({
         }
         c = modeCol(c, al);
       } else {
+        if (coverage / 6.0 > 0.35) { gl_FragColor = vec4(0.0); return; }
         // ---- environment: glyph ramp chosen per material class (stored in alpha)
         vec4 s0 = texture2D(tScene, uv);
         vec3 col = grade(cellCol(uv, cs));
@@ -207,7 +213,7 @@ const postMat = new THREE.ShaderMaterial({
   uniforms: {
     tCells: { value: cellRT.texture }, tFont: { value: null }, tCellsA: { value: actorCellRT.texture }, tFontA: { value: null },
     tMask: { value: maskRT.texture }, uRes: { value: bufSize.clone() }, uN: { value: N },
-    tScene: { value: rt.texture }, uMode: cellMat.uniforms.uMode, uHit: cellMat.uniforms.uHit, uRim: { value: 1.5 * DPR }, uLight: cellMat.uniforms.uLight,
+    tScene: { value: rt.texture }, uMode: cellMat.uniforms.uMode, uHit: cellMat.uniforms.uHit, uRim: { value: 1.15 * DPR }, uLight: cellMat.uniforms.uLight,
     uCell: { value: new THREE.Vector2() }, uGlyph: { value: new THREE.Vector2() }, uGrid: { value: new THREE.Vector2() },
     uCellA: { value: new THREE.Vector2() }, uGlyphA: { value: new THREE.Vector2() }, uGridA: { value: new THREE.Vector2() }
   },
@@ -224,8 +230,8 @@ const postMat = new THREE.ShaderMaterial({
     float mask(vec2 p){ return texture2D(tMask, p / uRes).r; }
     // solid colour behind the actor characters, one flat tile per actor cell, cel-shaded in bands
     vec3 actorBacking(vec2 fc){
-      vec2 uv = (floor(fc / uCellA) + 0.5) * uCellA / uRes;
-      vec3 bc = grade(texture2D(tScene, uv).rgb);
+      vec2 p = (floor(fc / uCellA) + 0.5) * uCellA;
+      vec3 bc = grade(texture2D(tScene, (mask(p) > 0.5 ? p : fc) / uRes).rgb);
       float l = luma(bc);
       float band = l < 0.05 ? 0.03 : l < 0.14 ? 0.15 : l < 0.28 ? 0.3 : l < 0.48 ? 0.48 : 0.68;
       vec3 tint = bc / max(max(max(bc.r, bc.g), bc.b), 0.03);
@@ -291,16 +297,16 @@ const postMat = new THREE.ShaderMaterial({
 const postScene = new THREE.Scene();
 postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat));
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-function makeGrid(cw: number, ch: number, ov: number): Grid {
+function makeGrid(cw: number, ch: number, ov: number, actor = false): Grid {
   const gw = Math.round(cw * ov), gh = Math.round(ch * ov);
-  return { cw, ch, gw, gh, cols: Math.ceil(bufSize.x / cw), rows: Math.ceil(bufSize.y / ch), font: buildAtlas(gw, gh) };
+  return { cw, ch, gw, gh, cols: Math.ceil(bufSize.x / cw), rows: Math.ceil(bufSize.y / ch), font: buildAtlas(gw, gh, actor) };
 }
 export function applyDensity() {
   const [w, h] = DENSITY[densityIdx];
   const cw = Math.max(3, Math.round(w * DPR)), ch = Math.max(5, Math.round(h * DPR));
   grids.env?.font.dispose(); grids.actor?.font.dispose();
   const E = grids.env = makeGrid(cw, ch, OVERLAP);
-  const A = grids.actor = makeGrid(Math.max(3, Math.round(cw * ACTOR_SCALE)), Math.max(5, Math.round(ch * ACTOR_SCALE)), ACTOR_OVERLAP);
+  const A = grids.actor = makeGrid(Math.max(2, Math.round(cw * ACTOR_SCALE)), Math.max(3, Math.round(ch * ACTOR_SCALE)), ACTOR_OVERLAP, true);
   cellRT.setSize(E.cols, E.rows); actorCellRT.setSize(A.cols, A.rows);
   cellMat.uniforms.uRes.value.copy(bufSize);
   const u = postMat.uniforms;
@@ -335,6 +341,6 @@ export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
 /** call after renderer.setSize */
 export function resizeAscii() {
   renderer.getDrawingBufferSize(bufSize);
-  rt.setSize(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE); maskRT.setSize(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE);
+  rt.setSize(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE); maskRT.setSize(bufSize.x, bufSize.y);
   applyDensity();   // grid size + glyph atlas follow the new canvas size
 }
