@@ -19,4 +19,4 @@ export const state = {
 };
 
 /** keys currently held, by KeyboardEvent.code */
-export const keys = {};
+export const keys: Record<string, boolean> = {};

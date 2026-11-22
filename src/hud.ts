@@ -1,19 +1,19 @@
 // HUD text, centre-screen messages and the title / death overlay.
-import { player, state } from './state.js';
-import { enemies } from './enemies.js';
-import { sfx } from './sfx.js';
+import { player, state } from './state';
+import { enemies } from './enemies';
+import { sfx } from './sfx';
 
-const hud = document.getElementById('hud'), msgEl = document.getElementById('msg');
-export const overlay = document.getElementById('overlay');
+const hud = document.getElementById('hud')!, msgEl = document.getElementById('msg')!;
+export const overlay = document.getElementById('overlay')!;
 
 let msgTimer = 0;
-export function showMsg(t, d = 1.8) { msgEl.textContent = t; msgEl.style.opacity = 1; msgTimer = d; }
-export function updateMsg(dt) {
-  if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) msgEl.style.opacity = 0; }
+export function showMsg(t: string, d = 1.8) { msgEl.textContent = t; msgEl.style.opacity = '1'; msgTimer = d; }
+export function updateMsg(dt: number) {
+  if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) msgEl.style.opacity = '0'; }
 }
 
 let hudT = 0;
-export function updateHud(dt) {
+export function updateHud(dt: number) {
   hudT -= dt; if (hudT > 0) return; hudT = 0.1;
   const n = 24, f = Math.round(player.hp / 100 * n);
   const bar = '#'.repeat(f) + '-'.repeat(n - f);
@@ -27,8 +27,8 @@ export function updateHud(dt) {
 
 export function showDeathScreen() {
   document.exitPointerLock?.();
-  overlay.querySelector('.k').textContent = '散';
-  overlay.querySelector('.sub').textContent = `Has caído en la oleada ${state.wave} · ${state.kills} onis abatidos`;
-  document.getElementById('go').textContent = '[ clic para volver a empezar ]';
+  overlay.querySelector('.k')!.textContent = '散';
+  overlay.querySelector('.sub')!.textContent = `Has caído en la oleada ${state.wave} · ${state.kills} onis abatidos`;
+  document.getElementById('go')!.textContent = '[ clic para volver a empezar ]';
   overlay.style.display = 'flex';
 }

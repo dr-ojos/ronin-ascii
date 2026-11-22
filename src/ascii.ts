@@ -1,7 +1,7 @@
 // ASCII post-process: turns the rendered scene into real text-mode output (one printable ASCII
 // character per cell), with a finer character grid for the actors and light-aware contours.
 import * as THREE from 'three';
-import { renderer, DPR } from './renderer.js';
+import { renderer, DPR } from './renderer';
 
 export const bufSize = new THREE.Vector2();
 renderer.getDrawingBufferSize(bufSize);
@@ -38,8 +38,8 @@ const OVERLAP = 1.8;   // glyph size / cell size (must stay < 3: each pixel look
 // each ramp sorted by ink coverage (measured once on a large reference glyph)
 const RAMPS = (() => {
   const gw = 44, gh = 72, c = document.createElement('canvas'); c.width = gw; c.height = gh;
-  const x = c.getContext('2d', { willReadFrequently: true });
-  const coverage = ch => {
+  const x = c.getContext('2d', { willReadFrequently: true })!;
+  const coverage = (ch: string) => {
     x.fillStyle = '#000'; x.fillRect(0, 0, gw, gh);
     x.fillStyle = '#fff'; x.font = `bold ${Math.round(gh * 0.86)}px ${FONT_FAMILY}`; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText(ch, gw / 2, gh / 2 + 2);
@@ -55,13 +55,13 @@ const RAMPS = (() => {
 
 // The font atlas is rasterised at the exact on-screen glyph size and read with texelFetch
 // (1 atlas texel = 1 screen pixel), so characters stay sharp: no scaling, no mipmap blur.
-function buildAtlas(gw, gh) {
+function buildAtlas(gw: number, gh: number) {
   const a = document.createElement('canvas'); a.width = gw * N; a.height = gh * ROWS;
-  const x = a.getContext('2d');
+  const x = a.getContext('2d')!;
   x.fillStyle = '#000'; x.fillRect(0, 0, a.width, a.height);
   const size = Math.max(6, Math.floor(Math.min(gh * 0.95, gw / 0.6)));   // Courier advance = 0.6em
   x.fillStyle = '#fff'; x.font = `bold ${size}px ${FONT_FAMILY}`; x.textAlign = 'center'; x.textBaseline = 'middle';
-  const put = (c, col, row) => x.fillText(c, col * gw + gw / 2, row * gh + gh / 2 + 1);
+  const put = (c: string, col: number, row: number) => x.fillText(c, col * gw + gw / 2, row * gh + gh / 2 + 1);
   RAMPS.forEach((ramp, r) => ramp.forEach((c, i) => put(c, i, r)));
   [...EDGE_CHARS].forEach((c, i) => put(c, i, EDGE_ROW));
   const t = new THREE.CanvasTexture(a);
@@ -83,7 +83,8 @@ const cellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);
 const actorCellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);   // finer grid, actors only
 // samurai + oni get characters ACTOR_SCALE times smaller (more detail), overlapping a bit less
 const ACTOR_SCALE = 0.5, ACTOR_OVERLAP = 1.45;
-const grids = { env: null, actor: null };
+interface Grid { cw: number; ch: number; gw: number; gh: number; cols: number; rows: number; font: THREE.CanvasTexture }
+const grids: { env: Grid | null; actor: Grid | null } = { env: null, actor: null };
 export const cellMat = new THREE.ShaderMaterial({
   uniforms: {
     tScene: { value: rt.texture }, tMask: { value: maskRT.texture },
@@ -290,7 +291,7 @@ const postMat = new THREE.ShaderMaterial({
 const postScene = new THREE.Scene();
 postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat));
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-function makeGrid(cw, ch, ov) {
+function makeGrid(cw: number, ch: number, ov: number): Grid {
   const gw = Math.round(cw * ov), gh = Math.round(ch * ov);
   return { cw, ch, gw, gh, cols: Math.ceil(bufSize.x / cw), rows: Math.ceil(bufSize.y / ch), font: buildAtlas(gw, gh) };
 }
@@ -310,13 +311,13 @@ export function applyDensity() {
 applyDensity();
 
 /** + / - : step through DENSITY (negative step = smaller cells, more characters) */
-export function changeDensity(step) {
+export function changeDensity(step: number) {
   densityIdx = Math.min(DENSITY.length - 1, Math.max(0, densityIdx + step));
   applyDensity();
 }
 
 /** scene -> actor mask -> character cells (environment grid + actor grid) -> screen */
-export function renderAscii(scene, camera) {
+export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
   const bg = scene.background;
   scene.background = null; scene.overrideMaterial = maskMat; camera.layers.set(ACTOR_LAYER);
@@ -324,9 +325,9 @@ export function renderAscii(scene, camera) {
   renderer.setRenderTarget(maskRT); renderer.clear(); renderer.render(scene, camera);
   scene.background = bg; scene.overrideMaterial = null; camera.layers.set(0);
   const cu = cellMat.uniforms;
-  cu.uActor.value = 0; cu.uCell.value.set(grids.env.cw, grids.env.ch);
+  cu.uActor.value = 0; cu.uCell.value.set(grids.env!.cw, grids.env!.ch);
   renderer.setRenderTarget(cellRT); renderer.render(cellScene, postCam);
-  cu.uActor.value = 1; cu.uCell.value.set(grids.actor.cw, grids.actor.ch);
+  cu.uActor.value = 1; cu.uCell.value.set(grids.actor!.cw, grids.actor!.ch);
   renderer.setRenderTarget(actorCellRT); renderer.render(cellScene, postCam);
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }

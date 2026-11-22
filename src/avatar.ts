@@ -1,22 +1,23 @@
 // The player's samurai (mocap rig if the model loaded, procedural otherwise) and its per-frame animation.
 import * as THREE from 'three';
-import { rigGltf } from './assets.js';
-import { createSamurai } from './samurai.js';
-import { createRealSamurai } from './rig.js';
-import { wind as natureWind } from './nature.js';
-import { scene } from './renderer.js';
-import { ACTOR_LAYER } from './ascii.js';
-import { CLS, tagTree } from './materials.js';
-import { updateNature, placeMoonShadow } from './world.js';
-import { enemies } from './enemies.js';
-import { player, state } from './state.js';
-import { angDiff } from './utils.js';
+import { rigGltf } from './assets';
+import { createSamurai } from './samurai';
+import { createRealSamurai } from './rig';
+import { wind as natureWind } from './nature';
+import { scene } from './renderer';
+import { ACTOR_LAYER } from './ascii';
+import { CLS, tagTree } from './materials';
+import { updateNature, placeMoonShadow } from './world';
+import { enemies } from './enemies';
+import { player, state } from './state';
+import { angDiff } from './utils';
 
 export const sam = rigGltf ? createRealSamurai(rigGltf) : createSamurai();
 // luminous armour: each material glows softly with its own colour (cloned so the oni keep theirs)
 {
-  const done = new Map();
-  sam.root.traverse(o => {
+  const done = new Map<THREE.MeshStandardMaterial, THREE.MeshStandardMaterial>();
+  sam.root.traverse(obj => {
+    const o = obj as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
     if (!o.isMesh || !o.material || !o.material.isMeshStandardMaterial) return;
     let m = done.get(o.material);
     if (!m) {
@@ -31,12 +32,12 @@ export const sam = rigGltf ? createRealSamurai(rigGltf) : createSamurai();
 }
 // glowing blade (the extruded mesh inside the katana group)
 export const bladeMat = new THREE.MeshStandardMaterial({ color: 0xf4f9ff, metalness: 0.6, roughness: 0.14, emissive: 0xa6dcff, emissiveIntensity: 2.2 });
-sam.katana.traverse(o => { if (o.isMesh && o.geometry.type === 'ExtrudeGeometry') { o.material = bladeMat; } });
-sam.root.traverse(o => { if (o.isMesh && o.castShadow) o.layers.enable(ACTOR_LAYER); });
+sam.katana.traverse(obj => { const o = obj as THREE.Mesh; if (o.isMesh && o.geometry.type === 'ExtrudeGeometry') { o.material = bladeMat; } });
+sam.root.traverse(o => { if ((o as THREE.Mesh).isMesh && o.castShadow) o.layers.enable(ACTOR_LAYER); });
 tagTree(sam.root, CLS.actor);
 scene.add(sam.root);
 
-export function animSamurai(dt) {
+export function animSamurai(dt: number) {
   updateNature(state.time, player.pos);
   const push = natureWind.uPush.value;
   push[0].set(player.pos.x, player.pos.z, 1.5, 0);

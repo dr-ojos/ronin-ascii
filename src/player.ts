@@ -1,14 +1,14 @@
 // The player's moves: walking, dashing and the katana combo, hit detection included.
 import * as THREE from 'three';
-import { sam } from './avatar.js';
-import { sparkBurst } from './katana-fx.js';
-import { enemies } from './enemies.js';
-import { burst, slashArc } from './fx.js';
-import { sfx, panOf } from './sfx.js';
-import { collide } from './physics.js';
-import { keyLight, rimLight } from './world.js';
-import { player, state, keys } from './state.js';
-import { angDiff } from './utils.js';
+import { sam } from './avatar';
+import { sparkBurst } from './katana-fx';
+import { enemies } from './enemies';
+import { burst, slashArc } from './fx';
+import { sfx, panOf } from './sfx';
+import { collide } from './physics';
+import { keyLight, rimLight } from './world';
+import { player, state, keys } from './state';
+import { angDiff } from './utils';
 
 // K = slash combo (diagonal, reverse diagonal, spin) · L = heavy spinning cut · click = slash too
 export function tryAttack(heavy = false) {
@@ -39,7 +39,7 @@ export function moveInput() {
 }
 
 const tmp = new THREE.Vector3();
-export function updatePlayer(dt) {
+export function updatePlayer(dt: number) {
   player.invuln = Math.max(0, player.invuln - dt);
   player.dashCd = Math.max(0, player.dashCd - dt);
   const mv = moveInput();

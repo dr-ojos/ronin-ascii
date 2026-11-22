@@ -1,10 +1,10 @@
 // Katana effects: blade light, sparks shed by the edge, and the vapour trail of each cut.
 import * as THREE from 'three';
-import { scene } from './renderer.js';
-import { CLS } from './materials.js';
-import { sam, bladeMat } from './avatar.js';
-import { player, state } from './state.js';
-import { rnd } from './utils.js';
+import { scene } from './renderer';
+import { CLS } from './materials';
+import { sam, bladeMat } from './avatar';
+import { player, state } from './state';
+import { rnd } from './utils';
 
 // soft personal glow + a cold light that rides on the blade
 const samGlow = new THREE.PointLight(0xffe6c0, 0.8, 3.6, 2);
@@ -41,7 +41,7 @@ const prevBase = new THREE.Vector3();
 // ---------------------------------------------------------------- katana trail
 // a ribbon of light that follows the edge while it moves, then breaks into grains and drifts off like vapour
 const TRAIL_N = 48, TRAIL_LIFE = 0.34;
-const trail = [];                                        // newest first: { b, t, age, k }
+const trail: { b: THREE.Vector3; t: THREE.Vector3; age: number; k: number }[] = [];   // newest first: { b, t, age, k }
 const trPos = new Float32Array(TRAIL_N * 6), trCol = new Float32Array(TRAIL_N * 6);
 const trGeo = new THREE.BufferGeometry();
 trGeo.setAttribute('position', new THREE.BufferAttribute(trPos, 3));
@@ -69,11 +69,11 @@ trailMat.onBeforeCompile = sh => {
 };
 const trailMesh = new THREE.Mesh(trGeo, trailMat);
 trailMesh.frustumCulled = false; scene.add(trailMesh);
-function pushTrail(b, t, age, k) {
+function pushTrail(b: THREE.Vector3, t: THREE.Vector3, age: number, k: number) {
   trail.unshift({ b: b.clone(), t: t.clone(), age, k });
   if (trail.length > TRAIL_N) trail.pop();
 }
-function updateTrail(dt, emit) {
+function updateTrail(dt: number, emit: boolean) {
   trailU.uT.value += dt;
   for (const s of trail) s.age += dt;
   while (trail.length && trail[trail.length - 1].age > TRAIL_LIFE) trail.pop();
@@ -102,19 +102,19 @@ function updateTrail(dt, emit) {
   trGeo.attributes.color.needsUpdate = true;
   trGeo.setDrawRange(0, Math.max(0, n - 1) * 6);
 }
-function spawnSpark(p, vx, vy, vz, life) {
+function spawnSpark(p: THREE.Vector3, vx: number, vy: number, vz: number, life: number) {
   const i = spNext; spNext = (spNext + 1) % SPARKS;
   spPos[i * 3] = p.x; spPos[i * 3 + 1] = p.y; spPos[i * 3 + 2] = p.z;
   spVel[i * 3] = vx; spVel[i * 3 + 1] = vy; spVel[i * 3 + 2] = vz;
   spLife[i] = spMax[i] = life;
 }
-export function sparkBurst(p, n, speed = 6) {
+export function sparkBurst(p: THREE.Vector3, n: number, speed = 6) {
   for (let k = 0; k < n; k++) {
     spTmp.set(rnd(-1, 1), rnd(-0.3, 1), rnd(-1, 1)).normalize().multiplyScalar(speed * rnd(0.35, 1));
     spawnSpark(p, spTmp.x, spTmp.y + 1.2, spTmp.z, rnd(0.25, 0.55));
   }
 }
-export function updateSparks(dt, emit) {
+export function updateSparks(dt: number, emit: boolean) {
   if (dt <= 0) return;
   sam.katana.updateMatrixWorld(true);
   bladeBase.set(0, 0, 0.24); sam.katana.localToWorld(bladeBase);

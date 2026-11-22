@@ -3,12 +3,12 @@
   "configurations": [
     {
       "name": "ronin-ascii",
-      "runtimeExecutable": "python3",
+      "runtimeExecutable": "npm",
       "runtimeArgs": [
-        "serve.py",
-        "8766"
+        "run",
+        "dev"
       ],
-      "port": 8766
+      "port": 5173
     },
     {
       "name": "ronin-ascii-mirror",

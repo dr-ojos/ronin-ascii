@@ -1,13 +1,13 @@
 // One-shot effects: particle bursts (hits, deaths) and slash arcs.
 import * as THREE from 'three';
-import { scene } from './renderer.js';
-import { CLS, tagMat } from './materials.js';
-import { player } from './state.js';
-import { rnd } from './utils.js';
+import { scene } from './renderer';
+import { CLS, tagMat } from './materials';
+import { player } from './state';
+import { rnd } from './utils';
 
-const bursts = [];
-export function burst(pos, color, n = 60, speed = 7, size = 0.16) {
-  const p = new Float32Array(n * 3), v = [];
+const bursts: { pts: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>; v: THREE.Vector3[]; life: number; max: number }[] = [];
+export function burst(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 60, speed = 7, size = 0.16) {
+  const p = new Float32Array(n * 3), v: THREE.Vector3[] = [];
   for (let i = 0; i < n; i++) {
     p.set([pos.x, pos.y, pos.z], i * 3);
     const d = new THREE.Vector3(rnd(-1, 1), rnd(-0.2, 1.2), rnd(-1, 1)).normalize().multiplyScalar(speed * rnd(0.3, 1));
@@ -17,8 +17,8 @@ export function burst(pos, color, n = 60, speed = 7, size = 0.16) {
   const pts = new THREE.Points(geo, tagMat(new THREE.PointsMaterial({ color, size, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx));
   scene.add(pts); bursts.push({ pts, v, life: 0.9, max: 0.9 });
 }
-const arcs = [];
-export function slashArc(spin, big, combo = 0) {
+const arcs: { m: THREE.Group; mesh: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>; life: number; max: number }[] = [];
+export function slashArc(spin: boolean, big: boolean, combo = 0) {
   const spread = spin ? Math.PI * 2 : 2.6;
   const geo = new THREE.RingGeometry(big ? 1.0 : 1.1, big ? 3.2 : 2.7, 48, 1, -Math.PI / 2 - spread / 2, spread);
   const m = new THREE.Mesh(geo, tagMat(new THREE.MeshBasicMaterial({ color: 0xdfeaff, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx));
@@ -28,7 +28,7 @@ export function slashArc(spin, big, combo = 0) {
   scene.add(g); arcs.push({ m: g, mesh: m, life: 0.2, max: 0.2 });
 }
 
-export function updateFx(dt) {
+export function updateFx(dt: number) {
   for (let i = bursts.length - 1; i >= 0; i--) {
     const b = bursts[i], pa = b.pts.geometry.attributes.position;
     for (let k = 0; k < b.v.length; k++) {

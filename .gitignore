@@ -2,3 +2,5 @@
 *.antes-*
 .DS_Store
 .claude/settings.local.json
+node_modules/
+dist/

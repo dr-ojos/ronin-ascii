@@ -1,16 +1,16 @@
 // Third-person camera (zoom, photo mode, shake, pulled in front of buildings) and the on-screen
 // moonlight direction used by the ASCII pass for lit / shadowed contours.
 import * as THREE from 'three';
-import { camera } from './renderer.js';
-import { bufSize, cellMat } from './ascii.js';
-import { camBlockers, moonDir } from './world.js';
-import { player, state } from './state.js';
-import { rnd } from './utils.js';
+import { camera } from './renderer';
+import { bufSize, cellMat } from './ascii';
+import { camBlockers, moonDir } from './world';
+import { player, state } from './state';
+import { rnd } from './utils';
 
 const tmp = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 const camRay = new THREE.Raycaster();
-export function updateCamera(dt) {
+export function updateCamera(dt: number) {
   camTarget.lerp(tmp.set(player.pos.x, state.photo ? 1.3 : 1.5, player.pos.z), Math.min(1, dt * 10));
   const pt = state.photo ? 0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025) : state.pitch, cp = Math.cos(pt), camDist = state.photo ? state.photoDist : state.camDistUser;
   camera.position.set(

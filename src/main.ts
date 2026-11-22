@@ -1,16 +1,16 @@
 // Ronin ASCII: entry point. Wires the modules together and runs the frame loop.
 import * as THREE from 'three';
-import './assets.js';   // first: shows "cargando..." while the character model loads
-import { renderer, scene, camera } from './renderer.js';
-import { cellMat, renderAscii, resizeAscii } from './ascii.js';
-import { animSamurai } from './avatar.js';
-import { updateSparks } from './katana-fx.js';
-import { updateRain } from './world.js';
-import { updateCamera, updateLightDir } from './camera.js';
-import { updateHud } from './hud.js';
-import { update } from './game.js';
-import { state } from './state.js';
-import './input.js';
+import './assets';   // first: shows "cargando..." while the character model loads
+import { renderer, scene, camera } from './renderer';
+import { cellMat, renderAscii, resizeAscii } from './ascii';
+import { animSamurai } from './avatar';
+import { updateSparks } from './katana-fx';
+import { updateRain } from './world';
+import { updateCamera, updateLightDir } from './camera';
+import { updateHud } from './hud';
+import { update } from './game';
+import { state } from './state';
+import './input';
 
 const clock = new THREE.Clock();
 function frame() {

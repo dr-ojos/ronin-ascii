@@ -1,13 +1,14 @@
 // Oni: the live list and spawning (mocap-rigged or procedural). Their behaviour is in enemy-ai.js.
 import * as THREE from 'three';
-import { rigGltf } from './assets.js';
-import { createOniWarrior } from './rig.js';
-import { scene } from './renderer.js';
-import { ACTOR_LAYER } from './ascii.js';
-import { M, CLS, tagTree } from './materials.js';
-import { WORLD_R } from './world.js';
-import { player } from './state.js';
-import { rnd } from './utils.js';
+import { rigGltf } from './assets';
+import { createOniWarrior } from './rig';
+import { scene } from './renderer';
+import { ACTOR_LAYER } from './ascii';
+import { M, CLS, tagTree } from './materials';
+import { WORLD_R } from './world';
+import { player } from './state';
+import { rnd } from './utils';
+import type { Enemy } from './types';
 
 const oniGeo = {
   robe: new THREE.ConeGeometry(0.55, 1.5, 7), head: new THREE.SphereGeometry(0.28, 12, 10),
@@ -15,8 +16,8 @@ const oniGeo = {
   arm: new THREE.ConeGeometry(0.1, 0.8, 5), ring: new THREE.RingGeometry(0.85, 1.05, 28)
 };
 const hornMat = M(0xdccca2), eyeMat = new THREE.MeshBasicMaterial({ color: 0xff5a3a });
-export const enemies = [];
-export function spawnOni(big) {
+export const enemies: Enemy[] = [];
+export function spawnOni(big: boolean) {
   if (rigGltf) return spawnRealOni(big);
   const g = new THREE.Group();
   const robeMat = M(big ? 0x8a1a14 : 0x6a2a6a, { roughness: 0.8, emissive: 0x000000 });
@@ -35,7 +36,7 @@ export function spawnOni(big) {
   let x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
   const d = Math.hypot(x, z); if (d > WORLD_R - 2) { x *= (WORLD_R - 2) / d; z *= (WORLD_R - 2) / d; }
   g.position.set(x, 0, z);
-  g.traverse(o => { if (o.isMesh && o !== ring) { o.castShadow = true; o.layers.enable(ACTOR_LAYER); } });
+  g.traverse(o => { if ((o as THREE.Mesh).isMesh && o !== ring) { o.castShadow = true; o.layers.enable(ACTOR_LAYER); } });
   tagTree(g, CLS.actor);
   scene.add(g);
   enemies.push({
@@ -44,7 +45,7 @@ export function spawnOni(big) {
   });
 }
 
-function spawnRealOni(big) {
+function spawnRealOni(big: boolean) {
   const oni = createOniWarrior(rigGltf, big);
   const g = oni.root;
   const k = big ? 1.45 : 1; g.scale.setScalar(k);
@@ -52,7 +53,7 @@ function spawnRealOni(big) {
   let x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
   const d = Math.hypot(x, z); if (d > WORLD_R - 2) { x *= (WORLD_R - 2) / d; z *= (WORLD_R - 2) / d; }
   g.position.set(x, 0, z);
-  g.traverse(o => { if (o.isMesh && o !== oni.ring) o.layers.enable(ACTOR_LAYER); });
+  g.traverse(o => { if ((o as THREE.Mesh).isMesh && o !== oni.ring) o.layers.enable(ACTOR_LAYER); });
   tagTree(g, CLS.actor);
   scene.add(g);
   enemies.push({

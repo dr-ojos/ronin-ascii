@@ -1,12 +1,12 @@
 // Damage taken by the player, and death.
 import * as THREE from 'three';
-import { cellMat } from './ascii.js';
-import { burst } from './fx.js';
-import { sfx } from './sfx.js';
-import { showDeathScreen } from './hud.js';
-import { player, state } from './state.js';
+import { cellMat } from './ascii';
+import { burst } from './fx';
+import { sfx } from './sfx';
+import { showDeathScreen } from './hud';
+import { player, state } from './state';
 
-export function hurtPlayer(dmg) {
+export function hurtPlayer(dmg: number) {
   if (player.invuln > 0 || state.dead) return;
   player.hp -= dmg; player.invuln = 0.5; cellMat.uniforms.uHit.value = 1; state.shake = 0.5; sfx.hurt();
   if (player.hp <= 0) {

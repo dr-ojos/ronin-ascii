@@ -1,9 +1,9 @@
 // Waves of oni, and starting a new run.
-import { scene } from './renderer.js';
-import { enemies, spawnOni } from './enemies.js';
-import { sfx } from './sfx.js';
-import { showMsg } from './hud.js';
-import { player, state } from './state.js';
+import { scene } from './renderer';
+import { enemies, spawnOni } from './enemies';
+import { sfx } from './sfx';
+import { showMsg } from './hud';
+import { player, state } from './state';
 
 export function reset() {
   for (const e of enemies) scene.remove(e.g);
@@ -12,7 +12,7 @@ export function reset() {
   player.pos.set(0, 0, 4); state.wave = 0; state.kills = 0; state.waveTimer = 1.2; state.dead = false;
 }
 
-export function updateWaves(dt) {
+export function updateWaves(dt: number) {
   if (enemies.length === 0) {
     state.waveTimer -= dt;
     if (state.waveTimer <= 0) {

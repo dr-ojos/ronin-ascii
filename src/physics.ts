@@ -1,7 +1,8 @@
 // Collision against the world's static colliders (circles and rectangles) and the edge of the clearing.
-import { colliders, WORLD_R } from './world.js';
+import { colliders, WORLD_R } from './world';
+import type { XZ } from './types';
 
-export function collide(p, r) {
+export function collide(p: XZ, r: number) {
   for (const c of colliders) {
     if (c.rect) {
       const [x0, x1, z0, z1] = c.rect;

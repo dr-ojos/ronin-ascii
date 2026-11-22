@@ -1,15 +1,15 @@
 // One simulation step: player, oni, waves and effects.
-import { cellMat } from './ascii.js';
-import { sam } from './avatar.js';
-import { updatePetals } from './world.js';
-import { updatePlayer } from './player.js';
-import { updateEnemies } from './enemy-ai.js';
-import { updateWaves } from './waves.js';
-import { updateFx } from './fx.js';
-import { updateMsg } from './hud.js';
-import { state } from './state.js';
+import { cellMat } from './ascii';
+import { sam } from './avatar';
+import { updatePetals } from './world';
+import { updatePlayer } from './player';
+import { updateEnemies } from './enemy-ai';
+import { updateWaves } from './waves';
+import { updateFx } from './fx';
+import { updateMsg } from './hud';
+import { state } from './state';
 
-export function update(dt) {
+export function update(dt: number) {
   state.time += dt;
   cellMat.uniforms.uTime.value = state.time;
   cellMat.uniforms.uHit.value = Math.max(0, cellMat.uniforms.uHit.value - dt * 3);

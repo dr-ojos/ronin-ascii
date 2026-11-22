@@ -1,12 +1,12 @@
 // Keyboard and mouse.
 import * as THREE from 'three';
-import { canvas } from './renderer.js';
-import { changeDensity } from './ascii.js';
-import { tryAttack, tryDash } from './player.js';
-import { reset } from './waves.js';
-import { sfx } from './sfx.js';
-import { showMsg, overlay } from './hud.js';
-import { state, keys } from './state.js';
+import { canvas } from './renderer';
+import { changeDensity } from './ascii';
+import { tryAttack, tryDash } from './player';
+import { reset } from './waves';
+import { sfx } from './sfx';
+import { showMsg, overlay } from './hud';
+import { state, keys } from './state';
 
 addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -38,4 +38,3 @@ overlay.addEventListener('click', () => {
   state.playing = true;
 });
 
-function lockMouse() { try { const r = canvas.requestPointerLock?.(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }

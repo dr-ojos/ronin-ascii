@@ -1,13 +1,14 @@
 // The clearing: lights, moon and stars, stone path, torii, shrine, fence, nature, petals and rain.
 import * as THREE from 'three';
-import { renderer, scene } from './renderer.js';
-import { M, CLS, tagMat, tagTree, shadowTree, box } from './materials.js';
-import { buildNature } from './nature.js';
-import { player, state } from './state.js';
-import { rnd } from './utils.js';
+import { renderer, scene } from './renderer';
+import { M, CLS, tagMat, tagTree, shadowTree, box } from './materials';
+import { buildNature } from './nature';
+import { player, state } from './state';
+import { rnd } from './utils';
+import type { Collider } from './types';
 
-export const colliders = [];
-export const camBlockers = [];
+export const colliders: Collider[] = [];
+export const camBlockers: THREE.Object3D[] = [];
 export const WORLD_R = 42;
 
 // sky fill: brighter blue from above, warm bounce from the ground so shadows aren't pitch black
@@ -28,7 +29,7 @@ scene.add(moonLight, moonLight.target);
 const shLX = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), moonDir).normalize();
 const shLY = new THREE.Vector3().crossVectors(moonDir, shLX).normalize();
 const shSnap = new THREE.Vector3();
-export function placeMoonShadow(p) {
+export function placeMoonShadow(p: THREE.Vector3) {
   const a = Math.round(p.dot(shLX) / SHADOW_TEXEL) * SHADOW_TEXEL;
   const b = Math.round(p.dot(shLY) / SHADOW_TEXEL) * SHADOW_TEXEL;
   shSnap.set(0, 0, 0).addScaledVector(shLX, a).addScaledVector(shLY, b).addScaledVector(moonDir, p.dot(moonDir));
@@ -58,7 +59,7 @@ tagMat(moon.material, CLS.light);
 scene.add(moon);
 {
   const c = document.createElement('canvas'); c.width = c.height = 128;
-  const x = c.getContext('2d'); const g = x.createRadialGradient(64, 64, 10, 64, 64, 64);
+  const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 10, 64, 64, 64);
   g.addColorStop(0, 'rgba(200,215,255,0.55)'); g.addColorStop(1, 'rgba(200,215,255,0)');
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -73,8 +74,8 @@ scene.add(moon);
 }
 
 // layout helpers
-const inCompound = (x, z, m = 0) => Math.abs(x) < 12 + m && z < -15 + m && z > -31 - m;
-const onPath = (x, z) => Math.abs(x) < 1.6 && z > -16 && z < 7;
+const inCompound = (x: number, z: number, m = 0) => Math.abs(x) < 12 + m && z < -15 + m && z > -31 - m;
+const onPath = (x: number, z: number) => Math.abs(x) < 1.6 && z > -16 && z < 7;
 
 // ground
 // pure black soil under the grass: unlit, no fog, and tagged as "sky" so the ASCII pass leaves it blank
@@ -124,7 +125,7 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
 {
   const shojiTex = (() => {
     const c = document.createElement('canvas'); c.width = 128; c.height = 160;
-    const x = c.getContext('2d');
+    const x = c.getContext('2d')!;
     const g = x.createRadialGradient(64, 90, 10, 64, 80, 110); g.addColorStop(0, '#ffd08a'); g.addColorStop(1, '#e07a2a');
     x.fillStyle = g; x.fillRect(0, 0, 128, 160);
     x.fillStyle = '#2a170d';
@@ -139,7 +140,7 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
   const shoji = tagMat(new THREE.MeshStandardMaterial({ map: shojiTex, emissiveMap: shojiTex, emissive: 0xffffff, emissiveIntensity: 1.5, color: 0x333333 }), CLS.light);
   const chochin = tagMat(M(0xff6a2a, { emissive: 0xff5a1a, emissiveIntensity: 2.2 }), CLS.light);
   const g = new THREE.Group(); g.position.set(0, 0, -24);
-  const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
   add(new THREE.BoxGeometry(10, 0.7, 7), stoneB, 0, 0.35, 0);
   add(new THREE.BoxGeometry(9.4, 0.15, 6.4), wood, 0, 0.78, 0);
   add(new THREE.BoxGeometry(7.9, 2.6, 5), wood, 0, 2.15, -0.1);
@@ -161,7 +162,7 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
   add(new THREE.BoxGeometry(11.4, 0.38, 0.45), roofM, 0, 5.25, 0);
   for (const x of [-5.3, 5.3]) for (const r of [0.6, -0.6]) { const c = add(new THREE.BoxGeometry(0.1, 1.1, 0.1), roofM, x, 5.6, 0); c.rotation.z = r; }
   shadowTree(g);
-  g.traverse(o => { if (o.material === shoji || o.material === chochin) o.castShadow = false; });
+  g.traverse(o => { if ((o as THREE.Mesh).material === shoji || (o as THREE.Mesh).material === chochin) o.castShadow = false; });
   const pl = new THREE.PointLight(0xffa050, 9, 16, 1.3); pl.position.set(0, 2.2, 5); g.add(pl);
   scene.add(g); camBlockers.push(g);
   colliders.push({ rect: [-5, 5, -27.5, -19.4] });
@@ -172,7 +173,7 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
   const fenceM = tagMat(M(0x4a4774, { roughness: 0.8 }), CLS.wood);
   const capM = tagMat(M(0xffd060, { emissive: 0xffb030, emissiveIntensity: 1.6 }), CLS.light);
   const g = new THREE.Group();
-  const run = (x0, z0, x1, z1) => {
+  const run = (x0: number, z0: number, x1: number, z1: number) => {
     const len = Math.hypot(x1 - x0, z1 - z0), n = Math.round(len / 1.1), ang = Math.atan2(x1 - x0, z1 - z0);
     for (let i = 0; i <= n; i++) {
       const t = i / n, x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
@@ -186,7 +187,7 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
   };
   run(-12, -15.2, -2.2, -15.2); run(2.2, -15.2, 12, -15.2);
   run(-12, -15.2, -12, -31); run(12, -15.2, 12, -31); run(-12, -31, 12, -31);
-  shadowTree(g); g.traverse(o => { if (o.material === capM) o.castShadow = false; });
+  shadowTree(g); g.traverse(o => { if ((o as THREE.Mesh).material === capM) o.castShadow = false; });
   scene.add(g);
 }
 
@@ -213,7 +214,7 @@ for (let i = 0; i < RAIN; i++) {
 const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
 const rain = new THREE.LineSegments(rainGeo, tagMat(new THREE.LineBasicMaterial({ color: 0x9fb2d8, transparent: true, opacity: 0.55, depthWrite: false }), CLS.fx));
 rain.frustumCulled = false; scene.add(rain);
-export function updateRain(dt) {
+export function updateRain(dt: number) {
   rain.visible = state.raining; if (!state.raining) return;
   for (let i = 0; i < RAIN; i++) {
     const j = i * 6; let y = rainPos[j + 1] - rainSpd[i] * dt;
@@ -225,7 +226,7 @@ export function updateRain(dt) {
 }
 
 // petals follow the player area
-export function updatePetals(dt) {
+export function updatePetals(dt: number) {
   for (let i = 0; i < PETALS; i++) {
     const j = i * 3, s = petalSeed[i];
     petalPos[j] += (Math.sin(state.time * 0.9 + s) * 0.6 + 0.5) * dt;

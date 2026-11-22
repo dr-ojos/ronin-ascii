@@ -1,16 +1,16 @@
 // Oni behaviour: chase, wind-up, strike, recover; knockback, crowding, hit flash and death.
 import * as THREE from 'three';
-import { scene } from './renderer.js';
-import { enemies } from './enemies.js';
-import { hurtPlayer } from './damage.js';
-import { burst } from './fx.js';
-import { sfx, panOf } from './sfx.js';
-import { showMsg } from './hud.js';
-import { collide } from './physics.js';
-import { player, state } from './state.js';
+import { scene } from './renderer';
+import { enemies } from './enemies';
+import { hurtPlayer } from './damage';
+import { burst } from './fx';
+import { sfx, panOf } from './sfx';
+import { showMsg } from './hud';
+import { collide } from './physics';
+import { player, state } from './state';
 
 const tmp = new THREE.Vector3();
-export function updateEnemies(dt) {
+export function updateEnemies(dt: number) {
   for (let i = enemies.length - 1; i >= 0; i--) {
     const en = enemies[i], g = en.g;
     tmp.subVectors(player.pos, g.position); tmp.y = 0;
