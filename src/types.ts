@@ -1,6 +1,30 @@
 // Shared type definitions.
 import type * as THREE from 'three';
 
+export type Vec3 = [number, number, number];
+
+/** katana pose in body space */
+export interface Pose { pos: THREE.Vector3; q: THREE.Quaternion }
+/** one attack: katana keyframes and spine twist, both keyed by attack progress 0..1 */
+export interface Attack { keys: [number, Pose][]; twist: [number, number][] }
+
+/** what the samurai animation needs each frame */
+export interface AvatarInput {
+  time: number;
+  moving: number;          // 0 idle .. 1 walking
+  walk: number;            // walk cycle phase
+  dash: boolean;
+  look?: number;           // head turn towards the nearest oni (radians)
+  attack: { combo: number; p: number } | null;
+}
+/** the player's samurai, procedural (samurai.ts) or mocap-rigged (rig.ts) */
+export interface Avatar {
+  root: THREE.Object3D;
+  katana: THREE.Object3D;
+  update(dt: number, s: AvatarInput): void;
+  realistic?: boolean;
+}
+
 /** static obstacle: a circle (x, z, r) or an axis-aligned rectangle [x0, x1, z0, z1] */
 export type Collider =
   | { x: number; z: number; r: number; rect?: undefined }

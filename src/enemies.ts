@@ -1,6 +1,7 @@
 // Oni: the live list and spawning (mocap-rigged or procedural). Their behaviour is in enemy-ai.js.
 import * as THREE from 'three';
 import { rigGltf } from './assets';
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { createOniWarrior } from './rig';
 import { scene } from './renderer';
 import { ACTOR_LAYER } from './ascii';
@@ -18,7 +19,7 @@ const oniGeo = {
 const hornMat = M(0xdccca2), eyeMat = new THREE.MeshBasicMaterial({ color: 0xff5a3a });
 export const enemies: Enemy[] = [];
 export function spawnOni(big: boolean) {
-  if (rigGltf) return spawnRealOni(big);
+  if (rigGltf) return spawnRealOni(rigGltf, big);
   const g = new THREE.Group();
   const robeMat = M(big ? 0x8a1a14 : 0x6a2a6a, { roughness: 0.8, emissive: 0x000000 });
   const maskMat = M(big ? 0xc0402a : 0xe6ddc8, { roughness: 0.6, emissive: 0x000000 });
@@ -45,8 +46,8 @@ export function spawnOni(big: boolean) {
   });
 }
 
-function spawnRealOni(big: boolean) {
-  const oni = createOniWarrior(rigGltf, big);
+function spawnRealOni(gltf: GLTF, big: boolean) {
+  const oni = createOniWarrior(gltf, big);
   const g = oni.root;
   const k = big ? 1.45 : 1; g.scale.setScalar(k);
   const a = Math.random() * Math.PI * 2, r = rnd(18, 28);

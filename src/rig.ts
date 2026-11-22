@@ -4,32 +4,34 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {
   softBlobTex, MAT, laceMat, curvedPanel, openCyl, bladeGeometry, hornGeometry, mesh, grp,
-  IDLE, RUN, DASH, ATTACKS, sampleKeys, sampleScalar, smooth, clamp, key
-} from './samurai.js';
+  DASH, ATTACKS, sampleKeys, sampleScalar, smooth, clamp, key
+} from './samurai';
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import type { Avatar, AvatarInput, OniWarrior } from './types';
 
 const V = THREE.Vector3, Q = THREE.Quaternion, TAU = Math.PI * 2;
-const rnd = (a, b) => a + Math.random() * (b - a);
+const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const UP = new V(0, 1, 0);
 
 // ------------------------------------------------------------ bone helpers
 const _q1 = new Q(), _q2 = new Q(), _qd = new Q();
-function rotateBoneTo(bone, from, to) {
+function rotateBoneTo(bone: THREE.Object3D, from: THREE.Vector3, to: THREE.Vector3) {
   _qd.setFromUnitVectors(from.normalize(), to.normalize());
   bone.getWorldQuaternion(_q1).premultiply(_qd);
-  bone.parent.getWorldQuaternion(_q2).invert();
+  bone.parent!.getWorldQuaternion(_q2).invert();
   bone.quaternion.copy(_q2.multiply(_q1));
   bone.updateMatrixWorld(true);
 }
-function rotateBoneWorld(bone, axis, ang) {
+function rotateBoneWorld(bone: THREE.Object3D, axis: THREE.Vector3, ang: number) {
   if (!ang) return;
   _qd.setFromAxisAngle(axis, ang);
   bone.getWorldQuaternion(_q1).premultiply(_qd);
-  bone.parent.getWorldQuaternion(_q2).invert();
+  bone.parent!.getWorldQuaternion(_q2).invert();
   bone.quaternion.copy(_q2.multiply(_q1));
   bone.updateMatrixWorld(true);
 }
 // analytic two-bone IK in world space; keeps each bone's twist from the animation
-function ik2(up, lo, end, target, pole, weight = 1) {
+function ik2(up: THREE.Object3D, lo: THREE.Object3D, end: THREE.Object3D, target: THREE.Vector3, pole: THREE.Vector3, weight = 1) {
   const a = up.getWorldPosition(new V()), b = lo.getWorldPosition(new V()), c = end.getWorldPosition(new V());
   const l1 = a.distanceTo(b), l2 = b.distanceTo(c);
   const toT = target.clone().sub(a);
@@ -44,14 +46,14 @@ function ik2(up, lo, end, target, pole, weight = 1) {
   const curF = c2.clone().sub(b2).normalize();
   rotateBoneTo(lo, curF.clone(), curF.clone().lerp(reach.sub(b2).normalize(), weight));
 }
-function boneMap(model) {
-  const b = {};
+function boneMap(model: THREE.Object3D) {
+  const b: Record<string, THREE.Object3D> = {};
   model.traverse(o => { if (/^mixamorig/.test(o.name)) b[o.name.replace(/^mixamorig:?/, '')] = o; });
   return b;
 }
 
 // Clone the rigged model, face it to +z, put it in bind pose and return helpers.
-function prepareRig(gltf, tint, scale) {
+function prepareRig(gltf: GLTF, tint: THREE.ColorRepresentation, scale?: THREE.Vector3) {
   const root = new THREE.Group();
   const body = grp(root);
   const holder = grp(body);
@@ -59,40 +61,42 @@ function prepareRig(gltf, tint, scale) {
   holder.add(model);
   if (scale) holder.scale.copy(scale);
   const B = boneMap(model);
-  let skinned = null;
-  model.traverse(o => {
+  type SkinnedLit = THREE.SkinnedMesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  let skinned = null as SkinnedLit | null;
+  model.traverse(obj => {
+    const o = obj as SkinnedLit;
     if (o.isSkinnedMesh) {
       if (/visor/i.test(o.name)) o.visible = false;
       else skinned = o;
       o.frustumCulled = false;
     }
   });
+  if (!skinned) throw new Error('el modelo no tiene malla con esqueleto');
   skinned.material = skinned.material.clone();
   skinned.material.color.set(tint);
   skinned.material.roughness = 0.85; skinned.material.metalness = 0.05;
   skinned.skeleton.pose();
   root.updateMatrixWorld(true);
-  const P = n => B[n].getWorldPosition(new V());
+  const P = (n: string) => B[n].getWorldPosition(new V());
   // make sure the character looks down +z (toes ahead of the feet) with its left side on +x
   if (P('LeftToe_End').z < P('LeftFoot').z) { holder.rotation.y = Math.PI; root.updateMatrixWorld(true); }
   const side = Math.sign(P('LeftArm').x) || 1;
   const mixer = new THREE.AnimationMixer(model);
-  const clip = n => gltf.animations.find(a => a.name === n);
-  const act = {};
-  for (const n of ['Idle', 'Walk', 'Run']) { const c = clip(n); if (c) { act[n] = mixer.clipAction(c); act[n].play(); act[n].setEffectiveWeight(0); } }
+  const clip = (n: string) => gltf.animations.find(a => a.name === n);
+  const act: Partial<Record<'Idle' | 'Walk' | 'Run', THREE.AnimationAction>> = {};
+  for (const n of ['Idle', 'Walk', 'Run'] as const) { const c = clip(n); if (c) { const a = act[n] = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); } }
   act.Idle?.setEffectiveWeight(1);
   // world-space attach in bind pose: build the prop in root space, then reparent onto the bone
-  const attach = (boneName, obj) => { root.add(obj); obj.updateMatrixWorld(true); B[boneName].attach(obj); return obj; };
+  const attach = <T extends THREE.Object3D>(boneName: string, obj: T): T => { root.add(obj); obj.updateMatrixWorld(true); B[boneName].attach(obj); return obj; };
   return { root, body, holder, model, B, P, side, mixer, act, attach, skinned };
 }
-function finish(rig, cls) {
-  rig.root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+function finish(rig: ReturnType<typeof prepareRig>) {
+  rig.root.traverse(o => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   rig.skinned.skeleton.pose();
-  return cls;
 }
 
 // ------------------------------------------------------------ samurai armour pieces (in root space)
-function buildHelmet() {
+export function buildHelmet() {
   const head = new THREE.Group();
   const menpo = mesh(new THREE.SphereGeometry(0.106, 24, 12, Math.PI / 2 - 1.15, 2.3, 1.62, 1.0), MAT.redLac, head);
   menpo.scale.set(0.95, 1.08, 1.05);
@@ -126,9 +130,9 @@ function buildHelmet() {
 
 // ------------------------------------------------------------ the ronin (stylised: straw kasa, black armour, vermilion stripes, teal cloth)
 const RONIN = { red: '#e4573d', redDark: '#8e2a1c', black: '#0d0c0f', teal: 0x2b7f8c, tan: 0xd9a35a };
-function stripeTex(vertical, cols = 6) {
+function stripeTex(vertical: boolean, cols = 6) {
   const c = document.createElement('canvas'); c.width = 128; c.height = 128;
-  const x = c.getContext('2d');
+  const x = c.getContext('2d')!;
   x.fillStyle = RONIN.black; x.fillRect(0, 0, 128, 128);
   const n = cols, w = 128 / n;
   for (let i = 0; i < n; i++) {
@@ -148,7 +152,7 @@ function stripeTex(vertical, cols = 6) {
 }
 function hatTex() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 64;
-  const x = c.getContext('2d');
+  const x = c.getContext('2d')!;
   x.fillStyle = '#121114'; x.fillRect(0, 0, 256, 64);
   for (let i = 0; i < 60; i++) {
     const px = Math.random() * 256, len = 14 + Math.random() * 40, a = 0.15 + Math.random() * 0.45;
@@ -157,9 +161,9 @@ function hatTex() {
   }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; return t;
 }
-const lacq = (map, rx, ry) => { const m = map.clone(); m.repeat.set(rx, ry); m.needsUpdate = true; return new THREE.MeshPhysicalMaterial({ map: m, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.25, side: THREE.DoubleSide }); };
+const lacq = (map: THREE.Texture, rx: number, ry: number) => { const m = map.clone(); m.repeat.set(rx, ry); m.needsUpdate = true; return new THREE.MeshPhysicalMaterial({ map: m, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.25, side: THREE.DoubleSide }); };
 
-export function createRealSamurai(gltf) {
+export function createRealSamurai(gltf: GLTF): Avatar {
   const rig = prepareRig(gltf, RONIN.teal, new V(0.95, 1.03, 0.95));
   const { root, body, B, P, side, attach, act, mixer } = rig;
   const hips = P('Hips'), neck = P('Neck'), head = P('Head'), top = P('HeadTop_End');
@@ -182,7 +186,7 @@ export function createRealSamurai(gltf) {
   mesh(new THREE.ConeGeometry(0.04, 0.04, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.245, -0.012);
   const mask = mesh(new THREE.SphereGeometry(0.1, 18, 10, Math.PI / 2 - 0.9, 1.8, 1.45, 0.9), skin, hg, 0, -0.03, 0.012); mask.scale.set(0.95, 1.1, 1.05);
   mesh(new THREE.BoxGeometry(0.05, 0.006, 0.01), hair, hg, 0, -0.06, 0.112);
-  const strands = [];
+  const strands: { g: THREE.Group; ph: number; base: number; st: THREE.Mesh }[] = [];
   for (let i = 0; i < 34; i++) {
     const a = Math.PI * 0.35 + (i / 33) * Math.PI * 1.3, len = rnd(0.35, 0.62);
     const sg = new THREE.Group(); sg.position.set(Math.cos(a) * 0.095, 0.02, Math.sin(a) * -0.095 - 0.01); sg.rotation.y = -a + Math.PI / 2;
@@ -205,7 +209,8 @@ export function createRealSamurai(gltf) {
   attach('Spine1', chest);
 
   // ---- long black scarf streaming behind
-  const scarf = new THREE.Group(); const ribbons = [];
+  const scarf = new THREE.Group();
+  const ribbons: { geo: THREE.PlaneGeometry; base: Float32Array; len: number; ph: number }[] = [];
   for (let i = 0; i < 4; i++) {
     const len = rnd(1.2, 1.9), w = rnd(0.07, 0.15), geo = new THREE.PlaneGeometry(w, len, 1, 18);
     geo.rotateX(Math.PI / 2); geo.translate(0, 0, -len / 2);              // lies along -z (behind the neck)
@@ -220,7 +225,7 @@ export function createRealSamurai(gltf) {
   const waist = new THREE.Group();
   const obi = mesh(new THREE.TorusGeometry(0.205, 0.03, 8, 32), teal, waist, 0, 0.035, 0); obi.rotation.x = Math.PI / 2; obi.scale.y = 0.78;
   mesh(new THREE.TorusKnotGeometry(0.025, 0.01, 24, 5), teal, waist, 0.12, 0.03, 0.15);
-  const kusa = [];
+  const kusa: THREE.Group[] = [];
   for (const th of [-2.6, -1.95, -1.3, -0.65, 0, 0.65, 1.3, 1.95, 2.6]) {
     const g = grp(waist, Math.sin(th) * 0.215, 0.02, Math.cos(th) * 0.17); g.rotation.y = th; g.rotation.x = -0.2;
     const p = curvedPanel(0.15, 0.42, 0.9, lacq(Vt, 0.5, 1)); p.position.y = -0.21; g.add(p);
@@ -238,7 +243,7 @@ export function createRealSamurai(gltf) {
   attach('Hips', waist);
 
   // ---- big striped sode, striped forearm guards, red gloves
-  for (const [nm, a, f, s, isLeft] of [['LeftArm', lArm, lFore, side, true], ['RightArm', rArm, rFore, -side, false]]) {
+  for (const [nm, a, f, s, isLeft] of [['LeftArm', lArm, lFore, side, true], ['RightArm', rArm, rFore, -side, false]] as [string, THREE.Vector3, THREE.Vector3, number, boolean][]) {
     const g = new THREE.Group(), len = a.distanceTo(f);
     const panel = curvedPanel(0.27, Math.min(0.36, len * 1.1), 1.5, lacq(H, 1, 1.3)); panel.rotation.set(-Math.PI / 2, 0, Math.PI / 2); g.add(panel);
     mesh(new THREE.BoxGeometry(0.03, 0.03, 0.28), black, g, -s * len * 0.5, 0.01, 0);
@@ -296,13 +301,13 @@ export function createRealSamurai(gltf) {
   // ~1.45 m walking and ~2.75 m running; these offsets put both clips at the same foot (phase 0 =
   // right foot forward, right hand back), so walk and run cross-fade without the legs scissoring.
   const WALK_STRIDE = 1.45, RUN_STRIDE = 2.75, WALK_OFF = 0.783, RUN_OFF = 0.75;
-  for (const n of ['Walk', 'Run']) if (act[n]) act[n].timeScale = 0;
+  for (const n of ['Walk', 'Run'] as const) if (act[n]) act[n].timeScale = 0;
   const loco = { init: false, px: 0, pz: 0, yaw: 0, lag: 0, spd: 0, acc: 0, turn: 0, phase: 0, lean: 0, bank: 0, step: 0 };
-  const angWrap = a => Math.atan2(Math.sin(a), Math.cos(a));
-  const ease = (rate, dt) => 1 - Math.exp(-dt * rate);
+  const angWrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+  const ease = (rate: number, dt: number) => 1 - Math.exp(-dt * rate);
   const AX_X = new V(1, 0, 0), axis = new V(), swQ = new Q();
 
-  function locomotion(dt, s, atk) {
+  function locomotion(dt: number, atk: AvatarInput['attack']) {
     const dts = Math.max(dt, 1e-4);
     if (!loco.init) { loco.init = true; loco.px = root.position.x; loco.pz = root.position.z; loco.yaw = root.rotation.y; }
     // speed, acceleration and turn rate, measured from how the root really moved this frame
@@ -342,9 +347,9 @@ export function createRealSamurai(gltf) {
     return { idleW, runW, move: 1 - idleW };
   }
 
-  function update(dt, s) {
+  function update(dt: number, s: AvatarInput) {
     const atk = s.attack, p = atk ? clamp(atk.p, 0, 1) : 0, m = s.moving, t = s.time;
-    const L = locomotion(dt, s, atk);
+    const L = locomotion(dt, atk);
     mixer.update(dt);
     const spin = atk && atk.combo === 2 ? smooth(clamp((p - 0.25) / 0.55, 0, 1)) * TAU : 0;
     body.rotation.set(0, spin - loco.lag, loco.bank);
@@ -416,7 +421,7 @@ const oniMats = {
   stud: new THREE.MeshStandardMaterial({ color: 0x8a8a92, metalness: 0.9, roughness: 0.3 }),
   rope: new THREE.MeshStandardMaterial({ color: 0x9a8352, roughness: 1 })
 };
-export function createOniWarrior(gltf, big) {
+export function createOniWarrior(gltf: GLTF, big: boolean): OniWarrior {
   const rig = prepareRig(gltf, big ? 0x3a1512 : 0x23202a);
   const { root, B, P, side, attach, act, mixer } = rig;
   const head = P('Head'), top = P('HeadTop_End'), hips = P('Hips'), neck = P('Neck');
@@ -478,12 +483,12 @@ export function createOniWarrior(gltf, big) {
   finish(rig);
   ring.castShadow = false;
 
-  const flashMats = [];
-  root.traverse(o => { if (o.isMesh && o.material && 'emissive' in o.material && !flashMats.includes(o.material)) { if (o.material !== MAT.iron && o.material !== MAT.hakama) { o.material = o.material.clone(); flashMats.push(o.material); } } });
+  const flashMats: THREE.MeshStandardMaterial[] = [];
+  root.traverse(obj => { const o = obj as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>; if (o.isMesh && o.material && 'emissive' in o.material && !flashMats.includes(o.material)) { if (o.material !== MAT.iron && o.material !== MAT.hakama) { o.material = o.material.clone(); flashMats.push(o.material); } } });
   const pole = new V(), bq = new Q(), tgt = new V();
   let lift = 0;
   act.Run && (act.Run.time = Math.random() * 2);
-  function update(dt, s) {
+  function update(dt: number, s: Parameters<OniWarrior['update']>[1]) {
     const run = clamp(s.moving, 0, 1);
     act.Idle?.setEffectiveWeight(1 - run);
     act.Run?.setEffectiveWeight(run);
@@ -505,6 +510,6 @@ export function createOniWarrior(gltf, big) {
       rotateBoneWorld(B.Spine, new V(1, 0, 0).applyQuaternion(bq), 0.4);
     }
   }
-  function setFlash(f) { for (const m of flashMats) m.emissive.setScalar(f * 0.9); }
+  function setFlash(f: number) { for (const m of flashMats) m.emissive.setScalar(f * 0.9); }
   return { root, update, setFlash, ring };
 }

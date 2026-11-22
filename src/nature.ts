@@ -2,15 +2,28 @@
 // wildflowers, fallen petals, mossy rocks, a rippling pond and fireflies — all swaying in one wind field.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { CLS as MaterialClasses } from './materials';
+import type { Collider, XZ } from './types';
+
+/** what world.ts hands to the landscape builder */
+export interface NatureCtx {
+  tagMat: <T extends THREE.Material>(mat: T, cls: number) => T;
+  CLS: typeof MaterialClasses;
+  colliders: Collider[];
+  camBlockers: THREE.Object3D[];
+  inCompound(x: number, z: number, margin?: number): boolean;
+  onPath(x: number, z: number): boolean;
+}
+type ShaderParams = Parameters<THREE.Material['onBeforeCompile']>[0];
 
 const V = THREE.Vector3, TAU = Math.PI * 2, UP = new V(0, 1, 0);
-const rnd = (a, b) => a + Math.random() * (b - a);
-const pick = a => a[(Math.random() * a.length) | 0];
+const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+const pick = <T,>(a: readonly T[]): T => a[(Math.random() * a.length) | 0];
 // cheap ambient occlusion: darker towards the inside / underside of a canopy
-const ao = (hex, k) => new THREE.Color(hex).multiplyScalar(THREE.MathUtils.clamp(k, 0.35, 1.1));
+const ao = (hex: THREE.ColorRepresentation, k: number) => new THREE.Color(hex).multiplyScalar(THREE.MathUtils.clamp(k, 0.35, 1.1));
 // canopies are brighter on the side facing the moon (same direction as the moonlight in index.html)
 const MOON = new V(-0.55, 0.7, -0.45).normalize();
-const moonLit = u => 0.8 + 0.32 * (u.lengthSq() > 1e-6 ? u.clone().normalize().dot(MOON) : 0);
+const moonLit = (u: THREE.Vector3) => 0.8 + 0.32 * (u.lengthSq() > 1e-6 ? u.clone().normalize().dot(MOON) : 0);
 
 // ------------------------------------------------------------ wind
 export const wind = {
@@ -53,8 +66,8 @@ vec3 windAt(vec3 wp, float h01, float amp, float flutter) {
 `;
 
 // patch any lit material (and its shadow depth material) so vertices move with the wind
-export function addWind(mat, { height = 6, amp = 0.3, flutter = 0 } = {}) {
-  const inject = sh => {
+export function addWind(mat: THREE.Material, { height = 6, amp = 0.3, flutter = 0 }: { height?: number; amp?: number; flutter?: number } = {}) {
+  const inject = (sh: ShaderParams) => {
     sh.uniforms.uTime = wind.uTime;
     sh.vertexShader = WIND_GLSL + sh.vertexShader
       .replace('#include <project_vertex>', /* glsl */`
@@ -78,7 +91,7 @@ export function addWind(mat, { height = 6, amp = 0.3, flutter = 0 } = {}) {
 }
 
 // ------------------------------------------------------------ helpers
-function tube(start, end, r0, r1, seg = 6, color) {
+function tube(start: THREE.Vector3, end: THREE.Vector3, r0: number, r1: number, seg = 6, color?: THREE.ColorRepresentation) {
   const d = end.clone().sub(start), len = d.length();
   const g = new THREE.CylinderGeometry(r1, r0, len, seg, 1);
   g.translate(0, len / 2, 0);
@@ -98,22 +111,23 @@ function tube(start, end, r0, r1, seg = 6, color) {
   }
   return g;
 }
-const perp = d => { const p = new V(1, 0, 0); if (Math.abs(d.x) > 0.9) p.set(0, 0, 1); return p.cross(d).normalize(); };
-function jitter(geo, amt) {
-  const p = geo.attributes.position, seen = new Map();
+const perp = (d: THREE.Vector3) => { const p = new V(1, 0, 0); if (Math.abs(d.x) > 0.9) p.set(0, 0, 1); return p.cross(d).normalize(); };
+function jitter<T extends THREE.BufferGeometry>(geo: T, amt: number): T {
+  const p = geo.attributes.position, seen = new Map<string, number[]>();
   for (let i = 0; i < p.count; i++) {
     const k = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
     if (!seen.has(k)) seen.set(k, [rnd(-amt, amt), rnd(-amt, amt), rnd(-amt, amt)]);
-    const j = seen.get(k); p.setXYZ(i, p.getX(i) + j[0], p.getY(i) + j[1], p.getZ(i) + j[2]);
+    const j = seen.get(k)!; p.setXYZ(i, p.getX(i) + j[0], p.getY(i) + j[1], p.getZ(i) + j[2]);
   }
   geo.computeVertexNormals(); return geo;
 }
 // collects instances of one blob geometry and emits a single InstancedMesh
 class Batch {
-  constructor(geo, mat) { this.geo = geo; this.mat = mat; this.m = []; this.c = []; }
-  add(pos, scale, rotY = Math.random() * TAU, color, rot) {
+  geo: THREE.BufferGeometry; mat: THREE.Material; m: THREE.Matrix4[] = []; c: THREE.Color[] = [];
+  constructor(geo: THREE.BufferGeometry, mat: THREE.Material) { this.geo = geo; this.mat = mat; }
+  add(pos: THREE.Vector3, scale: number | THREE.Vector3, rotY: number | undefined = Math.random() * TAU, color: THREE.ColorRepresentation, rot?: THREE.Quaternion) {
     const q = rot || new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(-0.4, 0.4), rotY, rnd(-0.4, 0.4)));
-    this.m.push(new THREE.Matrix4().compose(pos, q, scale.isVector3 ? scale : new V(scale, scale, scale)));
+    this.m.push(new THREE.Matrix4().compose(pos, q, typeof scale === 'number' ? new V(scale, scale, scale) : scale));
     this.c.push(new THREE.Color(color));
   }
   build() {
@@ -125,9 +139,9 @@ class Batch {
 }
 
 // ------------------------------------------------------------ main
-export function buildNature(scene, ctx) {
+export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
   const { tagMat, CLS, colliders, camBlockers, inCompound, onPath } = ctx;
-  const free = (minR, maxR, gap = 3) => {
+  const free = (minR: number, maxR: number, gap = 3): [number, number] | null => {
     for (let t = 0; t < 120; t++) {
       const a = Math.random() * TAU, r = rnd(minR, maxR), x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (Math.abs(x) < 4.5 && z < 8 && z > -16) continue;
@@ -137,8 +151,8 @@ export function buildNature(scene, ctx) {
     }
     return null;
   };
-  const addMesh = (mesh, depth, cls, blocker) => {
-    tagMat(mesh.material, cls);
+  const addMesh = (mesh: THREE.Mesh, depth: THREE.Material | null, cls: number, blocker?: boolean) => {
+    tagMat(mesh.material as THREE.Material, cls);
     if (depth) mesh.customDepthMaterial = depth;
     mesh.castShadow = true; mesh.receiveShadow = true;
     scene.add(mesh); if (blocker) camBlockers.push(mesh);
@@ -183,12 +197,12 @@ export function buildNature(scene, ctx) {
 
   // ---------------- mossy rocks (incl. the pond rim)
   const rockMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
-  const rockGeos = [];
-  const rock = (x, z, k) => {
+  const rockGeos: THREE.BufferGeometry[] = [];
+  const rock = (x: number, z: number, k: number) => {
     const g = jitter(new THREE.IcosahedronGeometry(k, 1), k * 0.22);
     g.scale(1, rnd(0.45, 0.75), 1);
     g.computeVertexNormals();
-    const n = g.attributes.normal, cols = [];
+    const n = g.attributes.normal, cols: number[] = [];
     for (let i = 0; i < n.count; i++) {
       const moss = THREE.MathUtils.smoothstep(n.getY(i), 0.35, 0.85) * rnd(0.7, 1);
       const c = new THREE.Color(0x5a5d66).lerp(new THREE.Color(0x3d5a2e), moss).multiplyScalar(rnd(0.8, 1.15));
@@ -206,7 +220,7 @@ export function buildNature(scene, ctx) {
   // bark carries per-vertex colour: dark mossy roots, lighter thin twigs, a slight tint per tree
   const barkMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, vertexColors: true });
   const barkDepth = addWind(barkMat, { height: 12, amp: 0.25, flutter: 0 });
-  const bark = [];
+  const bark: THREE.BufferGeometry[] = [];
   const blobGeo = jitter(new THREE.IcosahedronGeometry(0.2, 1), 0.03);
   const blossomMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, emissive: 0x2a0a18 });
   const needleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
@@ -214,10 +228,10 @@ export function buildNature(scene, ctx) {
   const petals = new Batch(new THREE.PlaneGeometry(0.07, 0.05), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, side: THREE.DoubleSide }));
   const PINK = [0xf4b3c8, 0xe993b1, 0xfcd6e2, 0xd97a9e, 0xf7c4d4];
   const GREEN = [0x1d3b27, 0x24452c, 0x2d5233, 0x183322];
-  const petalSources = [];   // canopy points that shed falling petals
+  const petalSources: THREE.Vector3[] = [];   // canopy points that shed falling petals
 
   // a branch made of a few slightly bent segments, so limbs curve instead of being straight sticks
-  function bentTube(start, dir, len, r0, r1, bend, color, parts = 3) {
+  function bentTube(start: THREE.Vector3, dir: THREE.Vector3, len: number, r0: number, r1: number, bend: number, color: THREE.ColorRepresentation, parts = 3): [THREE.Vector3, THREE.Vector3] {
     let p = start.clone(), d = dir.clone().normalize();
     const axis = perp(d).applyAxisAngle(d, rnd(0, TAU));
     for (let i = 0; i < parts; i++) {
@@ -229,7 +243,7 @@ export function buildNature(scene, ctx) {
     return [p, d];
   }
   // buttress roots splaying into the soil
-  function roots(base, r, color) {
+  function roots(base: THREE.Vector3, r: number, color: THREE.ColorRepresentation) {
     const n = 5 + ((Math.random() * 3) | 0);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU + rnd(-0.3, 0.3), reach = r * rnd(2.6, 3.8);
@@ -238,10 +252,10 @@ export function buildNature(scene, ctx) {
     }
   }
 
-  function sakura(x, z) {
-    const k = rnd(0.85, 1.25), tips = [], weeping = Math.random() < 0.3;
+  function sakura(x: number, z: number) {
+    const k = rnd(0.85, 1.25), tips: THREE.Vector3[] = [], weeping = Math.random() < 0.3;
     const barkCol = pick([0x4a2f29, 0x52342c, 0x3f2824]);
-    const branch = (s, d, len, r, depth) => {
+    const branch = (s: THREE.Vector3, d: THREE.Vector3, len: number, r: number, depth: number): void => {
       const [e, ed] = bentTube(s, d, len, r, r * 0.66, depth > 2 ? 0.3 : 0.55, barkCol);
       if (depth === 0) { tips.push(e); return; }
       const n = depth > 2 ? 2 : 3;
@@ -285,7 +299,7 @@ export function buildNature(scene, ctx) {
     }
     colliders.push({ x, z, r: 0.35 * k });
   }
-  function pine(x, z) {
+  function pine(x: number, z: number) {
     const k = rnd(0.9, 1.3), barkCol = pick([0x34302d, 0x3a3430, 0x2e2a28]);
     let p = new V(x, 0, z), d = new V(rnd(-0.3, 0.3), 1, rnd(-0.3, 0.3)).normalize(), r = 0.27 * k;
     const lean = new V(rnd(-1, 1), 0, rnd(-1, 1)).normalize();
@@ -314,7 +328,7 @@ export function buildNature(scene, ctx) {
     }
     colliders.push({ x, z, r: 0.4 * k });
   }
-  function cypress(x, z) {
+  function cypress(x: number, z: number) {
     const H = rnd(8, 12.5), base = rnd(1.3, 1.9), barkCol = 0x3d2c24;
     roots(new V(x, 0, z), 0.2, barkCol);
     bark.push(tube(new V(x, 0, z), new V(x, H * 0.92, z), 0.22, 0.05, 8, barkCol));
@@ -330,11 +344,11 @@ export function buildNature(scene, ctx) {
   }
   const culmMat = new THREE.MeshStandardMaterial({ color: 0x5d8a35, roughness: 0.5 });
   const culmDepth = addWind(culmMat, { height: 10, amp: 0.55, flutter: 0 });
-  const culms = [];
+  const culms: THREE.BufferGeometry[] = [];
   const bambooLeaf = new THREE.PlaneGeometry(0.06, 0.34); bambooLeaf.translate(0, -0.17, 0);
   const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, side: THREE.DoubleSide });
   const leaves = new Batch(bambooLeaf, leafMat);
-  function bamboo(x, z) {
+  function bamboo(x: number, z: number) {
     for (let j = 0; j < 9; j++) {
       const h = rnd(6.5, 10.5), bx = x + rnd(-1.5, 1.5), bz = z + rnd(-1.5, 1.5), tilt = new V(rnd(-0.06, 0.06), 1, rnd(-0.06, 0.06)).normalize();
       const top = new V(bx, 0, bz).addScaledVector(tilt, h);
@@ -402,7 +416,8 @@ export function buildNature(scene, ctx) {
   buildGrass(scene, ctx);
 
   // ---------------- sakura petals drifting down from the canopies
-  const PF = Math.min(420, petalSources.length * 6), pfPos = new Float32Array(PF * 3), pfSeed = [];
+  const PF = Math.min(420, petalSources.length * 6), pfPos = new Float32Array(PF * 3);
+  const pfSeed: { src: THREE.Vector3; ox: number; oz: number; sp: number; ph: number; sw: number }[] = [];
   for (let i = 0; i < PF; i++) pfSeed.push({ src: petalSources[i % petalSources.length], ox: rnd(-0.7, 0.7), oz: rnd(-0.7, 0.7), sp: rnd(0.28, 0.5), ph: Math.random() * 40, sw: rnd(0.8, 1.6) });
   const pfGeo = new THREE.BufferGeometry(); pfGeo.setAttribute('position', new THREE.BufferAttribute(pfPos, 3));
   const pfMat = tagMat(new THREE.PointsMaterial({ color: 0xf7c6d6, size: 0.075 }), CLS.foliage);
@@ -417,7 +432,7 @@ export function buildNature(scene, ctx) {
   const fireflies = new THREE.Points(ffGeo, ffMat); fireflies.frustumCulled = false; scene.add(fireflies);
 
   let frame = 0;
-  return function update(t, center) {
+  return function update(t: number, center: XZ) {
     wind.uTime.value = t;
     wind.uCenter.value.set(center.x, center.z);
     for (let i = 0; i < FF; i++) {
@@ -451,7 +466,7 @@ export function buildNature(scene, ctx) {
 }
 
 // ------------------------------------------------------------ grass
-function buildGrass(scene, { tagMat, CLS }) {
+function buildGrass(scene: THREE.Scene, { tagMat, CLS }: NatureCtx) {
   const TILE = 84, N = 210000;
   const geo = new THREE.PlaneGeometry(0.075, 0.7, 1, 4);
   geo.translate(0, 0.35, 0);

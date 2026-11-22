@@ -10,6 +10,19 @@
 //   gain  – level of the sample      wet   – reverb send       pitch – random ± playback-rate variation
 //   layer – level of the synth layer kept underneath the sample (0 = sample only)
 //   loop  – ambience bed that loops forever
+interface SlotCfg { wet: number; gain: number; layer?: number; loop?: boolean; pitch?: number }
+/** settings once defaults and the manifest are merged in */
+type SlotSettings = SlotCfg & { pitch: number; layer: number; files?: string[] };
+/** a slot ready to play: its decoded variants and the last one played */
+type Slot = SlotSettings & { buffers: AudioBuffer[]; last: number; raw?: undefined };
+type RawFile = { f: string; data: ArrayBuffer };
+/** manifest.json: a list of files, or { files, gain, wet, ... } */
+type ManifestEntry = string[] | (Partial<SlotCfg> & { files?: string[] });
+type PlayOpts = { t?: number; pan?: number; gain?: number; rate?: number };
+/** 'slot' or ['slot', { rate, gain }] for a re-pitched fallback */
+type Candidate = string | [string, PlayOpts];
+interface Ambience { rainBus: GainNode; windBus: GainNode; drone: GainNode; rainOn: boolean; rainSample?: GainNode }
+
 const SLOTS = {
   swing:      { wet: 0.2,  gain: 0.9 },
   swingHeavy: { wet: 0.22, gain: 1 },
@@ -25,32 +38,36 @@ const SLOTS = {
   taiko:      { wet: 0.5,  gain: 1 },
   rain:       { wet: 0.15, gain: 0.35, loop: true, pitch: 0 },
   wind:       { wet: 0.25, gain: 0.3,  loop: true, pitch: 0 },
-};
+} satisfies Record<string, SlotCfg>;
+type SlotName = keyof typeof SLOTS;
 const SOUND_DIR = new URL(import.meta.env.BASE_URL + 'sounds/', location.href);
 
 // Download the manifest and the raw file bytes straight away (no AudioContext needed yet),
 // so the samples are usually ready by the time the player clicks to start.
-function prefetchSamples() {
+function prefetchSamples(): Promise<[SlotName, SlotSettings & { raw: RawFile[] }][]> {
   return fetch(new URL('manifest.json', SOUND_DIR)).then(r => (r.ok ? r.json() : {})).catch(() => ({}))
-    .then(manifest => Promise.all(Object.keys(SLOTS).map(async name => {
+    .then((manifest: Record<string, ManifestEntry>) => Promise.all((Object.keys(SLOTS) as SlotName[]).map(async (name): Promise<[SlotName, SlotSettings & { raw: RawFile[] }]> => {
       const entry = manifest[name] || [];
-      const cfg = { ...SLOTS[name], pitch: SLOTS[name].pitch ?? 0.04, layer: SLOTS[name].layer ?? 0, ...(Array.isArray(entry) ? {} : entry) };
-      const files = Array.isArray(entry) ? entry : entry.files || [];
+      const base: SlotCfg = SLOTS[name];
+      const cfg = { ...base, pitch: base.pitch ?? 0.04, layer: base.layer ?? 0, ...(Array.isArray(entry) ? {} : entry) };
+      const files: string[] = Array.isArray(entry) ? entry : entry.files || [];
       const raw = await Promise.all(files.map(f => fetch(new URL(f, SOUND_DIR))
-        .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-        .then(data => ({ f, data }))
+        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
+        .then((data): RawFile => ({ f, data }))
         .catch(e => { console.warn(`[audio] no se pudo cargar sounds/${f} (${e.message})`); return null; })));
-      return [name, { ...cfg, raw: raw.filter(Boolean) }];
+      return [name, { ...cfg, raw: raw.filter((r): r is RawFile => r !== null) }];
     })));
 }
 
 export function createAudio() {
-  let ctx = null, master, verb, verbSend, noise, amb = null, muted = false, scale = 1, ready = null;
-  const rnd = (a, b) => a + Math.random() * (b - a);
+  // the WebAudio graph is built by init() on the first click; every sound checks ok() before using it
+  let ctx!: AudioContext, master!: GainNode, verb!: ConvolverNode, verbSend!: GainNode, noise!: AudioBuffer;
+  let amb: Ambience | null = null, muted = false, scale = 1, ready: Promise<Record<string, number>> | null = null;
+  const rnd = (a: number, b: number) => a + Math.random() * (b - a);
   const prefetch = prefetchSamples();
-  const slots = {}; // name -> { buffers: AudioBuffer[], gain, wet, pitch, layer, loop, last }
+  const slots: Record<string, Slot> = {}; // name -> { buffers: AudioBuffer[], gain, wet, pitch, layer, loop, last }
 
-  function impulse(seconds, decay) {
+  function impulse(seconds: number, decay: number) {
     const len = ctx.sampleRate * seconds, buf = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let c = 0; c < 2; c++) {
       const d = buf.getChannelData(c);
@@ -60,7 +77,7 @@ export function createAudio() {
   }
   function init() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     const comp = ctx.createDynamicsCompressor();
     Object.assign(comp, {});
     comp.threshold.value = -16; comp.knee.value = 10; comp.ratio.value = 5; comp.attack.value = 0.003; comp.release.value = 0.25;
@@ -74,7 +91,7 @@ export function createAudio() {
     startAmbience();
     ready = prefetch.then(entries => Promise.all(entries.map(async ([name, cfg]) => {
       const buffers = (await Promise.all(cfg.raw.map(({ f, data }) => ctx.decodeAudioData(data)
-        .catch(() => { console.warn(`[audio] formato no soportado: sounds/${f}`); return null; })))).filter(Boolean);
+        .catch(() => { console.warn(`[audio] formato no soportado: sounds/${f}`); return null; })))).filter((b): b is AudioBuffer => b !== null);
       slots[name] = { ...cfg, raw: undefined, buffers, last: -1 };
     }))).then(() => {
       const loaded = Object.entries(slots).filter(([, s]) => s.buffers.length).map(([n, s]) => `${n}×${s.buffers.length}`);
@@ -87,7 +104,7 @@ export function createAudio() {
 
   // ------------------------------------------------------------ samples
   // Play one random variant of a slot (never the same one twice in a row). Returns false if the slot is empty.
-  function playSample(name, { t = ctx.currentTime, pan = 0, gain = 1, rate = 1 } = {}) {
+  function playSample(name: string, { t = ctx.currentTime, pan = 0, gain = 1, rate = 1 }: PlayOpts = {}) {
     const s = slots[name]; if (!s || !s.buffers.length) return false;
     let i = (Math.random() * s.buffers.length) | 0;
     if (s.buffers.length > 1 && i === s.last) i = (i + 1) % s.buffers.length;
@@ -100,9 +117,9 @@ export function createAudio() {
   }
   // Try each candidate slot in order ('name' or ['name', { rate, gain }] for a re-pitched fallback).
   // If one plays, the synth version is kept underneath at that slot's `layer` level; otherwise the synth plays alone.
-  function voice(candidates, opts, synth, layerSynth = synth) {
+  function voice(candidates: Candidate[], opts: PlayOpts, synth: () => void, layerSynth = synth) {
     for (const c of candidates) {
-      const [name, extra] = Array.isArray(c) ? c : [c, {}];
+      const [name, extra]: [string, PlayOpts] = Array.isArray(c) ? c : [c, {}];
       if (!playSample(name, { ...opts, ...extra })) continue;
       const l = slots[name].layer;
       if (l > 0) { const prev = scale; scale = prev * l; try { layerSynth(); } finally { scale = prev; } }
@@ -112,31 +129,31 @@ export function createAudio() {
   }
 
   // route a node to the dry bus and the reverb, with stereo position
-  function out(node, { wet = 0.25, pan = 0, gain = 1 } = {}) {
+  function out(node: AudioNode, { wet = 0.25, pan = 0, gain = 1 }: { wet?: number; pan?: number; gain?: number } = {}) {
     const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan));
     const g = ctx.createGain(); g.gain.value = gain * scale;
     node.connect(g).connect(p); p.connect(master);
     const s = ctx.createGain(); s.gain.value = wet; p.connect(s).connect(verb);
     return g;
   }
-  function env(g, t, a, peak, d, end = 0.0001) {
+  function env(g: GainNode, t: number, a: number, peak: number, d: number, end = 0.0001) {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(peak, t + a);
     g.gain.exponentialRampToValueAtTime(end, t + a + d);
   }
-  function noiseSrc(t, dur, rate = 1) {
+  function noiseSrc(t: number, dur: number, rate = 1) {
     const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.playbackRate.value = rate;
     s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.05); return s;
   }
   const ok = () => ctx && !muted;
 
   // ------------------------------------------------------------ one-shots
-  function swing({ power = 1, pan = 0 } = {}) {
+  function swing({ power = 1, pan = 0 }: { power?: number; pan?: number } = {}) {
     if (!ok()) return;
-    const cands = power > 1.2 ? ['swingHeavy', ['swing', { rate: 0.9, gain: 1.15 }]] : ['swing'];
+    const cands: Candidate[] = power > 1.2 ? ['swingHeavy', ['swing', { rate: 0.9, gain: 1.15 }]] : ['swing'];
     voice(cands, { pan }, () => swingSynth({ power, pan }));
   }
-  function swingSynth({ power = 1, pan = 0 } = {}) {
+  function swingSynth({ power = 1, pan = 0 }: { power?: number; pan?: number } = {}) {
     const t = ctx.currentTime, len = 0.32 * (0.8 + power * 0.3);
     // body of the whoosh: band-passed noise sweeping up then down (doppler feel)
     const n = noiseSrc(t, len), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
@@ -152,7 +169,7 @@ export function createAudio() {
     const g3 = ctx.createGain(); env(g3, t, 0.05, 0.18 * power, len);
     o.connect(g3); out(g3, { wet: 0.05 }); o.start(t); o.stop(t + len + 0.1);
   }
-  function steel(t, pan, bright = 1) {
+  function steel(t: number, pan: number, bright = 1) {
     // inharmonic partials = struck blade ringing in the hall
     const f0 = rnd(1500, 2100) * bright;
     for (const [m, amp, dec] of [[1, 0.16, 1.4], [2.76, 0.09, 0.9], [5.4, 0.06, 0.6], [8.93, 0.035, 0.35], [1.008, 0.1, 1.6]]) {
@@ -163,7 +180,7 @@ export function createAudio() {
     const n = noiseSrc(t, 0.05), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3000;
     const g = ctx.createGain(); env(g, t, 0.001, 0.5, 0.04); n.connect(hp).connect(g); out(g, { wet: 0.2, pan });
   }
-  function body(t, heavy, pan) {
+  function body(t: number, heavy: boolean, pan: number) {
     // sub drop + flesh slap + distortion grit
     const o = ctx.createOscillator(); o.type = 'sine';
     o.frequency.setValueAtTime(heavy ? 140 : 170, t); o.frequency.exponentialRampToValueAtTime(heavy ? 32 : 45, t + (heavy ? 0.45 : 0.25));
@@ -174,11 +191,11 @@ export function createAudio() {
     const n = noiseSrc(t, 0.2, 0.6), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
     const g2 = ctx.createGain(); env(g2, t, 0.002, heavy ? 0.7 : 0.5, 0.14); n.connect(lp).connect(g2); out(g2, { wet: 0.15, pan });
   }
-  function blood(t, pan) {
+  function blood(t: number, pan: number) {
     const n = noiseSrc(t + 0.03, 0.35, 0.8), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.8;
     const g = ctx.createGain(); env(g, t + 0.03, 0.01, 0.22, 0.3); n.connect(bp).connect(g); out(g, { wet: 0.2, pan });
   }
-  function hit({ heavy = false, pan = 0, count = 1 } = {}) {
+  function hit({ heavy = false, pan = 0, count = 1 }: { heavy?: boolean; pan?: number; count?: number } = {}) {
     if (!ok()) return; const t = ctx.currentTime, big = heavy || count > 1;
     voice(big ? ['hitHeavy', ['hit', { rate: 0.88, gain: 1.15 }]] : ['hit'], { pan },
       () => { steel(t, pan, heavy ? 0.85 : 1); body(t, big, pan); blood(t, pan); },
@@ -189,21 +206,21 @@ export function createAudio() {
     // power doubles as pitch, so a sampled drum still follows the rhythm's accents
     voice(['taiko'], { t, rate: 0.85 + power * 0.15, gain: Math.min(1.2, power) }, () => taikoSynth(t, power));
   }
-  function taikoSynth(t, power) {
+  function taikoSynth(t: number, power: number) {
     const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(110 * power, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.5);
     const g = ctx.createGain(); env(g, t, 0.004, 0.9, 0.9); o.connect(g); out(g, { wet: 0.5 }); o.start(t); o.stop(t + 1.2);
     const n = noiseSrc(t, 0.2), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
     const g2 = ctx.createGain(); env(g2, t, 0.002, 0.6, 0.18); n.connect(lp).connect(g2); out(g2, { wet: 0.6 });
   }
-  function waveStart(boss) {
+  function waveStart(boss: boolean) {
     taiko(1, 0); taiko(0.9, 0.32); taiko(1.15, 0.64);
     if (boss) { taiko(0.7, 1.0); taiko(0.7, 1.15); taiko(1.3, 1.4); roar({ big: true, delay: 1.5 }); }
   }
-  function roar({ big = false, pan = 0, delay = 0 } = {}) {
+  function roar({ big = false, pan = 0, delay = 0 }: { big?: boolean; pan?: number; delay?: number } = {}) {
     if (!ok()) return; const t = ctx.currentTime + delay;
     voice(big ? ['roarBig', ['roar', { rate: 0.78, gain: 1.2 }]] : ['roar'], { t, pan }, () => roarSynth(t, big, pan));
   }
-  function roarSynth(t, big, pan) {
+  function roarSynth(t: number, big: boolean, pan: number) {
     const dur = big ? 1.4 : 0.7;
     const o = ctx.createOscillator(); o.type = 'sawtooth';
     o.frequency.setValueAtTime(big ? 70 : 110, t); o.frequency.linearRampToValueAtTime(big ? 95 : 150, t + dur * 0.3); o.frequency.exponentialRampToValueAtTime(big ? 45 : 70, t + dur);
@@ -216,11 +233,11 @@ export function createAudio() {
     out(g, { wet: 0.4, pan }); out(ng, { wet: 0.4, pan });
     o.start(t); o.stop(t + dur + 0.1); trem.start(t); trem.stop(t + dur + 0.1);
   }
-  function death({ big = false, pan = 0 } = {}) {
+  function death({ big = false, pan = 0 }: { big?: boolean; pan?: number } = {}) {
     if (!ok()) return;
     voice(big ? ['deathBig', ['death', { rate: 0.82, gain: 1.2 }]] : ['death'], { pan }, () => deathSynth(big, pan));
   }
-  function deathSynth(big, pan) {
+  function deathSynth(big: boolean, pan: number) {
     const t = ctx.currentTime;
     const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(big ? 80 : 110, t); o.frequency.exponentialRampToValueAtTime(22, t + (big ? 1.6 : 0.9));
     const g = ctx.createGain(); env(g, t, 0.005, big ? 1 : 0.7, big ? 1.6 : 0.9); o.connect(g); out(g, { wet: 0.5, pan }); o.start(t); o.stop(t + 2);
@@ -245,7 +262,7 @@ export function createAudio() {
     if (!ok()) return;
     voice(['warn'], { pan }, () => warnSynth(pan));
   }
-  function warnSynth(pan) {
+  function warnSynth(pan: number) {
     const t = ctx.currentTime;
     const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.4);
     const g = ctx.createGain(); env(g, t, 0.15, 0.08, 0.35); o.connect(g); out(g, { wet: 0.3, pan }); o.start(t); o.stop(t + 0.6);
@@ -272,23 +289,24 @@ export function createAudio() {
   }
   // Swap the synth rain / wind for recorded loops once they have decoded (crossfade over ~1 s).
   function startSampleAmbience() {
+    if (!amb) return;
     const t = ctx.currentTime;
-    for (const [name, bus] of [['rain', amb.rainBus], ['wind', amb.windBus]]) {
+    for (const [name, bus] of [['rain', amb.rainBus], ['wind', amb.windBus]] as const) {
       const s = slots[name]; if (!s || !s.buffers.length) continue;
       const src = ctx.createBufferSource(); src.buffer = s.buffers[(Math.random() * s.buffers.length) | 0]; src.loop = true;
       const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(s.gain, t + 1.2);
       bus.gain.setTargetAtTime(0, t, 0.3); // fade out the synth version
       src.connect(g); const o = out(g, { wet: s.wet });
-      src.start(t, Math.random() * src.buffer.duration);
+      src.start(t, Math.random() * src.buffer!.duration);
       if (name === 'rain') { amb.rainSample = o; if (!amb.rainOn) o.gain.value = 0; }
     }
   }
-  function setRain(on) {
+  function setRain(on: boolean) {
     if (!amb) return; amb.rainOn = on; const t = ctx.currentTime;
     if (amb.rainSample) amb.rainSample.gain.setTargetAtTime(on ? 1 : 0, t, 0.4);
     else amb.rainBus.gain.setTargetAtTime(on ? 1 : 0, t, 0.4);
   }
-  function setMuted(m) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
+  function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
     init, swing, hit, taiko, waveStart, roar, death, hurt, dash, warn, setRain, setMuted,

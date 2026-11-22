@@ -20,5 +20,5 @@ npm run preview    # servir dist/ para probarla
 - `src/`: un módulo por responsabilidad (`ascii.ts` efecto ASCII, `world.ts` escenario,
   `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `waves.ts` oleadas, `hud.ts` interfaz...).
   `state.ts` guarda el estado compartido y `types.ts` los tipos comunes.
-- `src/audio.js`, `nature.js`, `rig.js`, `samurai.js`: módulos grandes aún en JavaScript.
+- `src/samurai.ts` y `src/rig.ts`: personajes (procedural y con esqueleto de mocap); `nature.ts`: paisaje; `audio.ts`: sonido.
 - `public/`: modelos 3D y sonidos, copiados tal cual a `dist/`.
