@@ -1,4 +1,4 @@
-// One-shot effects: particle bursts (hits, deaths) and slash arcs.
+// One-shot effects: particle bursts (hits, deaths), slash arcs and the dodge's halo.
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { CLS, tagMat } from './materials';
@@ -29,7 +29,33 @@ export function slashArc(spin: boolean, big: boolean, combo = 0) {
   scene.add(g); arcs.push({ m: g, mesh: m, life: 0.2, max: 0.2 });
 }
 
+// ------------------------------------------------------------ dodge halo: glowing after-images along the dash
+const GHOST_BODY = new THREE.CapsuleGeometry(0.32, 0.95, 4, 10), GHOST_HEAD = new THREE.SphereGeometry(0.2, 10, 8);
+const GHOST_RING = new THREE.RingGeometry(0.5, 0.75, 32);
+const ghostMat = tagMat(new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
+const ghosts: { g: THREE.Object3D; mat: THREE.MeshBasicMaterial; life: number; max: number; peak: number; grow: number }[] = [];
+/** one after-image of the samurai where it is now */
+export function dashGhost(pos: THREE.Vector3, face: number, k = 1) {
+  const mat = ghostMat.clone(), g = new THREE.Group();
+  const body = new THREE.Mesh(GHOST_BODY, mat); body.position.y = 0.85; g.add(body);
+  const head = new THREE.Mesh(GHOST_HEAD, mat); head.position.y = 1.62; g.add(head);
+  g.position.copy(pos); g.rotation.y = face; scene.add(g);
+  ghosts.push({ g, mat, life: 0.45, max: 0.45, peak: 0.45 * k, grow: 0.15 });
+}
+/** a ring of light that spreads from your feet when you start the dodge */
+export function dashRing(pos: THREE.Vector3) {
+  const mat = ghostMat.clone(), m = new THREE.Mesh(GHOST_RING, mat);
+  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.08, pos.z); scene.add(m);
+  ghosts.push({ g: m, mat, life: 0.4, max: 0.4, peak: 0.7, grow: 2.6 });
+}
+
 export function updateFx(dt: number) {
+  for (let i = ghosts.length - 1; i >= 0; i--) {
+    const h = ghosts[i]; h.life -= dt;
+    const k = Math.max(0, h.life / h.max);
+    h.mat.opacity = h.peak * k; h.g.scale.setScalar(1 + (1 - k) * h.grow);
+    if (h.life <= 0) { scene.remove(h.g); h.mat.dispose(); ghosts.splice(i, 1); }
+  }
   for (let i = bursts.length - 1; i >= 0; i--) {
     const b = bursts[i], pa = b.pts.geometry.attributes.position;
     for (let k = 0; k < b.v.length; k++) {

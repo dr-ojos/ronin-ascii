@@ -5,6 +5,7 @@ import { changeDensity } from './ascii';
 import { tryAttack, tryDash } from './player';
 import { reset } from './encounters';
 import { tryOpen } from './loot';
+import { tryLightning } from './special';
 import { sfx } from './sfx';
 import { showMsg, overlay } from './hud';
 import { state, keys } from './state';
@@ -15,6 +16,7 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyK' && state.playing && !state.dead) tryAttack(false);
   if (!e.repeat && e.code === 'KeyL' && state.playing && !state.dead) tryAttack(true);
   if (!e.repeat && e.code === 'KeyE') tryOpen();
+  if (!e.repeat && e.code === 'KeyP') tryLightning();
   if (e.code === 'KeyC') state.colorMode = (state.colorMode + 1) % 4;
   if (e.code === 'KeyT') state.asciiOn = !state.asciiOn;
   if (e.code === 'KeyM') sfx.setMuted(!sfx.muted);

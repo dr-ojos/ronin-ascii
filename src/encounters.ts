@@ -130,7 +130,7 @@ export function reset() {
   for (const c of camps) { c.active = false; c.roster = c.kinds.slice(); c.clearedAt = -1; }
   resetChests(); resetUpgrades();
   Object.assign(player, { hp: 100, maxHp: 100, attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1 });
-  player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0;
+  player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0; state.special = 0;
   resetScore();
   discovered.clear(); discovered.add('claro');
   ambushT = rnd(35, 60);

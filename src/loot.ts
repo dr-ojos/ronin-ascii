@@ -1,6 +1,6 @@
 // Rewards. Chests: one in every camp (sealed with an ofuda until the camp is cleared), a lacquered one
 // where a giant lives, and plain ones hidden near the corners of the wilds. Walk up and press E:
-// mon (points), healing and often an upgrade (upgrades.ts). Slain oni also drop mon and onigiri.
+// (or cut it open with the katana): mon (points), healing and often an upgrade (upgrades.ts). Slain oni also drop mon and onigiri.
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { M, CLS, tagMat, shadowTree } from './materials';
@@ -126,7 +126,7 @@ export function updateLoot(dt: number) {
     glow.material.opacity = c.state === 'closed' ? 0.18 + 0.1 * Math.sin(state.time * 3 + c.x) : 0;
     if (c.state !== 'open' && d < nd) { nd = d; near = c; }
   }
-  if (near && !state.dead) state.prompt = near.state === 'sealed' ? 'sellado con un ofuda · limpia la guarida para abrirlo' : '[ E ] abrir el cofre';
+  if (near && !state.dead) state.prompt = near.state === 'sealed' ? 'sellado con un ofuda · limpia la guarida para abrirlo' : '[ E ] o un tajo para abrir el cofre';
   nearest = near;
   // drops: pop up, settle, bob; drawn to you when close
   for (let i = pickups.length - 1; i >= 0; i--) {
@@ -145,6 +145,30 @@ export function updateLoot(dt: number) {
   }
 }
 let nearest: Chest | null = null;
+/** the katana hit whatever is in front (or all around, for a spin): closed chests burst open,
+ *  sealed ones just ring. Returns how many chests were struck. */
+export function hitChests(px: number, pz: number, face: number, reach: number, spin: boolean) {
+  let n = 0;
+  for (const c of chests) {
+    if (!c.g || c.state === 'open') continue;
+    const dx = c.x - px, dz = c.z - pz, d = Math.hypot(dx, dz);
+    const ang = Math.abs(Math.atan2(Math.sin(Math.atan2(dx, dz) - face), Math.cos(Math.atan2(dx, dz) - face)));
+    if (d > reach + (c.kind === 'jefe' ? 0.9 : 0.6) || (!spin && ang > 1.35)) continue;
+    n++;
+    if (c.state === 'closed') openChest(c);
+    else {
+      burst(new THREE.Vector3(c.x, c.g.position.y + 0.7, c.z), 0xfff0c0, 14, 4, 0.1);
+      showMsg('el ofuda no se rompe mientras quede un oni en la guarida', 1.6);
+    }
+  }
+  return n;
+}
+/** the closest unopened chest within reach (the katana aims at it when no oni is around) */
+export function chestInReach(px: number, pz: number, r: number) {
+  let best: Chest | null = null, bd = r;
+  for (const c of chests) { if (!c.g || c.state === 'open') continue; const d = Math.hypot(c.x - px, c.z - pz); if (d < bd) { bd = d; best = c; } }
+  return best;
+}
 /** E pressed */
 export function tryOpen() {
   if (!state.playing || state.dead || !nearest) return;

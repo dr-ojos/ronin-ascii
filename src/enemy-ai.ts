@@ -17,6 +17,7 @@ import { surfaceY } from './structures';
 import { addPoints, POINTS } from './score';
 import { dropLoot, unseal } from './loot';
 import { lifesteal } from './upgrades';
+import { chargeKill } from './special';
 import { CLS, tagMat } from './materials';
 import { player, state } from './state';
 import { angDiff, rnd } from './utils';
@@ -174,6 +175,7 @@ function kill(en: Enemy, i: number, gy: number) {
   scene.remove(g); enemies.splice(i, 1); state.kills++;
   sfx.death({ big: en.big, pan: panOf(g.position.x, g.position.z) });
   addPoints(Math.round(def.points * (1 + camp.tier * 0.5) / 10) * 10, def.name, true);
+  chargeKill();
   if (lifesteal()) player.hp = Math.min(player.maxHp, player.hp + lifesteal());
   if (en.big) state.shake = 0.6;
   dropLoot(g.position.x, g.position.z, camp.tier, en.kind === 'jefe');

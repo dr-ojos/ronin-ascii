@@ -5,7 +5,8 @@ import { sparkBurst } from './katana-fx';
 import { enemies } from './enemies';
 import { provoke } from './enemy-ai';
 import { dmgMult, dashCdMult, runMult } from './upgrades';
-import { burst, slashArc } from './fx';
+import { hitChests, chestInReach } from './loot';
+import { burst, slashArc, dashGhost, dashRing } from './fx';
 import { sfx, panOf } from './sfx';
 import { collide } from './physics';
 import { surfaceY } from './structures';
@@ -24,6 +25,7 @@ export function tryAttack(heavy = false) {
   let best = 4.5, aim = null;
   for (const en of enemies) { const d = Math.hypot(en.g.position.x - player.pos.x, en.g.position.z - player.pos.z); if (d < best) { best = d; aim = en; } }
   if (aim) player.face = Math.atan2(aim.g.position.x - player.pos.x, aim.g.position.z - player.pos.z);
+  else { const c = chestInReach(player.pos.x, player.pos.z, 3.2); if (c) player.face = Math.atan2(c.x - player.pos.x, c.z - player.pos.z); }
   sfx.swing({ power: player.combo === 2 ? 1.35 : 1, pan: player.combo === 1 ? 0.3 : -0.3 });
 }
 export function tryDash() {
@@ -32,6 +34,7 @@ export function tryDash() {
   if (mv.lengthSq() < 0.01) mv.set(Math.sin(player.face), 0, Math.cos(player.face));
   player.dashDir.copy(mv.normalize()); player.dashT = 0.2; player.dashCd = 0.75 * dashCdMult(); player.invuln = 0.3;
   player.face = Math.atan2(mv.x, mv.z);
+  dashRing(player.pos);
   sfx.dash();
 }
 export function moveInput() {
@@ -42,6 +45,7 @@ export function moveInput() {
 }
 
 const tmp = new THREE.Vector3();
+let ghostGap = 0;
 export function updatePlayer(dt: number) {
   player.invuln = Math.max(0, player.invuln - dt);
   player.dashCd = Math.max(0, player.dashCd - dt);
@@ -52,6 +56,8 @@ export function updatePlayer(dt: number) {
   if (player.dashT > 0) {
     player.dashT -= dt;
     player.pos.addScaledVector(player.dashDir, 18 * dt);
+    // the halo: an after-image every few centimetres, brighter at the start of the dodge
+    if ((ghostGap -= 18 * dt) <= 0) { ghostGap = 0.45; dashGhost(player.pos, player.face, 0.4 + player.dashT * 3); }
   } else if (mv.lengthSq() > 0) {
     player.pos.addScaledVector(mv, speed * dt);
     if (player.attackT < 0) player.face += angDiff(Math.atan2(mv.x, mv.z), player.face) * Math.min(1, dt * 12);
@@ -86,6 +92,8 @@ export function updatePlayer(dt: number) {
           sparkBurst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(player.pos.y + 1.25), 0.35), spin ? 14 : 9, spin ? 5.5 : 4.5);
         }
       }
+      const struck = hitChests(player.pos.x, player.pos.z, player.face, spin ? 3.3 : 2.8, spin);
+      if (struck && !hits) { state.hitStop = 0.05; state.shake = Math.max(state.shake, 0.15); sfx.hit({ heavy: false, pan: 0, count: 1 }); }
       if (hits) { state.hitStop = spin ? 0.09 : 0.06; state.shake = Math.max(state.shake, spin ? 0.35 : 0.2); sfx.hit({ heavy: spin, pan: hitPan / hits, count: hits }); }
     }
     if (p >= 1) { player.attackT = -1; player.lastAttackEnd = state.time; }

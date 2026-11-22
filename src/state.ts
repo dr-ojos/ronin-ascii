@@ -16,6 +16,8 @@ export const state = {
   score: 0, best: 0, mult: 1, streakT: 0, campsCleared: 0, gain: '', gainT: 0,
   // loot: chests opened, upgrades (level by id, see upgrades.ts), the "press E" hint
   chests: 0, upgrades: {} as Record<string, number>, prompt: '',
+  // the lightning strike's charge, 0..1 (special.ts)
+  special: 0,
   // feel
   shake: 0, hitStop: 0, time: 0,
   // toggles

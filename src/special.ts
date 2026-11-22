@@ -1,0 +1,112 @@
+// Raijin's strike, the special move: a charge that fills up with time (and a little with every kill);
+// when it is full, P calls lightning down on every oni around you. Each bolt hits hard, stuns and
+// throws them back. Also the bolts themselves, the white flash and the thunder.
+import * as THREE from 'three';
+import { scene } from './renderer';
+import { enemies } from './enemies';
+import { provoke } from './enemy-ai';
+import { burst } from './fx';
+import { sfx, panOf } from './sfx';
+import { showMsg } from './hud';
+import { CLS, tagMat } from './materials';
+import { dmgMult } from './upgrades';
+import { player, state } from './state';
+import { rnd } from './utils';
+
+const CHARGE_TIME = 30;     // seconds to fill the charge from empty
+const KILL_BONUS = 0.06;    // each kill fills this much more
+const RANGE = 15;           // metres around you the lightning reaches
+const MAX_BOLTS = 8;
+
+/** fill the charge (time passing, or a kill) */
+export function charge(amount: number) {
+  if (state.special >= 1) return;
+  state.special = Math.min(1, state.special + amount);
+  if (state.special >= 1) { sfx.chime(false); showMsg('— EL RAYO ESTÁ LISTO —\npulsa P', 1.6); }
+}
+export const chargeKill = () => charge(KILL_BONUS);
+
+// ------------------------------------------------------------ bolts
+const SEG = new THREE.CylinderGeometry(1, 1, 1, 5);
+const coreMat = tagMat(new THREE.MeshBasicMaterial({ color: 0xf4f8ff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
+const glowMat = tagMat(new THREE.MeshBasicMaterial({ color: 0x7fa8ff, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
+const UP = new THREE.Vector3(0, 1, 0);
+interface Bolt { g: THREE.Group; life: number; max: number; core: THREE.MeshBasicMaterial; glow: THREE.MeshBasicMaterial }
+const bolts: Bolt[] = [];
+const pending: { t: number; fn: () => void }[] = [];
+
+function segment(g: THREE.Group, a: THREE.Vector3, b: THREE.Vector3, r: number, core: THREE.Material, glow: THREE.Material) {
+  const d = new THREE.Vector3().subVectors(b, a), len = d.length(), mid = a.clone().addScaledVector(d, 0.5);
+  const q = new THREE.Quaternion().setFromUnitVectors(UP, d.normalize());
+  for (const [m, k] of [[core, r], [glow, r * 3.2]] as const) {
+    const s = new THREE.Mesh(SEG, m); s.position.copy(mid); s.quaternion.copy(q); s.scale.set(k, len, k); g.add(s);
+  }
+}
+/** a jagged bolt from the sky to `to`, with a couple of forks */
+function bolt(to: THREE.Vector3) {
+  const g = new THREE.Group(), core = coreMat.clone(), glow = glowMat.clone();
+  const top = new THREE.Vector3(to.x + rnd(-4, 4), to.y + 30, to.z + rnd(-4, 4));
+  const n = 12, pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= n; i++) {
+    const k = i / n, p = top.clone().lerp(to, k), j = Math.sin(k * Math.PI) * 2.2;
+    if (i > 0 && i < n) p.add(new THREE.Vector3(rnd(-j, j), rnd(-0.5, 0.5), rnd(-j, j)));
+    pts.push(p);
+  }
+  for (let i = 0; i < n; i++) segment(g, pts[i], pts[i + 1], 0.09, core, glow);
+  for (let f = 0; f < 2; f++) {   // forks off the upper half
+    let a = pts[2 + Math.floor(Math.random() * 5)];
+    for (let i = 0; i < 3; i++) { const b = a.clone().add(new THREE.Vector3(rnd(-2.5, 2.5), -rnd(1.5, 3), rnd(-2.5, 2.5))); segment(g, a, b, 0.05, core, glow); a = b; }
+  }
+  scene.add(g);
+  bolts.push({ g, life: 0.45, max: 0.45, core, glow });
+  burst(to.clone(), 0xcfe0ff, 50, 8, 0.14);
+  burst(to.clone(), 0xffffff, 20, 4, 0.2);
+}
+
+// a light that lights up the whole scene for an instant (always in the scene: no shader recompiles)
+const flash = new THREE.PointLight(0xcfe0ff, 0, 60, 1);
+scene.add(flash);
+let flashT = 0;
+
+/** P pressed */
+export function tryLightning() {
+  if (!state.playing || state.dead || state.special < 1) return;
+  state.special = 0;
+  // the samurai raises the blade and spins
+  Object.assign(player, { combo: 2, attackT: 0, attackDur: 0.55, hitDone: true, invuln: Math.max(player.invuln, 0.8) });
+  state.hitStop = 0.12; state.shake = 0.9; flashT = 0.5;
+  const targets = enemies
+    .map(e => ({ e, d: Math.hypot(e.g.position.x - player.pos.x, e.g.position.z - player.pos.z) }))
+    .filter(t => t.d < RANGE).sort((a, b) => a.d - b.d).slice(0, MAX_BOLTS);
+  targets.forEach(({ e }, i) => pending.push({ t: 0.08 + i * 0.07, fn: () => {
+    if (!enemies.includes(e)) return;
+    const p = e.g.position;
+    bolt(new THREE.Vector3(p.x, p.y + 1.1 * e.scale, p.z));
+    e.hp -= 6 * dmgMult(); e.flash = 1; provoke(e);
+    e.knock.set(p.x - player.pos.x, 0, p.z - player.pos.z).normalize().multiplyScalar(e.big ? 5 : 12);
+    if (e.state !== 'return') { e.state = 'recover'; e.t = 1.4; }   // stunned
+    sfx.thunder(panOf(p.x, p.z), i === 0);
+    flashT = Math.max(flashT, 0.25);
+  } }));
+  // a few more bolts crash around you for show (all of them if nobody is near)
+  for (let i = 0; i < Math.max(3, 6 - targets.length); i++) pending.push({ t: rnd(0, 0.5), fn: () => {
+    const a = rnd(0, Math.PI * 2), r = rnd(3, 10), x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
+    bolt(new THREE.Vector3(x, player.pos.y, z));
+    if (!targets.length && i === 0) sfx.thunder(0, true);
+  } });
+  if (!targets.length) showMsg('el rayo cae sobre la tierra vacía', 1.2);
+}
+
+export function updateSpecial(dt: number) {
+  if (state.playing && !state.dead) charge(dt / CHARGE_TIME);
+  for (let i = pending.length - 1; i >= 0; i--) { const p = pending[i]; if ((p.t -= dt) <= 0) { pending.splice(i, 1); p.fn(); } }
+  for (let i = bolts.length - 1; i >= 0; i--) {
+    const b = bolts[i]; b.life -= dt;
+    const k = Math.max(0, b.life / b.max), on = Math.random() < 0.8 ? 1 : 0.25;   // crackle
+    b.core.opacity = k * on; b.glow.opacity = 0.35 * k * on;
+    if (b.life <= 0) { scene.remove(b.g); b.core.dispose(); b.glow.dispose(); bolts.splice(i, 1); }
+  }
+  flashT = Math.max(0, flashT - dt);
+  flash.position.set(player.pos.x, player.pos.y + 14, player.pos.z);
+  flash.intensity = flashT > 0 ? 120 * flashT * (Math.random() < 0.7 ? 1 : 0.4) : 0;
+}

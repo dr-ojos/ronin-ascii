@@ -25,9 +25,14 @@ export function updateHud(dt: number) {
   const gain = state.gainT > 0 ? `<span class="y" style="opacity:${Math.min(1, state.gainT).toFixed(2)}">${state.gain}</span>` : '';
   const lairs = camps.filter(c => !c.route && !c.temp), cleared = lairs.filter(c => !c.roster.length).length;
   const ups = upgradeList();
+  const rf = Math.floor(state.special * 12);
+  const rayo = state.special >= 1
+    ? `RAYO  [<span class="y">${'#'.repeat(12)}</span>] ${state.time % 0.8 < 0.5 ? '<span class="y">¡ listo !  pulsa P</span>' : ''}`
+    : `RAYO  [<span class="b">${'#'.repeat(rf)}</span>${'-'.repeat(12 - rf)}] <span class="d">${Math.floor(state.special * 100)} %</span>`;
   hud.innerHTML =
     `<span class="r">浪人</span> RONIN ASCII\n` +
     `VIDA  [<span class="${player.hp < 30 ? 'r' : 'y'}">${bar}</span>] ${Math.ceil(player.hp)}\n` +
+    `${rayo}\n` +
     `PUNTOS <span class="y">${state.score}</span>${streak}   <span class="d">récord ${state.best}</span>\n` +
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}\n` +

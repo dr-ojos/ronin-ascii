@@ -287,6 +287,15 @@ export function createAudio() {
     const g2 = ctx.createGain(); env(g2, t, 0.03, 0.07, 0.4); n.connect(bp).connect(g2); out(g2, { wet: 0.25, pan });
   }
 
+  function thunder(pan = 0, big = true) { // a sharp crack, then (for the first bolt) a long rolling rumble
+    if (!ok()) return; const t = ctx.currentTime;
+    const c = noiseSrc(t, 0.25), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200;
+    const g = ctx.createGain(); env(g, t, 0.002, 0.5, 0.22); c.connect(hp).connect(g); out(g, { wet: 0.5, pan });
+    if (!big) return;
+    const r = noiseSrc(t, 3.2, 0.5), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(400, t); lp.frequency.exponentialRampToValueAtTime(90, t + 3);
+    const g2 = ctx.createGain(); env(g2, t + 0.05, 0.08, 0.6, 3); r.connect(lp).connect(g2); out(g2, { wet: 0.7 });
+  }
+
   // ------------------------------------------------------------ ambience bed
   function startAmbience() {
     const t = ctx.currentTime;
@@ -328,7 +337,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, warn, chime, coin, arrow, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, warn, chime, coin, arrow, thunder, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },
