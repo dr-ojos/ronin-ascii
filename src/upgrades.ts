@@ -1,6 +1,7 @@
 // Upgrades found in chests. They last until you fall, stack up to a few levels, and each one changes
 // how you fight: player.ts, damage.ts, score.ts and enemy-ai.ts read them through the helpers below.
 import { player, state } from './state';
+import { armorGuard, armorDash, armorRun } from './armor';
 
 export type UpgradeId = 'filo' | 'armadura' | 'viento' | 'sangre' | 'ofuda' | 'kitsune';
 export const UPGRADES: Record<UpgradeId, { name: string; desc: string; max: number }> = {
@@ -15,9 +16,9 @@ export const lvl = (id: UpgradeId) => state.upgrades[id] || 0;
 export const roman = (n: number) => ['', 'I', 'II', 'III', 'IV'][n] || String(n);
 
 export const dmgMult = () => 1 + 0.4 * lvl('filo');
-export const hurtMult = () => 1 - 0.15 * lvl('ofuda');
-export const dashCdMult = () => Math.pow(0.8, lvl('viento'));
-export const runMult = () => 1 + 0.07 * lvl('viento');
+export const hurtMult = () => (1 - 0.15 * lvl('ofuda')) * armorGuard();
+export const dashCdMult = () => Math.pow(0.8, lvl('viento')) * armorDash();
+export const runMult = () => (1 + 0.07 * lvl('viento')) * armorRun();
 export const lifesteal = () => 3 * lvl('sangre');
 export const streakBonus = () => 2 * lvl('kitsune');
 

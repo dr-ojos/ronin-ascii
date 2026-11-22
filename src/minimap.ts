@@ -9,6 +9,7 @@ import { showMsg } from './hud';
 import { discovered, camps } from './encounters';
 import { POIS } from './landmarks';
 import { chests } from './loot';
+import { smithPos } from './shop';
 import type { Camp } from './types';
 import { addPoints, POINTS } from './score';
 import { player, state } from './state';
@@ -101,6 +102,8 @@ function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, 
     const [px, py] = toPx(c.x, c.z);
     ctx.fillStyle = c.kind === 'guardian' ? (c.state === 'sealed' ? '#7a5a9a' : '#d0a0ff') : c.state === 'sealed' ? '#8a7440' : '#ffd060'; ctx.fillText('$', px, py);
   }
+  // Masa's shop, in the shrine at the start
+  if (near(smithPos.x, smithPos.z, 400)) { const [sx, sy] = toPx(smithPos.x, smithPos.z); ctx.fillStyle = '#8fb4ff'; ctx.fillText('†', sx, sy); }
   ctx.fillStyle = COL.oni;
   for (const e of enemies) { const [px, py] = toPx(e.g.position.x, e.g.position.z); ctx.fillText(KINDS[e.kind].glyph, px, py); }
   const [px, py] = toPx(player.pos.x, player.pos.z);

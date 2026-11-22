@@ -320,9 +320,12 @@ function buildWater() {
 function bridgeEndY(b: typeof BRIDGES[number], s: number) { const [x, z] = toWorld(b.x, b.z, b.dir, 0, s * b.len / 2); return groundY(x, z); }
 /** height of the deck along a bridge (local z), relative to its centre ground */
 function archY(b: typeof BRIDGES[number], lz: number) { const t = lz / (b.len / 2); return 0.15 + 0.75 * (1 - t * t); }
-/** walkable surface: the ground, or the deck of a bridge */
+/** raised floors you can walk onto (the shrine's boards, shop.ts): height at (x, z), or null outside */
+export const floors: ((x: number, z: number) => number | null)[] = [];
+/** walkable surface: the ground, a raised floor, or the deck of a bridge */
 export function surfaceY(x: number, z: number) {
   const gy = groundY(x, z);
+  for (const f of floors) { const y = f(x, z); if (y !== null) return Math.max(gy, y); }
   for (const b of BRIDGES) {
     const dx = x - b.x, dz = z - b.z; if (dx * dx + dz * dz > b.len * b.len) continue;
     const c = Math.cos(b.dir), s = Math.sin(b.dir), lx = dx * c - dz * s, lz = dx * s + dz * c;

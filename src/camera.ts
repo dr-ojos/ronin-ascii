@@ -12,8 +12,12 @@ const tmp = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 const camRay = new THREE.Raycaster();
 export function updateCamera(dt: number) {
-  camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo ? 1.3 : 1.5), player.pos.z), Math.min(1, dt * 10));
-  const pt = state.photo ? 0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025) : state.pitch, cp = Math.cos(pt), camDist = state.photo ? state.photoDist : state.camDistUser;
+  // the look menu (custom.ts) frames the samurai close up, like the photo mode
+  const dress = state.menu === 'custom';
+  camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo || dress ? 1.3 : 1.5), player.pos.z), Math.min(1, dt * 10));
+  const pt = state.photo ? 0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025) : dress ? 0.32 : state.pitch, cp = Math.cos(pt);
+  // inside Masa's shop the camera comes in closer (its roof is hidden, shop.ts)
+  const camDist = state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.camDistUser;
   camera.position.set(
     camTarget.x + Math.sin(state.yaw) * cp * camDist,
     camTarget.y + Math.sin(pt) * camDist,

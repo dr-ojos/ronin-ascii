@@ -2,11 +2,16 @@
 import { player, state } from './state';
 import { camps, discovered, placeCount, chestsLeft } from './encounters';
 import { upgradeList } from './upgrades';
+import { look } from './look';
+import { weapon } from './weapons';
+import { armor } from './armor';
 import { enemies, KINDS } from './enemies';
 import { sfx } from './sfx';
 
 const hud = document.getElementById('hud')!, msgEl = document.getElementById('msg')!, promptEl = document.getElementById('prompt')!;
 export const overlay = document.getElementById('overlay')!;
+
+const esc = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
 
 let msgTimer = 0;
 export function showMsg(t: string, d = 1.8) { msgEl.textContent = t; msgEl.style.opacity = '1'; msgTimer = d; }
@@ -18,7 +23,7 @@ export function updateMsg(dt: number) {
 let hudT = 0;
 export function updateHud(dt: number) {
   hudT -= dt; if (hudT > 0) return; hudT = 0.1;
-  promptEl.textContent = state.prompt;
+  promptEl.textContent = state.menu ? '' : state.prompt;
   const n = Math.round(24 * player.maxHp / 100), f = Math.round(player.hp / player.maxHp * n);
   const bar = '#'.repeat(f) + '-'.repeat(n - f);
   const modes = ['color', 'fósforo', 'ámbar', 'papel'];
@@ -39,10 +44,11 @@ export function updateHud(dt: number) {
   const ff = foe ? Math.max(0, Math.ceil(foe.hp / foe.maxHp * 16)) : 0;
   const foeBar = foe ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n` : '';
   hud.innerHTML =
-    `<span class="r">浪人</span> RONIN ASCII\n` +
+    `<span class="r">浪人</span> ${esc(look.name.toUpperCase() || 'RONIN')}\n` +
     `VIDA  [<span class="${player.hp < 30 ? 'r' : 'y'}">${bar}</span>] ${Math.ceil(player.hp)}\n` +
     `${rayo}\n` +
     `PUNTOS <span class="y">${state.score}</span>${streak}   <span class="d">récord ${state.best}</span>\n` +
+    `MON <span class="y">${state.mon}</span>   <span class="b">${weapon().name}</span>${state.armor !== 'kimono' ? ` · <span class="b">${armor().name}</span>` : ''}\n` +
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}\n` +
     (ups ? `<span class="y">${ups}</span>\n` : '') +

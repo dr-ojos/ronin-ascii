@@ -5,6 +5,8 @@ import { sparkBurst } from './katana-fx';
 import { enemies } from './enemies';
 import { provoke } from './enemy-ai';
 import { dmgMult, dashCdMult, runMult } from './upgrades';
+import { weapon } from './weapons';
+import { charge } from './special';
 import { hitChests, chestInReach } from './loot';
 import { burst, slashArc, dashGhost, dashRing } from './fx';
 import { sfx, panOf } from './sfx';
@@ -21,9 +23,9 @@ export function tryAttack(heavy = false) {
   if (heavy) player.combo = 2;
   else player.combo = state.time - player.lastAttackEnd < 0.55 ? (player.combo + 1) % 3 : 0;
   player.attackT = 0; player.hitDone = false;
-  player.attackDur = player.combo === 2 ? 0.55 : 0.38;
+  player.attackDur = (player.combo === 2 ? 0.55 : 0.38) * weapon().speed;
   // auto-aim: turn towards the closest oni in reach, otherwise keep the current heading
-  let best = 4.5, aim = null;
+  let best = 4.5 + weapon().reach, aim = null;
   for (const en of enemies) { const d = Math.hypot(en.g.position.x - player.pos.x, en.g.position.z - player.pos.z); if (d < best) { best = d; aim = en; } }
   if (aim) player.face = Math.atan2(aim.g.position.x - player.pos.x, aim.g.position.z - player.pos.z);
   else { const c = chestInReach(player.pos.x, player.pos.z, 3.2); if (c) player.face = Math.atan2(c.x - player.pos.x, c.z - player.pos.z); }
@@ -88,21 +90,25 @@ export function updatePlayer(dt: number) {
       player.hitDone = true;
       slashArc(spin, spin, player.combo);
       if (depth > 0.1) ripple(player.pos.x + Math.sin(player.face) * 1.2, player.pos.z + Math.cos(player.face) * 1.2, spin ? 1.3 : 0.9);
+      const w = weapon();
       let hits = 0, hitPan = 0;
       for (const en of enemies) {
         tmp.subVectors(en.g.position, player.pos); tmp.y = 0;
-        const d = tmp.length(), reach = (spin ? 3.3 : 2.8) + 0.45 * en.scale;
+        const d = tmp.length(), reach = (spin ? 3.3 : 2.8) + w.reach + 0.45 * en.scale;
         const ang = Math.abs(angDiff(Math.atan2(tmp.x, tmp.z), player.face));
         if (d < reach && (spin || ang < 1.35)) {
-          hits++; hitPan += panOf(en.g.position.x, en.g.position.z); en.hp -= (spin ? 2 : 1) * dmgMult(); en.flash = 1; provoke(en);
+          hits++; hitPan += panOf(en.g.position.x, en.g.position.z); en.hp -= (spin ? 2 : 1) * dmgMult() * w.dmg; en.flash = 1; provoke(en);
           en.knock.copy(tmp.normalize()).multiplyScalar((spin ? 12 : 8) / (en.big ? 3 : 1));
           if (en.state === 'windup' && !en.big) { en.state = 'recover'; en.t = 0.5; }
           burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), 0xffffff, 18, 5, 0.12);
           sparkBurst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(player.pos.y + 1.25), 0.35), spin ? 14 : 9, spin ? 5.5 : 4.5);
         }
       }
-      const struck = hitChests(player.pos.x, player.pos.z, player.face, spin ? 3.3 : 2.8, spin);
+      const struck = hitChests(player.pos.x, player.pos.z, player.face, (spin ? 3.3 : 2.8) + w.reach, spin);
       if (struck && !hits) { state.hitStop = 0.05; state.shake = Math.max(state.shake, 0.15); sfx.hit({ heavy: false, pan: 0, count: 1 }); }
+      // the blade's own gift: Muramasa drinks, Raijin's blade charges the lightning
+      if (hits && w.heal) player.hp = Math.min(player.maxHp, player.hp + w.heal * hits);
+      if (hits && w.charge) charge(w.charge * hits);
       if (hits) { state.hitStop = spin ? 0.09 : 0.06; state.shake = Math.max(state.shake, spin ? 0.35 : 0.2); sfx.hit({ heavy: spin, pan: hitPan / hits, count: hits }); }
     }
     if (p >= 1) { player.attackT = -1; player.lastAttackEnd = state.time; }

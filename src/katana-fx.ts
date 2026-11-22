@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { scene } from './renderer';
 import { CLS } from './materials';
 import { sam, bladeMat } from './avatar';
+import { tipZ } from './weapons';
 import { player, state } from './state';
 import { rnd } from './utils';
 
@@ -118,7 +119,7 @@ export function updateSparks(dt: number, emit: boolean) {
   if (dt <= 0) return;
   sam.katana.updateMatrixWorld(true);
   bladeBase.set(0, 0, 0.24); sam.katana.localToWorld(bladeBase);
-  bladeTip.set(0, 0, 0.86); sam.katana.localToWorld(bladeTip);
+  bladeTip.set(0, 0, tipZ()); sam.katana.localToWorld(bladeTip);
   tipVel.subVectors(bladeTip, prevTip).divideScalar(dt);
   if (tipVel.lengthSq() > 900) tipVel.setLength(30); // teleports (reset, first frame)
   const swing = Math.min(1, tipVel.length() / 12);

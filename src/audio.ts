@@ -289,6 +289,13 @@ export function createAudio() {
     if (heal) { bell(t, 440, 0.06, 0.5); bell(t + 0.07, 660, 0.05, 0.5); return; }
     bell(t, 1760 + rnd(-60, 60), 0.05, 0.25); bell(t + 0.05, 2350 + rnd(-60, 60), 0.04, 0.3);
   }
+  function anvil(pan = 0, gain = 1) { // the smith's hammer on the anvil: a ringing clang, quieter with distance
+    if (!ok() || gain < 0.02) return; const t = ctx.currentTime;
+    for (const [f, peak, dur] of [[1180, 0.07, 0.7], [2910, 0.035, 0.4], [4630, 0.018, 0.25]] as const) {
+      const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f * (1 + rnd(-0.01, 0.01));
+      const g = ctx.createGain(); env(g, t, 0.001, peak * gain, dur); o.connect(g); out(g, { wet: 0.45, pan }); o.start(t); o.stop(t + dur + 0.1);
+    }
+  }
   function arrow(pan = 0) { // bowstring twang + the hiss of the arrow
     if (!ok()) return; const t = ctx.currentTime;
     const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(110, t + 0.15);
@@ -349,7 +356,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, splash, warn, chime, coin, arrow, thunder, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, splash, warn, chime, coin, anvil, arrow, thunder, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

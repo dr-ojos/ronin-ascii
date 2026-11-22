@@ -129,7 +129,8 @@ export function buildHelmet() {
 }
 
 // ------------------------------------------------------------ the ronin (stylised: straw kasa, black armour, vermilion stripes, teal cloth)
-const RONIN = { red: '#e4573d', redDark: '#8e2a1c', black: '#0d0c0f', teal: 0x2b7f8c, tan: 0xd9a35a };
+// stripes are drawn in grey and tinted by the lacquer material's colour (look.ts can change it)
+const RONIN = { red: 0xe4573d, black: '#0d0c0f', teal: 0x2b7f8c, tan: 0xd9a35a };
 function stripeTex(vertical: boolean, cols = 6) {
   const c = document.createElement('canvas'); c.width = 128; c.height = 128;
   const x = c.getContext('2d')!;
@@ -137,7 +138,7 @@ function stripeTex(vertical: boolean, cols = 6) {
   const n = cols, w = 128 / n;
   for (let i = 0; i < n; i++) {
     const g = vertical ? x.createLinearGradient(i * w, 0, i * w + w, 0) : x.createLinearGradient(0, i * w, 0, i * w + w);
-    g.addColorStop(0, RONIN.redDark); g.addColorStop(0.25, RONIN.red); g.addColorStop(0.7, RONIN.red); g.addColorStop(1, RONIN.redDark);
+    g.addColorStop(0, '#9c9c9c'); g.addColorStop(0.25, '#ffffff'); g.addColorStop(0.7, '#ffffff'); g.addColorStop(1, '#9c9c9c');
     x.fillStyle = g;
     if (vertical) x.fillRect(i * w + w * 0.18, 4, w * 0.62, 120); else x.fillRect(0, i * w + w * 0.2, 128, w * 0.55);
     // brush-like notches, like the ink illustration
@@ -161,7 +162,7 @@ function hatTex() {
   }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; return t;
 }
-const lacq = (map: THREE.Texture, rx: number, ry: number) => { const m = map.clone(); m.repeat.set(rx, ry); m.needsUpdate = true; return new THREE.MeshPhysicalMaterial({ map: m, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.25, side: THREE.DoubleSide }); };
+const lacq = (map: THREE.Texture, rx: number, ry: number) => { const m = map.clone(); m.repeat.set(rx, ry); m.needsUpdate = true; const mat = new THREE.MeshPhysicalMaterial({ map: m, color: RONIN.red, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.25, side: THREE.DoubleSide }); mat.userData.role = 'lacquer'; return mat; };
 
 export function createRealSamurai(gltf: GLTF): Avatar {
   const rig = prepareRig(gltf, RONIN.teal, new V(0.95, 1.03, 0.95));
@@ -177,13 +178,19 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const red = new THREE.MeshStandardMaterial({ color: 0xe4573d, roughness: 0.55 });
   const hair = new THREE.MeshStandardMaterial({ color: 0x0b0a0c, roughness: 0.6, side: THREE.DoubleSide });
   const skin = new THREE.MeshStandardMaterial({ color: 0xc8955a, roughness: 0.6 });
+  const scarfMat = new THREE.MeshStandardMaterial({ color: 0x0b0a0c, roughness: 0.6, side: THREE.DoubleSide });
+  // roles: which materials / parts the player can restyle (look.ts)
+  teal.userData.role = 'cloth'; skin.userData.role = 'mask'; scarfMat.userData.role = 'scarf';
+  root.traverse(o => { const sk = o as THREE.SkinnedMesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>; if (sk.isSkinnedMesh) sk.material.userData.role = 'cloth'; });
 
   // ---- straw kasa + long hair + half mask
   const hg = new THREE.Group();
-  const kasa = mesh(new THREE.ConeGeometry(0.3, 0.16, 40, 1, true), new THREE.MeshStandardMaterial({ map: hatTex(), roughness: 0.9, side: THREE.DoubleSide }), hg, 0, 0.15, 0);
+  const hatMat = new THREE.MeshStandardMaterial({ map: hatTex(), roughness: 0.9, side: THREE.DoubleSide }); hatMat.userData.role = 'hat';
+  const kasa = mesh(new THREE.ConeGeometry(0.3, 0.16, 40, 1, true), hatMat, hg, 0, 0.15, 0);
   kasa.rotation.x = 0.14;
-  mesh(new THREE.TorusGeometry(0.3, 0.008, 4, 48), black, hg, 0, 0.07, 0.02).rotation.x = Math.PI / 2 + 0.14;
-  mesh(new THREE.ConeGeometry(0.04, 0.04, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.245, -0.012);
+  const rim = mesh(new THREE.TorusGeometry(0.3, 0.008, 4, 48), black, hg, 0, 0.07, 0.02); rim.rotation.x = Math.PI / 2 + 0.14;
+  const knob = mesh(new THREE.ConeGeometry(0.04, 0.04, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.245, -0.012);
+  for (const o of [kasa, rim, knob]) o.userData.part = 'hat';
   const mask = mesh(new THREE.SphereGeometry(0.1, 18, 10, Math.PI / 2 - 0.9, 1.8, 1.45, 0.9), skin, hg, 0, -0.03, 0.012); mask.scale.set(0.95, 1.1, 1.05);
   mesh(new THREE.BoxGeometry(0.05, 0.006, 0.01), hair, hg, 0, -0.06, 0.112);
   const strands: { g: THREE.Group; ph: number; base: number; st: THREE.Mesh }[] = [];
@@ -214,10 +221,10 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   for (let i = 0; i < 4; i++) {
     const len = rnd(1.2, 1.9), w = rnd(0.07, 0.15), geo = new THREE.PlaneGeometry(w, len, 1, 18);
     geo.rotateX(Math.PI / 2); geo.translate(0, 0, -len / 2);              // lies along -z (behind the neck)
-    const m = new THREE.Mesh(geo, hair); m.position.set((i - 1.5) * 0.05, 0, 0); scarf.add(m);
+    const m = new THREE.Mesh(geo, scarfMat); m.position.set((i - 1.5) * 0.05, 0, 0); scarf.add(m);
     ribbons.push({ geo, base: Float32Array.from(geo.attributes.position.array), len, ph: Math.random() * 6 });
   }
-  mesh(new THREE.TorusGeometry(0.09, 0.025, 6, 20), hair, scarf, 0, -0.02, 0.06).rotation.x = Math.PI / 2;
+  mesh(new THREE.TorusGeometry(0.09, 0.025, 6, 20), scarfMat, scarf, 0, -0.02, 0.06).rotation.x = Math.PI / 2;
   scarf.position.set(neck.x, neck.y - 0.02, neck.z - 0.06);
   attach('Spine2', scarf);
 

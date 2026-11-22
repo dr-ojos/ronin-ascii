@@ -141,6 +141,8 @@ const MAT = {
   ito: new THREE.MeshStandardMaterial({ map: rep(itoC, 1, 3), roughness: 0.8 }),
   flag: new THREE.MeshStandardMaterial({ map: flagC, roughness: 1, side: THREE.DoubleSide })
 };
+// the parts the player can restyle (look.ts)
+MAT.red.userData.role = 'lacquer'; MAT.cord.userData.role = 'cloth'; MAT.redLac.userData.role = 'mask';
 
 // ------------------------------------------------------------ geometry helpers
 const mesh = (g: THREE.BufferGeometry, m: THREE.Material, parent?: THREE.Object3D | null, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); if (parent) parent.add(o); return o; };

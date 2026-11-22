@@ -7,7 +7,7 @@ import { buildNature } from './nature';
 import { addCollider, isFree } from './physics';
 import { addLight, updateLights } from './lights';
 import { buildTerrainMesh, buildSkyline } from './terrain';
-import { buildStructures, updateStructures, blockers } from './structures';
+import { buildStructures, updateStructures, blockers, floors } from './structures';
 import { updateChunks, chunkBlockers } from './chunks';
 import { buildMasks } from './map';
 import { buildLandmarks } from './landmarks';
@@ -135,7 +135,9 @@ buildMasks();
   }
 }
 
-// shrine with glowing shoji
+// shrine with glowing shoji: hollow, with the middle doors slid open. Inside is Masa's shop (shop.ts);
+// its roof hides while you are in, so the camera sees you
+export const shrineRoof = new THREE.Group();
 {
   const shojiTex = (() => {
     const c = document.createElement('canvas'); c.width = 128; c.height = 160;
@@ -151,35 +153,52 @@ buildMasks();
   const wood = tagMat(M(0x3e2b22, { roughness: 0.9 }), CLS.wood), woodL = tagMat(M(0x6a4630, { roughness: 0.8 }), CLS.wood);
   const roofM = tagMat(M(0x2b3246, { roughness: 0.6, metalness: 0.25 }), CLS.wood), roofL = tagMat(M(0x5a6478, { roughness: 0.6, metalness: 0.3 }), CLS.wood);
   const stoneB = tagMat(M(0x5d6068, { roughness: 1 }), CLS.ground);
-  const shoji = tagMat(new THREE.MeshStandardMaterial({ map: shojiTex, emissiveMap: shojiTex, emissive: 0xffffff, emissiveIntensity: 1.5, color: 0x333333 }), CLS.light);
+  const shoji = tagMat(new THREE.MeshStandardMaterial({ map: shojiTex, emissiveMap: shojiTex, emissive: 0xffffff, emissiveIntensity: 1.5, color: 0x333333, side: THREE.DoubleSide }), CLS.light);
   const chochin = tagMat(M(0xff6a2a, { emissive: 0xff5a1a, emissiveIntensity: 2.2 }), CLS.light);
   const g = new THREE.Group(); g.position.set(0, 0, -24);
-  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+  g.add(shrineRoof);
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, p: THREE.Object3D = g) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); p.add(o); return o; };
   add(new THREE.BoxGeometry(10, 0.7, 7), stoneB, 0, 0.35, 0);
   add(new THREE.BoxGeometry(9.4, 0.15, 6.4), wood, 0, 0.78, 0);
-  add(new THREE.BoxGeometry(7.9, 2.6, 5), wood, 0, 2.15, -0.1);
-  for (const x of [-3, -1, 1, 3]) add(new THREE.PlaneGeometry(1.85, 2.2), shoji, x, 2.0, 2.42);
-  for (const x of [-4, -2, 0, 2, 4]) add(new THREE.CylinderGeometry(0.14, 0.15, 2.9, 8), woodL, x, 2.2, 2.55);
+  // walls (back, sides), a ceiling that goes with the roof; the two middle shoji slid aside make the door
+  add(new THREE.BoxGeometry(7.9, 2.6, 0.15), wood, 0, 2.15, -2.53);
+  for (const x of [-3.88, 3.88]) add(new THREE.BoxGeometry(0.15, 2.6, 5), wood, x, 2.15, -0.1);
+  add(new THREE.BoxGeometry(7.9, 0.1, 5), wood, 0, 3.42, -0.1, shrineRoof);
+  for (const x of [-3, 3]) add(new THREE.PlaneGeometry(1.85, 2.2), shoji, x, 2.0, 2.42);
+  for (const x of [-2.75, 2.75]) add(new THREE.PlaneGeometry(1.85, 2.2), shoji, x, 2.0, 2.36);
+  for (const x of [-4, -2, 2, 4]) add(new THREE.CylinderGeometry(0.14, 0.15, 2.9, 8), woodL, x, 2.2, 2.55);
   for (const z of [-2.6, 2.55]) for (const x of [-4, 4]) add(new THREE.CylinderGeometry(0.14, 0.15, 2.9, 8), woodL, x, 2.2, z);
   add(new THREE.BoxGeometry(8.3, 0.35, 0.2), woodL, 0, 3.35, 2.55);
   add(new THREE.BoxGeometry(8.3, 0.12, 0.18), woodL, 0, 0.95, 2.55);
   add(new THREE.BoxGeometry(9.6, 0.12, 1.3), wood, 0, 0.86, 3.3);
   for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(2.6, 0.24, 0.45), stoneB, 0, 0.12 + i * 0.24, 4.55 - i * 0.4);
   for (const sgn of [1, -1]) {
-    const panel = add(new THREE.BoxGeometry(11, 0.22, 4.7), roofM, 0, 4.15, 2.06 * sgn); panel.rotation.x = 0.5 * sgn;
-    for (let k = -5; k <= 5; k++) { const rib = add(new THREE.BoxGeometry(0.08, 0.06, 4.7), roofL, k, 4.29, 2.06 * sgn); rib.rotation.x = 0.5 * sgn; rib.position.y += 0.02; }
-    add(new THREE.BoxGeometry(11.2, 0.14, 0.22), roofL, 0, 3.05, 4.1 * sgn);
+    const panel = add(new THREE.BoxGeometry(11, 0.22, 4.7), roofM, 0, 4.15, 2.06 * sgn, shrineRoof); panel.rotation.x = 0.5 * sgn;
+    for (let k = -5; k <= 5; k++) { const rib = add(new THREE.BoxGeometry(0.08, 0.06, 4.7), roofL, k, 4.29, 2.06 * sgn, shrineRoof); rib.rotation.x = 0.5 * sgn; rib.position.y += 0.02; }
+    add(new THREE.BoxGeometry(11.2, 0.14, 0.22), roofL, 0, 3.05, 4.1 * sgn, shrineRoof);
     const lan = add(new THREE.SphereGeometry(0.32, 14, 10), chochin, 2.6 * sgn, 2.95, 3.55); lan.scale.y = 1.35;
     add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), wood, 2.6 * sgn, 3.42, 3.55);
     add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), wood, 2.6 * sgn, 2.5, 3.55);
   }
-  add(new THREE.BoxGeometry(11.4, 0.38, 0.45), roofM, 0, 5.25, 0);
-  for (const x of [-5.3, 5.3]) for (const r of [0.6, -0.6]) { const c = add(new THREE.BoxGeometry(0.1, 1.1, 0.1), roofM, x, 5.6, 0); c.rotation.z = r; }
+  add(new THREE.BoxGeometry(11.4, 0.38, 0.45), roofM, 0, 5.25, 0, shrineRoof);
+  for (const x of [-5.3, 5.3]) for (const r of [0.6, -0.6]) { const c = add(new THREE.BoxGeometry(0.1, 1.1, 0.1), roofM, x, 5.6, 0, shrineRoof); c.rotation.z = r; }
   shadowTree(g);
   g.traverse(o => { if ((o as THREE.Mesh).material === shoji || (o as THREE.Mesh).material === chochin) o.castShadow = false; });
   addLight({ x: 0, y: 2.2, z: -19, color: 0xffa050, intensity: 9, distance: 16, decay: 1.3 });
   scene.add(g); camBlockers.push(g);
-  addCollider({ rect: [-5, 5, -27.5, -19.4] });
+  // you go in by the steps: edges of the platform, the walls, the door posts
+  const seg = (x0: number, z0: number, x1: number, z1: number, r = 0.1) => addCollider({ seg: [x0, z0, x1, z1], r });
+  seg(-5, -27.5, 5, -27.5); seg(-5, -27.5, -5, -20.05); seg(5, -27.5, 5, -20.05);
+  seg(-5, -20.05, -1.4, -20.05); seg(1.4, -20.05, 5, -20.05); seg(-1.4, -20.05, -1.4, -19.2); seg(1.4, -20.05, 1.4, -19.2);
+  seg(-3.95, -26.6, 3.95, -26.6); seg(-3.95, -26.6, -3.95, -21.6); seg(3.95, -26.6, 3.95, -21.6);
+  seg(-3.95, -21.6, -1.85, -21.6); seg(1.85, -21.6, 3.95, -21.6);
+  for (const x of [-4, -2, 2, 4]) addCollider({ x, z: -21.45, r: 0.18 });
+  // the boards you walk on, and the stone steps up to them
+  floors.push((x, z) => {
+    if (Math.abs(x) < 5 && z > -27.5 && z < -20.05) return 0.88;
+    if (Math.abs(x) < 1.4 && z >= -20.05 && z < -19.2) return 0.88 * (-19.2 - z) / 0.85;
+    return null;
+  });
 }
 
 // wooden fence around the shrine compound, golden caps on every few posts

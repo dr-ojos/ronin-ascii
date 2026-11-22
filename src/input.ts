@@ -6,17 +6,26 @@ import { tryAttack, tryDash } from './player';
 import { reset } from './encounters';
 import { tryOpen } from './loot';
 import { tryLightning } from './special';
+import { tryTalk } from './shop';
+import { menuKey } from './menu';
+import { cycleWeapon, resetWeapons } from './weapons';
+import { resetArmor } from './armor';
 import { sfx } from './sfx';
 import { toggleRain } from './world';
 import { showMsg, overlay } from './hud';
 import { state, keys } from './state';
 
 addEventListener('keydown', e => {
+  if (menuKey(e)) return;   // an open menu takes the keys
   keys[e.code] = true;
   if (e.code === 'Space') { e.preventDefault(); tryDash(); }
   if (!e.repeat && e.code === 'KeyK' && state.playing && !state.dead) tryAttack(false);
   if (!e.repeat && e.code === 'KeyL' && state.playing && !state.dead) tryAttack(true);
-  if (!e.repeat && e.code === 'KeyE') tryOpen();
+  if (!e.repeat && e.code === 'KeyE' && !tryTalk()) tryOpen();
+  if (!e.repeat && e.code === 'KeyQ' && state.playing && !state.dead) {
+    const w = cycleWeapon();
+    showMsg(w ? `— ${w.name} —` : 'solo tienes esta katana · Masa vende más en la casa del santuario', w ? 1.2 : 2.2);
+  }
   if (!e.repeat && e.code === 'KeyP') tryLightning();
   if (e.code === 'KeyC') state.colorMode = (state.colorMode + 1) % 4;
   if (e.code === 'KeyT') state.asciiOn = !state.asciiOn;
@@ -31,7 +40,7 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 // camera is fixed: the mouse no longer rotates the view
 addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('mousedown', e => {
-  if (!state.playing || state.dead) return;
+  if (!state.playing || state.dead || state.menu) return;
   if (e.button === 0) tryAttack();
 });
 addEventListener('wheel', e => {
@@ -40,7 +49,7 @@ addEventListener('wheel', e => {
 }, { passive: true });
 overlay.addEventListener('click', () => {
   sfx.init(); overlay.style.display = 'none';
-  if (state.dead || !state.playing) reset();
+  if (state.dead || !state.playing) { reset(); resetWeapons(); resetArmor(); }
   state.playing = true;
 });
 

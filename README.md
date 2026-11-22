@@ -20,7 +20,9 @@ npm run preview    # servir dist/ para probarla
 - `index.html`: página, HUD y estilos.
 - `src/main.ts`: punto de entrada y bucle de frames.
 - `src/`: un módulo por responsabilidad (`ascii.ts` efecto ASCII, `world.ts` escenario,
-  `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `encounters.ts` guaridas, patrullas y emboscadas, `loot.ts` cofres y botín, `upgrades.ts` mejoras, `special.ts` golpe de rayos, `score.ts` puntos, `hud.ts` interfaz...).
+  `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `encounters.ts` guaridas, patrullas y emboscadas, `loot.ts` cofres y botín, `upgrades.ts` mejoras, `special.ts` golpe de rayos, `score.ts` puntos y mon, `hud.ts` interfaz...).
+- Tienda y aspecto: `shop.ts` la tienda de Masa dentro del santuario del inicio (se entra por la puerta; el tejado se oculta),
+  `weapons.ts` armas, `armor.ts` armaduras, `menu.ts` menús, `custom.ts` + `look.ts` personalizar al ronin (se guarda en el navegador).
   `state.ts` guarda el estado compartido y `types.ts` los tipos comunes.
 - `src/samurai.ts` y `src/rig.ts`: personajes (procedural y con esqueleto de mocap); `nature.ts`: paisaje; `audio.ts`: sonido.
 - Mundo abierto (~1,4 km de lado, cerrado por montañas):
@@ -37,6 +39,6 @@ npm run preview    # servir dist/ para probarla
 
 ## Controles
 
-WASD moverse · SHIFT correr · clic / K tajo · L giro pesado · ESPACIO esquivar · E o tajo abrir cofre · P rayo · N mapa del mundo ·
+WASD moverse · SHIFT correr · clic / K tajo · L giro pesado · ESPACIO esquivar · E o tajo abrir cofre · E en el mostrador de Masa: tienda · Q cambiar de arma · P rayo · N mapa del mundo ·
 C paleta · T vista sin ASCII · F modo foto · R lluvia · M sonido · + / - densidad de caracteres.
 - `public/`: modelos 3D y sonidos, copiados tal cual a `dist/`.

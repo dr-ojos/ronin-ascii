@@ -22,6 +22,24 @@
   #zone{position:fixed;right:16px;top:188px;width:233px;text-align:center;font-size:12px;color:#ffd27a;pointer-events:none;text-shadow:0 0 6px #000;letter-spacing:.08em}
   #bigmap{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:none;border:1px solid #2a3348;background:#05060a;box-shadow:0 0 40px #000;pointer-events:none}
   #prompt{position:fixed;left:0;right:0;bottom:16%;text-align:center;font-size:16px;font-weight:bold;color:#ffd27a;pointer-events:none;text-shadow:0 0 8px #000,0 0 2px #000;letter-spacing:.06em}
+  #overlay .cbtn{margin-top:16px;color:#8fb4ff;border:1px solid #2a3348;padding:6px 14px;cursor:pointer;font-size:14px;letter-spacing:.08em}
+  #overlay .cbtn:hover{color:#ffd27a;border-color:#ffd27a}
+  #menu{position:fixed;right:24px;top:50%;transform:translateY(-50%);width:min(440px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow-y:auto;display:none;z-index:5;
+    background:rgba(5,6,10,.9);border:1px solid #2a3348;box-shadow:0 0 30px #000;padding:14px 16px;box-sizing:border-box;font-size:14px;color:#cfd6e6}
+  #menu .mt{color:#ff5a4a;font-weight:bold;letter-spacing:.12em;text-align:center}
+  #menu .ms{color:#9aa3b5;font-size:12px;text-align:center;margin:4px 0 10px}
+  #menu .mh{color:#6c7488;font-size:11px;letter-spacing:.25em;margin:10px 0 2px;border-bottom:1px solid #1c2233}
+  #menu .mr{padding:4px 6px;cursor:pointer;border-left:2px solid transparent}
+  #menu .mr.on{background:#121827;border-left-color:#ffd27a}
+  #menu .mr .ml{white-space:pre}
+  #menu .mv{float:right}
+  #menu .mn{color:#6c7488;font-size:11px;margin:1px 0 0 18px}
+  #menu .mr.on .mn{color:#9aa3b5}
+  #menu .ma{color:#ffd27a;padding:0 4px}
+  #menu .mi{background:#05060a;border:1px solid #2a3348;color:#ffd27a;font:inherit;width:150px;padding:1px 4px}
+  #menu .mst{min-height:1.3em;margin-top:8px;color:#ffd27a;text-align:center;font-size:13px}
+  #menu .mf{color:#5c6478;font-size:11px;text-align:center}
+  #menu .y{color:#ffd27a}#menu .r{color:#ff5a4a}#menu .b{color:#8fb4ff}#menu .d{color:#6c7488}
   #hint{position:fixed;right:16px;bottom:12px;font-size:12px;color:#5c6478;pointer-events:none;white-space:pre;text-align:right}
 </style>
 </head>
@@ -32,7 +50,8 @@
 <canvas id="minimap" width="231" height="171"></canvas>
 <div id="zone"></div>
 <canvas id="bigmap"></canvas>
-<div id="hint">WASD mover · SHIFT correr · clic tajo · ESPACIO esquivar · E abrir cofre · P rayo · N mapa
+<div id="menu"></div>
+<div id="hint">WASD mover · SHIFT correr · clic tajo · ESPACIO esquivar · E cofre / tienda · Q cambiar arma · P rayo · N mapa
 K tajo · L giro · C color · T vista 3D · F foto · R lluvia · M sonido</div>
 <div id="overlay">
 <pre> ____   ___  _   _ ___ _   _
@@ -45,8 +64,10 @@ K tajo · L giro · C color · T vista 3D · F foto · R lluvia · M sonido</div
   <div class="help">
     <b>WASD</b> moverse &nbsp;·&nbsp; <b>K</b> / clic tajo (3º golpe = giro) &nbsp;·&nbsp; <b>L</b> giro pesado<br>
     <b>SHIFT</b> correr &nbsp;·&nbsp; <b>ESPACIO</b> esquivar (también flechas) &nbsp;·&nbsp; <b>E</b> / tajo abrir cofre &nbsp;·&nbsp; <b>P</b> rayo (cuando se carga) &nbsp;·&nbsp; <b>N</b> mapa<br>
+    <b>E</b> en el santuario del inicio: la tienda de Masa (armas y armaduras con tus mon) &nbsp;·&nbsp; <b>Q</b> cambiar de arma<br>
     <b>C</b> paleta &nbsp;·&nbsp; <b>T</b> ver sin ASCII &nbsp;·&nbsp; <b>F</b> modo foto &nbsp;·&nbsp; <b>+ / -</b> densidad &nbsp;·&nbsp; <b>M</b> sonido
   </div>
+  <div class="cbtn" id="custom-btn">[ personalizar ronin ]</div>
   <div class="go" id="go">[ clic para desenvainar ]</div>
 </div>
 
