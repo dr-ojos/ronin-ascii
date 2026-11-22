@@ -1,0 +1,16 @@
+{
+  "swing":      { "files": ["sword/swing-1.wav", "sword/swing-2.wav", "sword/swing-3.wav"], "gain": 0.5 },
+  "swingHeavy": { "files": ["sword/swing-heavy-1.wav", "sword/swing-heavy-2.wav", "sword/swing-heavy-3.wav"], "gain": 0.7 },
+  "dash": [],
+  "hit":        { "files": ["sword/hit-1.wav", "sword/hit-2.wav", "sword/hit-3.wav"], "gain": 0.8 },
+  "hitHeavy":   { "files": ["sword/clash-1.wav", "sword/clash-2.wav", "sword/clash-3.wav"], "gain": 0.8 },
+  "hurt":       { "files": ["body/hurt-1.wav", "body/hurt-2.wav", "body/hurt-3.wav"], "gain": 0.7, "layer": 0.6 },
+  "warn":       { "files": ["oni/warn-1.wav", "oni/warn-2.wav"], "gain": 0.28 },
+  "roar":       { "files": ["oni/roar-1.wav", "oni/roar-2.wav", "oni/roar-3.wav", "oni/roar-4.wav"], "gain": 0.3 },
+  "roarBig":    { "files": ["oni/roar-big-1.wav", "oni/roar-big-2.wav", "oni/roar-big-3.wav"], "gain": 0.3 },
+  "death":      { "files": ["oni/death-1.wav", "oni/death-2.wav", "oni/death-3.wav", "oni/death-4.wav"], "gain": 0.55 },
+  "deathBig":   { "files": ["oni/death-big-1.wav", "oni/death-big-2.wav"], "gain": 0.55 },
+  "taiko": [],
+  "rain":       { "files": ["amb/rain.wav"], "gain": 0.35 },
+  "wind":       { "files": ["amb/wind.wav"], "gain": 0.14 }
+}

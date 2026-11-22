@@ -1,0 +1,4 @@
+# copias de seguridad antiguas (ahora el historial lo guarda git)
+*.antes-*
+.DS_Store
+.claude/settings.local.json

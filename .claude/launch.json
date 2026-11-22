@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ronin-ascii",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "serve.py",
+        "8766"
+      ],
+      "port": 8766
+    },
+    {
+      "name": "ronin-ascii-mirror",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "/private/tmp/claude-501/-Users-josep--claude-spares-spare-plPFT6/220d9162-f82a-4451-81b3-1e2b2140dde3/scratchpad/mirror/serve.py",
+        "8767"
+      ],
+      "port": 8767
+    }
+  ]
+}
