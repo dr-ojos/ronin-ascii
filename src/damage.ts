@@ -11,7 +11,7 @@ export function hurtPlayer(dmg: number) {
   player.hp -= dmg; player.invuln = 0.5; cellMat.uniforms.uHit.value = 1; state.shake = 0.5; sfx.hurt();
   if (player.hp <= 0) {
     player.hp = 0; state.dead = true;
-    burst(new THREE.Vector3(player.pos.x, 1.2, player.pos.z), 0xff3030, 120, 8);
+    burst(new THREE.Vector3(player.pos.x, player.pos.y + 1.2, player.pos.z), 0xff3030, 120, 8);
     setTimeout(showDeathScreen, 1200);
   }
 }

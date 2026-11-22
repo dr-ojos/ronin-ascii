@@ -5,11 +5,12 @@ import { renderer, scene, camera } from './renderer';
 import { cellMat, renderAscii, resizeAscii } from './ascii';
 import { animSamurai } from './avatar';
 import { updateSparks } from './katana-fx';
-import { updateRain } from './world';
+import { updateRain, updateWorld, updateSky } from './world';
+import { updateMinimap } from './minimap';
 import { updateCamera, updateLightDir } from './camera';
 import { updateHud } from './hud';
 import { update } from './game';
-import { state } from './state';
+import { state, player } from './state';
 import './input';
 
 const clock = new THREE.Clock();
@@ -20,10 +21,13 @@ function frame() {
   if (state.photo) { state.time += dt; state.yaw += dt * 0.35; } else update(dt);
   animSamurai(dt);
   updateSparks(dt, !state.dead);
+  updateWorld();
   updateRain(dt);
   updateCamera(dt);
+  updateSky(camera.position);
   updateLightDir();
   updateHud(dt);
+  updateMinimap(dt);
   cellMat.uniforms.uMode.value = state.colorMode;
   if (state.asciiOn) renderAscii(scene, camera);
   else { renderer.setRenderTarget(null); renderer.render(scene, camera); }
@@ -34,5 +38,8 @@ addEventListener('resize', () => {
   resizeAscii();
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
 });
+
+// dev only: lets the browser console move the samurai around the world (__ronin.player.pos.set(x, 0, z))
+if (import.meta.env.DEV) Object.assign(window, { __ronin: { state, player, scene, renderer, camera, THREE } });
 
 frame();

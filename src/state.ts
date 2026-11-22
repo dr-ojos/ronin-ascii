@@ -15,7 +15,7 @@ export const state = {
   // feel
   shake: 0, hitStop: 0, time: 0,
   // toggles
-  asciiOn: true, colorMode: 0, photo: false, raining: true
+  asciiOn: true, colorMode: 0, photo: false, raining: true, bigMap: false
 };
 
 /** keys currently held, by KeyboardEvent.code */

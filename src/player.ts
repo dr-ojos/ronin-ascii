@@ -6,6 +6,7 @@ import { enemies } from './enemies';
 import { burst, slashArc } from './fx';
 import { sfx, panOf } from './sfx';
 import { collide } from './physics';
+import { surfaceY } from './structures';
 import { keyLight, rimLight } from './world';
 import { player, state, keys } from './state';
 import { angDiff } from './utils';
@@ -43,8 +44,9 @@ export function updatePlayer(dt: number) {
   player.invuln = Math.max(0, player.invuln - dt);
   player.dashCd = Math.max(0, player.dashCd - dt);
   const mv = moveInput();
-  let speed = 5.6;
-  if (player.attackT >= 0) speed *= 0.35;
+  // Shift: run (to cross the open world); attacking slows you down
+  let speed = keys.ShiftLeft || keys.ShiftRight ? 10 : 5.6;
+  if (player.attackT >= 0) speed = 5.6 * 0.35;
   if (player.dashT > 0) {
     player.dashT -= dt;
     player.pos.addScaledVector(player.dashDir, 18 * dt);
@@ -53,12 +55,13 @@ export function updatePlayer(dt: number) {
     if (player.attackT < 0) player.face += angDiff(Math.atan2(mv.x, mv.z), player.face) * Math.min(1, dt * 12);
   }
   collide(player.pos, 0.45);
+  player.pos.y = surfaceY(player.pos.x, player.pos.z);
   player.moving += ((mv.lengthSq() > 0 ? 1 : 0) - player.moving) * Math.min(1, dt * 10);
   player.walk += dt * 10 * player.moving;
   sam.root.position.copy(player.pos);
   sam.root.rotation.y = player.face;
-  keyLight.position.set(player.pos.x + Math.sin(state.yaw) * 2.5, 3.2, player.pos.z + Math.cos(state.yaw) * 2.5);
-  rimLight.position.set(player.pos.x - Math.sin(state.yaw) * 8, 5, player.pos.z - Math.cos(state.yaw) * 8); rimLight.target.position.copy(player.pos);
+  keyLight.position.set(player.pos.x + Math.sin(state.yaw) * 2.5, player.pos.y + 3.2, player.pos.z + Math.cos(state.yaw) * 2.5);
+  rimLight.position.set(player.pos.x - Math.sin(state.yaw) * 8, player.pos.y + 5, player.pos.z - Math.cos(state.yaw) * 8); rimLight.target.position.copy(player.pos);
 
   if (player.attackT >= 0) {
     player.attackT += dt;
@@ -77,8 +80,8 @@ export function updatePlayer(dt: number) {
           hits++; hitPan += panOf(en.g.position.x, en.g.position.z); en.hp -= spin ? 2 : 1; en.flash = 1;
           en.knock.copy(tmp.normalize()).multiplyScalar((spin ? 12 : 8) / (en.big ? 3 : 1));
           if (en.state === 'windup' && !en.big) { en.state = 'recover'; en.t = 0.5; }
-          burst(new THREE.Vector3(en.g.position.x, 1.3 * en.scale, en.g.position.z), 0xffffff, 18, 5, 0.12);
-          sparkBurst(new THREE.Vector3(en.g.position.x, 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(1.25), 0.35), spin ? 14 : 9, spin ? 5.5 : 4.5);
+          burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), 0xffffff, 18, 5, 0.12);
+          sparkBurst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(player.pos.y + 1.25), 0.35), spin ? 14 : 9, spin ? 5.5 : 4.5);
         }
       }
       if (hits) { state.hitStop = spin ? 0.09 : 0.06; state.shake = Math.max(state.shake, spin ? 0.35 : 0.2); sfx.hit({ heavy: spin, pan: hitPan / hits, count: hits }); }

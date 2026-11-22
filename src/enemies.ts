@@ -6,7 +6,8 @@ import { createOniWarrior } from './rig';
 import { scene } from './renderer';
 import { ACTOR_LAYER } from './ascii';
 import { M, CLS, tagTree } from './materials';
-import { WORLD_R } from './world';
+import { WORLD_R } from './map';
+import { surfaceY } from './structures';
 import { player } from './state';
 import { rnd } from './utils';
 import type { Enemy } from './types';
@@ -35,8 +36,8 @@ export function spawnOni(big: boolean) {
   const k = big ? 1.9 : rnd(0.9, 1.1); g.scale.setScalar(k);
   const a = Math.random() * Math.PI * 2, r = rnd(18, 28);
   let x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
-  const d = Math.hypot(x, z); if (d > WORLD_R - 2) { x *= (WORLD_R - 2) / d; z *= (WORLD_R - 2) / d; }
-  g.position.set(x, 0, z);
+  const d = Math.hypot(x, z); if (d > WORLD_R - 4) { x *= (WORLD_R - 4) / d; z *= (WORLD_R - 4) / d; }
+  g.position.set(x, surfaceY(x, z), z);
   g.traverse(o => { if ((o as THREE.Mesh).isMesh && o !== ring) { o.castShadow = true; o.layers.enable(ACTOR_LAYER); } });
   tagTree(g, CLS.actor);
   scene.add(g);
@@ -52,8 +53,8 @@ function spawnRealOni(gltf: GLTF, big: boolean) {
   const k = big ? 1.45 : 1; g.scale.setScalar(k);
   const a = Math.random() * Math.PI * 2, r = rnd(18, 28);
   let x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
-  const d = Math.hypot(x, z); if (d > WORLD_R - 2) { x *= (WORLD_R - 2) / d; z *= (WORLD_R - 2) / d; }
-  g.position.set(x, 0, z);
+  const d = Math.hypot(x, z); if (d > WORLD_R - 4) { x *= (WORLD_R - 4) / d; z *= (WORLD_R - 4) / d; }
+  g.position.set(x, surfaceY(x, z), z);
   g.traverse(o => { if ((o as THREE.Mesh).isMesh && o !== oni.ring) o.layers.enable(ACTOR_LAYER); });
   tagTree(g, CLS.actor);
   scene.add(g);

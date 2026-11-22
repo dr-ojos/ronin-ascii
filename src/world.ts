@@ -1,15 +1,20 @@
-// The clearing: lights, moon and stars, stone path, torii, shrine, fence, nature, petals and rain.
+// The world: lights, moon and stars, terrain, the clearing (stone path, torii, shrine, fence, nature),
+// every landmark of the open world (structures.ts), the streamed forest (chunks.ts), petals and rain.
 import * as THREE from 'three';
 import { renderer, scene } from './renderer';
 import { M, CLS, tagMat, tagTree, shadowTree, box } from './materials';
 import { buildNature } from './nature';
+import { addCollider, isFree } from './physics';
+import { addLight, updateLights } from './lights';
+import { buildTerrainMesh, buildSkyline } from './terrain';
+import { buildStructures, updateStructures, blockers } from './structures';
+import { updateChunks, chunkBlockers } from './chunks';
+import { buildMasks } from './map';
 import { player, state } from './state';
 import { rnd } from './utils';
-import type { Collider } from './types';
 
-export const colliders: Collider[] = [];
-export const camBlockers: THREE.Object3D[] = [];
-export const WORLD_R = 42;
+/** objects of the clearing the camera pulls in front of (the rest of the world: structures.ts / chunks.ts) */
+const camBlockers: THREE.Object3D[] = [];
 
 // sky fill: brighter blue from above, warm bounce from the ground so shadows aren't pitch black
 scene.add(new THREE.HemisphereLight(0x8a9ad8, 0x2a1f14, 1.05));
@@ -52,36 +57,42 @@ export function placeMoonShadow(p: THREE.Vector3) {
 export const keyLight = new THREE.PointLight(0xdde6ff, 7, 12, 1.2);
 scene.add(keyLight);
 
-// moon + halo + stars
+// moon + halo + stars + far mountains: a sky dome that travels with the camera
+const sky = new THREE.Group(); scene.add(sky);
 const moon = new THREE.Mesh(new THREE.SphereGeometry(7, 24, 16), new THREE.MeshBasicMaterial({ color: 0xf4efdc, fog: false }));
 moon.position.copy(moonDir).multiplyScalar(150);
 tagMat(moon.material, CLS.light);
-scene.add(moon);
+sky.add(moon);
+const skyline = buildSkyline(); tagMat(skyline.material, CLS.ground); sky.add(skyline);
+export function updateSky(cam: THREE.Vector3) { sky.position.set(cam.x, Math.max(cam.y - 12, player.pos.y - 6), cam.z); }
 {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 10, 64, 64, 64);
   g.addColorStop(0, 'rgba(200,215,255,0.55)'); g.addColorStop(1, 'rgba(200,215,255,0)');
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
-  tagMat(halo.material, CLS.sky); halo.scale.set(48, 48, 1); halo.position.copy(moon.position); scene.add(halo);
+  tagMat(halo.material, CLS.sky); halo.scale.set(48, 48, 1); halo.position.copy(moon.position); sky.add(halo);
   const n = 900, p = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
     const th = Math.random() * Math.PI * 2, ph = Math.acos(rnd(0.08, 1));
     p.set([Math.sin(ph) * Math.cos(th) * 200, Math.cos(ph) * 200, Math.sin(ph) * Math.sin(th) * 200], i * 3);
   }
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(p, 3));
-  scene.add(new THREE.Points(sg, tagMat(new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, fog: false }), CLS.sky)));
+  const stars = new THREE.Points(sg, tagMat(new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, fog: false }), CLS.sky));
+  stars.frustumCulled = false; sky.add(stars);
 }
 
 // layout helpers
 const inCompound = (x: number, z: number, m = 0) => Math.abs(x) < 12 + m && z < -15 + m && z > -31 - m;
 const onPath = (x: number, z: number) => Math.abs(x) < 1.6 && z > -16 && z < 7;
 
-// ground
-// pure black soil under the grass: unlit, no fog, and tagged as "sky" so the ASCII pass leaves it blank
-// (only the blades themselves turn into characters)
-const ground = new THREE.Mesh(new THREE.CircleGeometry(140, 48), tagMat(new THREE.MeshBasicMaterial({ color: 0x000000, fog: false }), CLS.sky));
-ground.rotation.x = -Math.PI / 2; scene.add(ground);
+// ground: black soil under the grass, left blank by the ASCII pass (only the blades turn into
+// characters); bare rock on the mountains around the world
+scene.add(buildTerrainMesh());
+
+// the rest of the world: landmarks, roads, water. They register the footprints the masks are drawn from.
+buildStructures();
+buildMasks();
 
 // stone path + gravel courtyard
 {
@@ -100,7 +111,7 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
   const g = new THREE.Group(); g.position.set(0, 0, -11);
   for (const sx of [-2.3, 2.3]) {
     const p = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 4.4, 10), red); p.position.set(sx, 2.2, 0); g.add(p);
-    colliders.push({ x: sx, z: -11, r: 0.35 });
+    addCollider({ x: sx, z: -11, r: 0.35 });
   }
   const top = box(6.6, 0.32, 0.55, blk); top.position.y = 4.5; g.add(top);
   const top2 = box(6.0, 0.25, 0.45, red); top2.position.y = 4.22; g.add(top2);
@@ -116,8 +127,8 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
     const fb = box(0.55, 0.45, 0.55, fire); fb.position.y = 1.38; l.add(fb);
     const roof = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.45, 4), stone); roof.position.y = 1.83; roof.rotation.y = Math.PI / 4; l.add(roof);
     shadowTree(l); fb.castShadow = false;
-    const pl = new THREE.PointLight(0xff9a40, 6, 14, 1.4); pl.position.y = 1.4; l.add(pl);
-    scene.add(l); colliders.push({ x: sx, z: -8.5, r: 0.5 });
+    addLight({ x: sx, y: 1.4, z: -8.5, color: 0xff9a40, intensity: 6, distance: 14, decay: 1.4 });
+    scene.add(l); addCollider({ x: sx, z: -8.5, r: 0.5 });
   }
 }
 
@@ -163,9 +174,9 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
   for (const x of [-5.3, 5.3]) for (const r of [0.6, -0.6]) { const c = add(new THREE.BoxGeometry(0.1, 1.1, 0.1), roofM, x, 5.6, 0); c.rotation.z = r; }
   shadowTree(g);
   g.traverse(o => { if ((o as THREE.Mesh).material === shoji || (o as THREE.Mesh).material === chochin) o.castShadow = false; });
-  const pl = new THREE.PointLight(0xffa050, 9, 16, 1.3); pl.position.set(0, 2.2, 5); g.add(pl);
+  addLight({ x: 0, y: 2.2, z: -19, color: 0xffa050, intensity: 9, distance: 16, decay: 1.3 });
   scene.add(g); camBlockers.push(g);
-  colliders.push({ rect: [-5, 5, -27.5, -19.4] });
+  addCollider({ rect: [-5, 5, -27.5, -19.4] });
 }
 
 // wooden fence around the shrine compound, golden caps on every few posts
@@ -183,7 +194,7 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
     for (const y of [0.45, 0.95]) {
       const rail = box(0.07, 0.09, len, fenceM); rail.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); rail.rotation.y = ang; g.add(rail);
     }
-    colliders.push({ rect: [Math.min(x0, x1) - 0.1, Math.max(x0, x1) + 0.1, Math.min(z0, z1) - 0.1, Math.max(z0, z1) + 0.1] });
+    addCollider({ rect: [Math.min(x0, x1) - 0.1, Math.max(x0, x1) + 0.1, Math.min(z0, z1) - 0.1, Math.max(z0, z1) + 0.1] });
   };
   run(-12, -15.2, -2.2, -15.2); run(2.2, -15.2, 12, -15.2);
   run(-12, -15.2, -12, -31); run(12, -15.2, 12, -31); run(-12, -31, 12, -31);
@@ -192,7 +203,25 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
 }
 
 // trees, grass, bushes, flowers, pond, fireflies (nature.js)
-export const updateNature = buildNature(scene, { tagMat, CLS, colliders, camBlockers, inCompound, onPath });
+export const updateNature = buildNature(scene, { addCollider: c => addCollider(c), isFree, camBlockers, inCompound, onPath });
+// the forest around the clearing, grown before the first frame
+updateChunks(player.pos.x, player.pos.z, 99);
+
+/** per frame: stream forest chunks, hide far landmarks, hand the lantern lights to the nearest lanterns */
+export function updateWorld() {
+  updateChunks(player.pos.x, player.pos.z, 1);
+  updateStructures(player.pos.x, player.pos.z);
+  updateLights(player.pos.x, player.pos.z, state.time);
+}
+/** what the camera may have to pull in front of, around the player */
+const near: THREE.Object3D[] = [];
+export function nearBlockers(x: number, z: number) {
+  near.length = 0;
+  if (Math.hypot(x, z) < 90) near.push(...camBlockers);
+  for (const b of blockers) if (b.o.visible && Math.hypot(b.x - x, b.z - z) < b.r + 30) near.push(b.o);
+  chunkBlockers(x, z, near);
+  return near;
+}
 
 // falling petals
 const PETALS = 700;
@@ -219,7 +248,7 @@ export function updateRain(dt: number) {
   for (let i = 0; i < RAIN; i++) {
     const j = i * 6; let y = rainPos[j + 1] - rainSpd[i] * dt;
     let x = rainPos[j] - 0.9 * dt, z = rainPos[j + 2];
-    if (y < 0 || Math.abs(x - player.pos.x) > 22 || Math.abs(z - player.pos.z) > 22) { x = player.pos.x + rnd(-22, 22); z = player.pos.z + rnd(-22, 22); y = rnd(10, 16); }
+    if (y < player.pos.y - 4 || Math.abs(x - player.pos.x) > 22 || Math.abs(z - player.pos.z) > 22) { x = player.pos.x + rnd(-22, 22); z = player.pos.z + rnd(-22, 22); y = player.pos.y + rnd(10, 16); }
     rainPos[j] = x; rainPos[j + 1] = y; rainPos[j + 2] = z; rainPos[j + 3] = x + 0.05; rainPos[j + 4] = y + 0.55; rainPos[j + 5] = z;
   }
   rainGeo.attributes.position.needsUpdate = true;
@@ -232,8 +261,8 @@ export function updatePetals(dt: number) {
     petalPos[j] += (Math.sin(state.time * 0.9 + s) * 0.6 + 0.5) * dt;
     petalPos[j + 1] -= (0.5 + (s % 1) * 0.6) * dt;
     petalPos[j + 2] += Math.cos(state.time * 0.7 + s * 2) * 0.4 * dt;
-    if (petalPos[j + 1] < 0 || Math.abs(petalPos[j] - player.pos.x) > 24 || Math.abs(petalPos[j + 2] - player.pos.z) > 24) {
-      petalPos[j] = player.pos.x + rnd(-22, 22); petalPos[j + 1] = rnd(6, 12); petalPos[j + 2] = player.pos.z + rnd(-22, 22);
+    if (petalPos[j + 1] < player.pos.y - 3 || Math.abs(petalPos[j] - player.pos.x) > 24 || Math.abs(petalPos[j + 2] - player.pos.z) > 24) {
+      petalPos[j] = player.pos.x + rnd(-22, 22); petalPos[j + 1] = player.pos.y + rnd(6, 12); petalPos[j + 2] = player.pos.z + rnd(-22, 22);
     }
   }
   petalGeo.attributes.position.needsUpdate = true;

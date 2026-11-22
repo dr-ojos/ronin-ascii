@@ -7,6 +7,7 @@ import { burst } from './fx';
 import { sfx, panOf } from './sfx';
 import { showMsg } from './hud';
 import { collide } from './physics';
+import { surfaceY } from './structures';
 import { player, state } from './state';
 
 const tmp = new THREE.Vector3();
@@ -34,13 +35,15 @@ export function updateEnemies(dt: number) {
       if (dd < m && dd > 1e-4) { g.position.x += dx / dd * (m - dd) * 0.5; g.position.z += dz / dd * (m - dd) * 0.5; }
     }
     collide(g.position, 0.5 * en.scale);
+    const gy = surfaceY(g.position.x, g.position.z);
+    g.position.y = gy;
     g.rotation.y = Math.atan2(player.pos.x - g.position.x, player.pos.z - g.position.z);
     const wind = en.state === 'windup';
     if (en.oni) {
       en.move += ((en.state === 'chase' && d > reach ? 1 : 0) - en.move) * Math.min(1, dt * 8);
       en.oni.update(dt, { moving: en.move, speed: en.speed, state: wind ? 'windup' : (en.state === 'recover' && en.t > 0.45 ? 'strike' : 'idle') });
     } else {
-      g.position.y = 0.08 + Math.sin(state.time * 3 + en.seed) * 0.07;
+      g.position.y = gy + 0.08 + Math.sin(state.time * 3 + en.seed) * 0.07;
       g.rotation.x = wind ? -0.25 : (en.state === 'recover' ? 0.15 : 0);
     }
     en.ring.material.opacity = wind ? 0.5 + 0.5 * Math.sin(state.time * 30) : 0;
@@ -48,7 +51,7 @@ export function updateEnemies(dt: number) {
     en.flash = Math.max(0, en.flash - dt * 6);
     if (en.oni) en.oni.setFlash(en.flash); else { en.robeMat.emissive.setScalar(en.flash); en.maskMat.emissive.setScalar(en.flash); }
     if (en.hp <= 0) {
-      const c = new THREE.Vector3(g.position.x, 1.2 * en.scale, g.position.z);
+      const c = new THREE.Vector3(g.position.x, gy + 1.2 * en.scale, g.position.z);
       burst(c, 0xff3a2a, en.big ? 160 : 70, en.big ? 10 : 7);
       burst(c, 0xffe0c0, 30, 4, 0.1);
       scene.remove(g); enemies.splice(i, 1); state.kills++;

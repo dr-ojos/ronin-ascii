@@ -152,7 +152,7 @@ export function updateSparks(dt: number, emit: boolean) {
     const drag = Math.exp(-2.2 * dt);
     spVel[j] *= drag; spVel[j + 1] *= drag; spVel[j + 2] *= drag;
     spPos[j] += spVel[j] * dt; spPos[j + 1] += spVel[j + 1] * dt; spPos[j + 2] += spVel[j + 2] * dt;
-    if (spPos[j + 1] < 0.03) { spPos[j + 1] = 0.03; spVel[j + 1] *= -0.35; spVel[j] *= 0.6; spVel[j + 2] *= 0.6; }
+    if (spPos[j + 1] < player.pos.y + 0.03) { spPos[j + 1] = player.pos.y + 0.03; spVel[j + 1] *= -0.35; spVel[j] *= 0.6; spVel[j + 2] *= 0.6; }
     const flick = 0.75 + Math.random() * 0.5;
     // soft yellow → amber as it cools
     const e = Math.min(1, t * 3) * 0.8;
@@ -169,5 +169,5 @@ export function updateSparks(dt: number, emit: boolean) {
   bladeLight.position.lerpVectors(bladeBase, bladeTip, 0.6);
   bladeLight.intensity = (0.5 + swingS * 4 + bladeHeat * 1.5) * fl;
   // sits between the samurai and the camera, chest high: lights his front, barely touches the grass
-  samGlow.position.set(player.pos.x + Math.sin(state.yaw) * 0.9, 1.55, player.pos.z + Math.cos(state.yaw) * 0.9);
+  samGlow.position.set(player.pos.x + Math.sin(state.yaw) * 0.9, player.pos.y + 1.55, player.pos.z + Math.cos(state.yaw) * 0.9);
 }

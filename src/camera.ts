@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { camera } from './renderer';
 import { bufSize, cellMat } from './ascii';
-import { camBlockers, moonDir } from './world';
+import { nearBlockers, moonDir } from './world';
+import { groundY } from './terrain';
 import { player, state } from './state';
 import { rnd } from './utils';
 
@@ -11,7 +12,7 @@ const tmp = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 const camRay = new THREE.Raycaster();
 export function updateCamera(dt: number) {
-  camTarget.lerp(tmp.set(player.pos.x, state.photo ? 1.3 : 1.5, player.pos.z), Math.min(1, dt * 10));
+  camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo ? 1.3 : 1.5), player.pos.z), Math.min(1, dt * 10));
   const pt = state.photo ? 0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025) : state.pitch, cp = Math.cos(pt), camDist = state.photo ? state.photoDist : state.camDistUser;
   camera.position.set(
     camTarget.x + Math.sin(state.yaw) * cp * camDist,
@@ -24,15 +25,18 @@ export function updateCamera(dt: number) {
   }
   camRay.set(camTarget, tmp.subVectors(camera.position, camTarget).normalize());
   camRay.far = camDist;
-  const hit = camRay.intersectObjects(camBlockers, true)[0];
+  const hit = camRay.intersectObjects(nearBlockers(player.pos.x, player.pos.z), true)[0];
   if (hit && pt < 0.55) camera.position.copy(camTarget).addScaledVector(tmp, Math.max(1.5, hit.distance - 0.4));
+  // never dig into a hillside
+  const gy = groundY(camera.position.x, camera.position.z) + 1.2;
+  if (camera.position.y < gy) camera.position.y = gy;
   camera.lookAt(camTarget);
 }
 
 const _l0 = new THREE.Vector3(), _l1 = new THREE.Vector3();
 export function updateLightDir() {
-  _l0.set(player.pos.x, 1.2, player.pos.z).project(camera);
-  _l1.set(player.pos.x, 1.2, player.pos.z).addScaledVector(moonDir, 1.5).project(camera);
+  _l0.set(player.pos.x, player.pos.y + 1.2, player.pos.z).project(camera);
+  _l1.set(player.pos.x, player.pos.y + 1.2, player.pos.z).addScaledVector(moonDir, 1.5).project(camera);
   const dx = (_l1.x - _l0.x) * bufSize.x, dy = (_l1.y - _l0.y) * bufSize.y, len = Math.hypot(dx, dy);
   if (len > 1e-3) cellMat.uniforms.uLight.value.set(dx / len, dy / len);
 }

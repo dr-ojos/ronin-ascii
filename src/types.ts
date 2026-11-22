@@ -25,10 +25,13 @@ export interface Avatar {
   realistic?: boolean;
 }
 
-/** static obstacle: a circle (x, z, r) or an axis-aligned rectangle [x0, x1, z0, z1] */
+/** static obstacle: a circle (x, z, r), an axis-aligned rectangle [x0, x1, z0, z1],
+ *  a capsule around a segment [x0, z0, x1, z1] (walls, rails, the river) or a lake's shore */
 export type Collider =
-  | { x: number; z: number; r: number; rect?: undefined }
-  | { rect: [number, number, number, number] };
+  | { x: number; z: number; r: number; rect?: undefined; seg?: undefined; lake?: undefined }
+  | { rect: [number, number, number, number]; seg?: undefined; lake?: undefined }
+  | { seg: [number, number, number, number]; r: number; rect?: undefined; lake?: undefined }
+  | { lake: { x: number; z: number; R: number; ph: number }; rect?: undefined; seg?: undefined };
 
 /** minimal 2D position (THREE.Vector3 fits: only x / z are used) */
 export interface XZ { x: number; z: number }

@@ -9,7 +9,7 @@ export function reset() {
   for (const e of enemies) scene.remove(e.g);
   enemies.length = 0;
   Object.assign(player, { hp: 100, attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1 });
-  player.pos.set(0, 0, 4); state.wave = 0; state.kills = 0; state.waveTimer = 1.2; state.dead = false;
+  player.pos.set(0, 0, 4); state.yaw = 0; state.wave = 0; state.kills = 0; state.waveTimer = 1.2; state.dead = false;
 }
 
 export function updateWaves(dt: number) {
