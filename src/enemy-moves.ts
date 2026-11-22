@@ -12,9 +12,9 @@ type Move = {
   power: number;
   color: number;
 } & (
-  | { shape: 'arc'; radius: number; angle: number }
+  | { shape: 'arc'; radius: number; angle: number; innerRadius?: number; pull?: number; parry?: boolean; heal?: number }
   | { shape: 'charge'; length: number; width: number }
-  | { shape: 'zones'; radius: number; layout: 'single' | 'line' | 'cross'; effect: 'curse' | 'wind' | 'thunder' }
+  | { shape: 'zones'; radius: number; layout: 'single' | 'line' | 'cross'; effect: 'curse' | 'wind' | 'thunder' | 'fire' }
   | { shape: 'volley'; arrows: number; angle: number }
 );
 
@@ -31,7 +31,14 @@ const MOVES = {
   arrowStorm: { shape: 'volley', range: 15, arrows: 7, angle: 0.59, windup: 0.87, recovery: 1.05, power: 1.1, color: 0xa9f9cb },
   gust:       { shape: 'zones', range: 13, radius: 2.2, layout: 'line', effect: 'wind', windup: 1.05, recovery: 1.15, power: 1.15, color: 0xa9f9cb },
   thunder:    { shape: 'zones', range: 13, radius: 2, layout: 'line', effect: 'thunder', windup: 1.03, recovery: 1.05, power: 0.85, color: 0x9fbbff },
-  storm:      { shape: 'zones', range: 14, radius: 2.25, layout: 'cross', effect: 'thunder', windup: 1.2, recovery: 1.3, power: 1.05, color: 0x9fbbff }
+  storm:      { shape: 'zones', range: 14, radius: 2.25, layout: 'cross', effect: 'thunder', windup: 1.2, recovery: 1.3, power: 1.05, color: 0x9fbbff },
+  hook:       { shape: 'arc', range: 3.6, radius: 4.45, angle: 1.06, windup: 0.78, recovery: 0.9, power: 0.8, pull: 1.55, color: 0xc6e4a7 },
+  staffStrike: { shape: 'arc', range: 2.8, radius: 3.5, angle: 0.9, windup: 0.62, recovery: 0.8, power: 1, color: 0xffaf50 },
+  fire:       { shape: 'zones', range: 12, radius: 2.35, layout: 'single', effect: 'fire', windup: 0.98, recovery: 1.38, power: 0.78, color: 0xff7530 },
+  riposte:    { shape: 'arc', range: 3.0, radius: 3.75, angle: 0.58, windup: 0.88, recovery: 1.02, power: 1.10, parry: true, color: 0xe7c47a },
+  rally:      { shape: 'arc', range: 8.5, radius: 7, angle: Math.PI, windup: 0.85, recovery: 1.45, power: 0, heal: 0.24, color: 0x8bdc7a },
+  shadowCut:  { shape: 'arc', range: 3.35, radius: 4.0, angle: 1.45, windup: 0.57, recovery: 0.82, power: 1, color: 0xcaa2ff },
+  shockwave:  { shape: 'arc', range: 5.9, radius: 7.25, innerRadius: 2.4, angle: Math.PI, windup: 1.03, recovery: 1.45, power: 1.06, color: 0x86d9ff }
 } satisfies Record<string, Move>;
 export type EnemyMove = keyof typeof MOVES;
 export const moveDef = (id: EnemyMove): Move => MOVES[id];
@@ -49,17 +56,18 @@ export interface EnemyAttack {
 }
 
 // Project the filled warning and its brighter outline onto the ground, including slopes and bridges.
-function groundWarning(outlines: XZ[][], color: number) {
+function groundWarning(outlines: XZ[][], color: number, innerRadiusRatio = 0) {
   const positions: number[] = [], colors: number[] = [];
   const fill = new THREE.Color(color), edge = fill.clone().lerp(new THREE.Color(0xfff4da), 0.42);
-  const bands = [0, 0.25, 0.5, 0.75, 0.88, 0.90, 1];
+  const bands = innerRadiusRatio > 0 ? [0, 0.09, 0.11, 0.5, 0.88, 0.90, 1] : [0, 0.25, 0.5, 0.75, 0.88, 0.90, 1];
   for (const outline of outlines) {
     const center = { x: 0, z: 0 };
     for (const p of outline) { center.x += p.x / outline.length; center.z += p.z / outline.length; }
     const vertex = (point: XZ, fraction: number) => {
-      const x = THREE.MathUtils.lerp(center.x, point.x, fraction), z = THREE.MathUtils.lerp(center.z, point.z, fraction);
+      const radial = THREE.MathUtils.lerp(innerRadiusRatio, 1, fraction);
+      const x = THREE.MathUtils.lerp(center.x, point.x, radial), z = THREE.MathUtils.lerp(center.z, point.z, radial);
       positions.push(x, surfaceY(x, z) + 0.09, z);
-      const rim = fraction >= 0.90, tint = rim ? edge : fill;
+      const rim = fraction >= 0.90 || (innerRadiusRatio > 0 && fraction <= 0.09), tint = rim ? edge : fill;
       colors.push(tint.r, tint.g, tint.b, rim ? 0.95 : 0.22);
     };
     for (let i = 0; i < outline.length; i++) {
@@ -130,14 +138,18 @@ export function prepareEnemyAttack(en: Enemy, move: Move, target: THREE.Vector3,
   } else {
     outlines = [arcOutline(origin, yaw, move.shape === 'arc' ? move.radius : 4.5, move.angle)];
   }
-  return { move, origin, target: target.clone(), yaw, windup, zones, length, hit: false, warning: groundWarning(outlines, move.color) };
+  const innerRadiusRatio = move.shape === 'arc' ? (move.innerRadius ?? 0) / move.radius : 0;
+  return { move, origin, target: target.clone(), yaw, windup, zones, length, hit: false, warning: groundWarning(outlines, move.color, innerRadiusRatio) };
+}
+
+export function removeEnemyWarning(warning: EnemyAttack['warning']) {
+  scene.remove(warning);
+  warning.geometry.dispose();
+  warning.material.dispose();
 }
 
 export function clearEnemyAttack(en: Enemy) {
   if (!en.attack) return;
-  const { warning } = en.attack;
-  scene.remove(warning);
-  warning.geometry.dispose();
-  warning.material.dispose();
+  removeEnemyWarning(en.attack.warning);
   en.attack = undefined;
 }

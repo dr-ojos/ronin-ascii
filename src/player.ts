@@ -97,9 +97,13 @@ export function updatePlayer(dt: number) {
         const d = tmp.length(), reach = (spin ? 3.3 : 2.8) + w.reach + 0.45 * en.scale;
         const ang = Math.abs(angDiff(Math.atan2(tmp.x, tmp.z), player.face));
         if (d < reach && (spin || ang < 1.35)) {
+          const incoming = Math.atan2(-tmp.x, -tmp.z);
           const guarding = KINDS[en.kind].look.shield && (en.state === 'idle' || en.state === 'chase')
-            && Math.abs(angDiff(Math.atan2(-tmp.x, -tmp.z), en.g.rotation.y)) < 1.05;
-          const blocked = guarding && !spin;
+            && Math.abs(angDiff(incoming, en.g.rotation.y)) < 1.05;
+          const attack = en.attack;
+          const parrying = en.state === 'windup' && attack?.move.shape === 'arc' && attack.move.parry
+            && Math.abs(angDiff(incoming, attack.yaw)) < attack.move.angle;
+          const blocked = (guarding || parrying) && !spin;
           hits++; hitPan += panOf(en.g.position.x, en.g.position.z);
           en.hp -= (spin ? 2 : blocked ? 0.2 : 1) * dmgMult() * w.dmg;
           en.flash = blocked ? 0.35 : 1;
@@ -108,6 +112,9 @@ export function updatePlayer(dt: number) {
           if (guarding && spin) {
             staggerEnemy(en, 0.9);
             showMsg('¡ GUARDIA ROTA !', 0.9);
+          } else if (parrying && blocked) {
+            if (en.t > 0.24) showMsg('¡ EL DUELISTA CONTRAATACA !', 0.7);
+            en.t = Math.min(en.t, 0.24);
           } else if ((en.state === 'windup' || en.state === 'charge') && !en.big) staggerEnemy(en, 0.5);
           burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), blocked ? 0xffd889 : 0xffffff, 18, 5, 0.12);
           sparkBurst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(player.pos.y + 1.25), 0.35), spin ? 14 : 9, spin ? 5.5 : 4.5);

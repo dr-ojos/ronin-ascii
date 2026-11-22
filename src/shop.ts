@@ -18,6 +18,7 @@ import { dressUp } from './outfit';
 import { WEAPONS, weapon, owns, buy, equip, weaponStats } from './weapons';
 import { ARMORS, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
+import { threatLabel } from './equipment-threat';
 import { angDiff } from './utils';
 
 export const SMITH_NAME = 'Masa';
@@ -215,7 +216,7 @@ function shopRows(): MenuRow[] {
 export function openShop(at = 1) {
   openMenu({
     id: 'shop', title: `— TIENDA DE ${SMITH_NAME.toUpperCase()} —`,
-    sub: () => `bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weapon().name}</span> · <span class="b">${armor().name}</span>`,
+    sub: () => `bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weapon().name}</span> · <span class="b">${armor().name}</span> · <span class="y">${threatLabel()}</span>`,
     rows: shopRows,
     foot: '↑ ↓ elegir · E / ENTER comprar o equipar · ESC salir'
   }, at);

@@ -431,14 +431,40 @@ export interface OniLook {
   tint: number;
   mask: number;
   eye?: number;
-  weapon: 'club' | 'spear' | 'bow' | 'bigclub' | 'sword' | 'staff';
+  weapon: 'club' | 'spear' | 'bow' | 'bigclub' | 'sword' | 'staff' | 'scythe' | 'drum';
   shield?: boolean;
+  plated?: boolean;
   crest?: 'crescent' | 'feathers' | 'halo';
 }
 const maskMats = new Map<number, THREE.MeshPhysicalMaterial>(), eyeMats = new Map<number, THREE.MeshBasicMaterial>();
 const maskMat = (c: number) => { let m = maskMats.get(c); if (!m) maskMats.set(c, m = new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.4, clearcoat: 0.8, clearcoatRoughness: 0.2 })); return m; };
 const eyeMat = (c: number) => { let m = eyeMats.get(c); if (!m) eyeMats.set(c, m = new THREE.MeshBasicMaterial({ color: c })); return m; };
 const bowMats = { wood: new THREE.MeshStandardMaterial({ color: 0x3a2214, roughness: 0.6 }), string: new THREE.MeshBasicMaterial({ color: 0xd8d0b8 }), steel: new THREE.MeshStandardMaterial({ color: 0xb8bcc8, metalness: 0.9, roughness: 0.25 }) };
+
+export function oniScythe() {
+  const g = new THREE.Group(), profile = new THREE.Shape();
+  mesh(new THREE.CylinderGeometry(0.024, 0.028, 1.78, 8), bowMats.wood, g, 0, 0.42, 0);
+  mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.18, 8), MAT.gold, g, 0, 1.27, 0);
+  profile.moveTo(-0.035, 0);
+  profile.quadraticCurveTo(0.42, 0.13, 0.70, -0.32);
+  profile.quadraticCurveTo(0.39, -0.12, -0.035, -0.12);
+  profile.closePath();
+  mesh(new THREE.ExtrudeGeometry(profile, { depth: 0.022, bevelEnabled: false, curveSegments: 12 }), MAT.steel, g, 0, 1.38, 0);
+  return g;
+}
+
+export function oniDrum(lacquer: THREE.Material) {
+  const g = new THREE.Group();
+  mesh(new THREE.CylinderGeometry(0.25, 0.27, 0.33, 16), lacquer, g).rotation.x = Math.PI / 2;
+  mesh(new THREE.CircleGeometry(0.255, 16), oniMats.fang, g, 0, 0, 0.172);
+  mesh(new THREE.TorusGeometry(0.259, 0.021, 6, 16), MAT.gold, g, 0, 0, 0.17);
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * TAU;
+    mesh(new THREE.SphereGeometry(0.025, 6, 5), MAT.iron, g, Math.cos(a) * 0.233, Math.sin(a) * 0.233, 0.175);
+  }
+  return g;
+}
+
 export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
   const big = look.big, mMask = maskMat(look.mask), mEye = eyeMat(look.eye ?? 0xffd040);
   const rig = prepareRig(gltf, look.tint);
@@ -488,7 +514,11 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
 
   // simple iron plates over the shoulders and a rope belt with a tattered apron
   const ch = new THREE.Group();
-  for (const s of [-1, 1]) { const pl = curvedPanel(0.2, 0.16, 2.2, MAT.iron, 6, 2); pl.rotation.set(-Math.PI / 2 + 0.3, 0, 0); pl.position.set(sw * 0.75 * s, 0.02, 0); ch.add(pl); }
+  for (const s of [-1, 1]) {
+    const pl = curvedPanel(look.plated ? 0.31 : 0.2, look.plated ? 0.25 : 0.16, 2.2, look.plated ? mMask : MAT.iron, 6, 2);
+    pl.rotation.set(-Math.PI / 2 + 0.3, 0, 0); pl.position.set(sw * 0.75 * s, 0.02, 0); ch.add(pl);
+  }
+  if (look.plated) mesh(new THREE.BoxGeometry(0.45, 0.29, 0.14), MAT.iron, ch, 0, -0.17, 0.12);
   ch.position.set(neck.x, neck.y - 0.04, neck.z); attach('Spine2', ch);
   const belt = new THREE.Group();
   const rope = mesh(new THREE.TorusGeometry(0.2, 0.02, 6, 28), oniMats.rope, belt); rope.rotation.x = Math.PI / 2; rope.scale.y = 0.8;
@@ -537,6 +567,20 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
     mesh(new THREE.OctahedronGeometry(0.075), mEye, staff, 0, 0, 1.08);
     staff.position.copy(rHand);
     attach('RightHand', staff);
+  } else if (look.weapon === 'scythe') {
+    const scythe = oniScythe();
+    scythe.position.copy(rHand);
+    scythe.rotation.x = Math.PI / 2;
+    attach('RightHand', scythe);
+  } else if (look.weapon === 'drum') {
+    const drum = oniDrum(mMask);
+    drum.position.set(hips.x, hips.y + 0.12, hips.z + 0.34);
+    attach('Spine', drum);
+    const stick = new THREE.Group();
+    mesh(new THREE.CylinderGeometry(0.027, 0.019, 0.63, 9), bowMats.wood, stick, 0, 0, 0.20).rotation.x = Math.PI / 2;
+    mesh(new THREE.SphereGeometry(0.065, 8, 6), MAT.gold, stick, 0, 0, 0.52);
+    stick.position.copy(rHand);
+    attach('RightHand', stick);
   } else {
     // yumi: a tall asymmetric bow in the left hand, and a quiver on the back
     const lHand = P('LeftHand'), yumi = new THREE.Group();

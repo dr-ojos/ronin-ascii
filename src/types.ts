@@ -2,6 +2,7 @@
 import type * as THREE from 'three';
 import type { EnemyAttack } from './enemy-moves';
 import type { LightAnchor } from './lights';
+import type { EquipmentThreat } from './equipment-threat';
 
 export type Vec3 = [number, number, number];
 
@@ -40,6 +41,7 @@ export interface XZ { x: number; z: number }
 
 /** the kinds of oni: each looks and fights differently (enemies.ts KINDS) */
 export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 'acechador' | 'hechicero'
+  | 'guadanero' | 'piromante' | 'duelista' | 'tambor' | 'sombra' | 'coloso'
   | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'kensei' | 'tengu' | 'raijin';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
 
@@ -69,7 +71,7 @@ interface EnemyBase {
   enraged: boolean;
   attack?: EnemyAttack;
   strikeT: number;
-  /** cooldown of a special move (the tengu's blink) */
+  /** cooldown of a blink or flank */
   cd: number;
   /** the coloured glow that follows a boss or guardian */
   aura?: LightAnchor;
@@ -94,11 +96,13 @@ export interface Camp {
   boss?: EnemyKind;
   /** the sub-boss guarding its chest, if any */
   elite?: EnemyKind;
-  /** the oni it is made of, and those still alive (also while despawned) */
+  /** base composition and the current occupation's survivors, including reinforcements */
   kinds: EnemyKind[];
   roster: EnemyKind[];
   /** 0 = near the shrine .. 1 = the edge of the world (tougher oni) */
   tier: number;
+  /** equipment bonuses locked when the group appears */
+  threat?: EquipmentThreat;
   active: boolean;
   /** state.time when cleared (-1 = not cleared) */
   clearedAt: number;

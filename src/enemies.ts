@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { rigGltf } from './assets';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
-import { createOniWarrior, type OniLook } from './rig';
+import { createOniWarrior, oniDrum, oniScythe, type OniLook } from './rig';
 import { scene } from './renderer';
 import { ACTOR_LAYER } from './ascii';
 import { M, CLS, tagTree } from './materials';
@@ -44,6 +44,22 @@ export const KINDS: Record<EnemyKind, KindDef> = {
                look: { tint: 0x261b24, mask: 0xcb392f, eye: 0xff7150, weapon: 'sword' }, robe: 0x55243c, maskC: 0xcb392f, moves: ['pounce'] },
   hechicero: { name: 'hechicero oni', scale: 0.98, hp: 3, speed: [2.9, 3.3], dmg: 15, reach: 11, windup: 0.95, heavy: false, points: 220, glyph: 'h', ranged: true,
                look: { tint: 0x372041, mask: 0xb267da, eye: 0xe3a6ff, weapon: 'staff' }, robe: 0x552f69, maskC: 0xb267da, moves: ['curse'] },
+  guadanero: { name: 'guadañero', scale: 1.12, hp: 4, speed: [2.9, 3.3], dmg: 14, reach: 3.3, windup: 0.75, heavy: false, points: 220, glyph: 'g',
+               look: { tint: 0x28473f, mask: 0x74ad8c, eye: 0xcdffd3, weapon: 'scythe' }, robe: 0x2c4b3e, maskC: 0x74ad8c,
+               moves: ['hook', 'staffStrike'] },
+  piromante: { name: 'piromante de las brasas', scale: 1.01, hp: 4, speed: [2.8, 3.2], dmg: 15, reach: 12, windup: 1, heavy: false, points: 250, glyph: 'f', ranged: true,
+               look: { tint: 0x593221, mask: 0xed672d, eye: 0xffc160, weapon: 'staff', crest: 'halo' }, robe: 0x664129, maskC: 0xea6c2d, moves: ['fire'] },
+  duelista: { name: 'duelista de marfil', scale: 1.12, hp: 6, speed: [3.8, 4.2], dmg: 16, reach: 3.2, windup: 0.8, heavy: false, points: 290, glyph: 'd',
+              look: { tint: 0x344257, mask: 0xe5d9bf, eye: 0xffd194, weapon: 'sword', crest: 'crescent' }, robe: 0x384963, maskC: 0xe5d9bf,
+              moves: ['riposte', 'blade'] },
+  tambor: { name: 'tambor de guerra', scale: 1.14, hp: 6, speed: [2.7, 3.1], dmg: 15, reach: 3, windup: 0.8, heavy: false, points: 325, glyph: 'm',
+            look: { tint: 0x423a18, mask: 0xd5a84f, eye: 0xccffa0, weapon: 'drum' }, robe: 0x585526, maskC: 0xd5a84f, moves: ['rally', 'staffStrike'] },
+  sombra: { name: 'sombra del bambú', scale: 0.96, hp: 6, speed: [4.4, 4.9], dmg: 18, reach: 3, windup: 0.57, heavy: false, points: 340, glyph: 's',
+            look: { tint: 0x251e3d, mask: 0x9577d1, eye: 0xe7bcff, weapon: 'sword', crest: 'feathers' }, robe: 0x352245, maskC: 0x9577d1,
+            moves: ['shadowCut', 'pounce'] },
+  coloso: { name: 'coloso de obsidiana', scale: 1.48, hp: 13, speed: [2.3, 2.6], dmg: 26, reach: 3.5, windup: 1, heavy: true, points: 490, glyph: 'Q',
+            look: { tint: 0x22262d, mask: 0x48677d, eye: 0x8be8ff, weapon: 'bigclub', plated: true }, robe: 0x292e3b, maskC: 0x48677d,
+            moves: ['shockwave', 'crush'] },
   // major bosses, with separate attack cycles for each phase
   jefe:     { name: 'oni sepulcral', scale: 1.58, hp: 21, speed: [2.4, 2.6], dmg: 25, reach: 3.3, windup: 0.67, heavy: true, points: 720, glyph: 'O',
               look: { tint: 0x3d1e12, mask: 0xad6037, eye: 0xffb353, weapon: 'bigclub' }, robe: 0x8a1a14, maskC: 0xc06038,
@@ -83,11 +99,13 @@ const oniGeo = {
 const hornMat = M(0xdccca2), bladeMat = M(0xdbe4ed, { metalness: 0.7 }), eyeMat = new THREE.MeshBasicMaterial({ color: 0xff5a3a });
 export const enemies: Enemy[] = [];
 
-/** stats for one oni of a camp: tougher further from the shrine */
+/** Regional danger and acquired gear scale independently. */
 function stats(camp: Camp, kind: EnemyKind, x: number, z: number) {
-  const k = KINDS[kind], t = camp.tier, hp = Math.round(k.hp * (1 + t * 0.8));
+  const k = KINDS[kind], t = camp.tier;
+  const hp = Math.round(k.hp * (1 + t * 0.8) * (1 + (camp.threat?.offense ?? 0) * 0.16));
+  const dmg = Math.round(k.dmg * (1 + t * 0.3) * (1 + (camp.threat?.defense ?? 0) * 0.11));
   return {
-    kind, hp, maxHp: hp, dmg: Math.round(k.dmg * (1 + t * 0.3)), reach: k.reach, windup: k.windup, swings: 0, strikeT: 0, cd: 0,
+    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup, swings: 0, strikeT: 0, cd: 0,
     big: k.heavy || !!k.elite || !!k.boss, enraged: false, speed: rnd(k.speed[0], k.speed[1]), camp, wander: { x, z }
   };
 }
@@ -120,6 +138,10 @@ export function spawnOni(camp: Camp, kind: EnemyKind, x: number, z: number) {
     const blade = new THREE.Mesh(oniGeo.blade, bladeMat); blade.position.y = 0.6; sword.add(blade);
     sword.add(new THREE.Mesh(oniGeo.hilt, hornMat));
     sword.position.set(-0.54, 1, 0.32); sword.rotation.set(0.65, 0, 0.35); g.add(sword);
+  } else if (def.look.weapon === 'scythe') {
+    const scythe = oniScythe(); scythe.position.set(-0.57, 1.05, 0.21); scythe.rotation.z = 0.22; g.add(scythe);
+  } else if (def.look.weapon === 'drum') {
+    const drum = oniDrum(maskMat); drum.position.set(0, 1.05, 0.4); g.add(drum);
   }
   const ring = new THREE.Mesh(oniGeo.ring, new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring);

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { enemies, KINDS, despawn } from './enemies';
-import { chargeBlocked, clearEnemyAttack, moveDef, prepareEnemyAttack, type EnemyAttack } from './enemy-moves';
+import { chargeBlocked, clearEnemyAttack, moveDef, prepareEnemyAttack, removeEnemyWarning, type EnemyAttack } from './enemy-moves';
 import { hurtPlayer } from './damage';
 import { burst } from './fx';
 import { sfx, panOf } from './sfx';
@@ -81,10 +81,12 @@ function updateArrows(dt: number) {
     if (gone) { scene.remove(a.m); arrows.splice(i, 1); }
   }
 }
-export function clearArrows() {
+export function clearEnemyHazards() {
   for (const a of arrows) scene.remove(a.m); arrows.length = 0;
   for (const k of marks) { scene.remove(k.m); k.m.material.dispose(); }
   marks.length = 0;
+  for (const patch of fires) removeEnemyWarning(patch.warning);
+  fires.length = 0;
 }
 
 // ------------------------------------------------------------ the thunder oni's lightning
@@ -120,19 +122,24 @@ function updateMarks(dt: number) {
   }
 }
 
-/** the tengu vanishes in a gust and reappears further away (still inside its territory) */
-function blink(en: Enemy) {
+/** The tengu withdraws. The shadow instead approaches from one side. */
+function blink(en: Enemy, flank = false) {
   const g = en.g, from = g.position.clone();
+  const bearing = Math.atan2(g.position.x - player.pos.x, g.position.z - player.pos.z);
+  const color = flank ? 0xbc93ff : 0xe8e8f0;
   for (let k = 0; k < 10; k++) {
-    const a = Math.atan2(g.position.x - player.pos.x, g.position.z - player.pos.z) + rnd(-1.2, 1.2), r = rnd(8, 11);
+    const offset = flank ? (k % 2 ? -1 : 1) * rnd(1.45, 2.15) : rnd(-1.2, 1.2);
+    const a = bearing + offset, r = flank ? rnd(3.1, 3.7) : rnd(8, 11);
     const x = player.pos.x + Math.sin(a) * r, z = player.pos.z + Math.cos(a) * r;
     if (Math.hypot(x - en.camp.x, z - en.camp.z) > en.camp.leash - 3) continue;
     const p = new THREE.Vector3(x, 0, z); collide(p, 0.6);
+    if (flank && Math.hypot(p.x - x, p.z - z) > 0.05) continue;
     g.position.set(p.x, surfaceY(p.x, p.z), p.z);
-    burst(from.setY(from.y + 1.2), 0xe8e8f0, 50, 6, 0.16);
-    burst(new THREE.Vector3(p.x, g.position.y + 1.2, p.z), 0xe8e8f0, 40, 5, 0.14);
+    burst(from.setY(from.y + 1.2), color, 50, 6, 0.16);
+    burst(new THREE.Vector3(p.x, g.position.y + 1.2, p.z), color, 40, 5, 0.14);
     sfx.warn(panOf(p.x, p.z));
-    en.cd = rnd(3.5, 5); en.state = 'recover'; en.t = 0.35;
+    en.cd = flank ? rnd(5, 7) : rnd(3.5, 5);
+    en.state = 'recover'; en.t = flank ? 0.48 : 0.35;
     return;
   }
   en.cd = 1;   // nowhere to go: try again in a moment
@@ -148,6 +155,53 @@ function slam(en: Enemy, r: number) {
 
 const CHARGE_T = 0.36;
 const moveDamage = (en: Enemy, attack: EnemyAttack) => Math.round(en.dmg * attack.move.power * (en.enraged ? 1.18 : 1));
+
+interface FirePatch {
+  owner: Enemy;
+  centers: THREE.Vector3[];
+  warning: EnemyAttack['warning'];
+  radius: number;
+  damage: number;
+  life: number;
+  pulse: number;
+}
+const fires: FirePatch[] = [];
+
+function updateFire(dt: number) {
+  for (let i = fires.length - 1; i >= 0; i--) {
+    const p = fires[i];
+    p.life -= dt;
+    if (p.life <= 0 || p.owner.hp <= 0 || !p.owner.g.parent || p.owner.state === 'return' || state.dead) {
+      removeEnemyWarning(p.warning);
+      fires.splice(i, 1);
+      continue;
+    }
+    p.warning.material.opacity = Math.min(1, p.life * 4) * (0.79 + 0.11 * Math.sin(state.time * 12));
+    p.pulse -= dt;
+    if (p.pulse > 0) continue;
+    p.pulse = 0.55;
+    for (const center of p.centers) burst(center, 0xff793c, 20, 4, 0.14);
+    if (p.centers.some(center => Math.hypot(player.pos.x - center.x, player.pos.z - center.z) < p.radius)) hurtPlayer(p.damage);
+  }
+}
+
+function rallyTarget(healer: Enemy, ally: Enemy, origin: THREE.Vector3, radius: number) {
+  const def = KINDS[ally.kind];
+  return ally !== healer && ally.camp === healer.camp && ally.hp > 0 && ally.hp < ally.maxHp
+    && ally.state !== 'return' && !def.boss && !def.elite
+    && Math.hypot(ally.g.position.x - origin.x, ally.g.position.z - origin.z) < radius;
+}
+
+function pullPlayer(dx: number, dz: number, distance: number, strength: number) {
+  const shift = Math.min(strength, distance - 0.7);
+  if (shift <= 0 || state.dead) return;
+  const steps = Math.ceil(shift / 0.25);
+  for (let i = 0; i < steps; i++) {
+    player.pos.x -= dx / distance * shift / steps;
+    player.pos.z -= dz / distance * shift / steps;
+    collide(player.pos, 0.45);
+  }
+}
 
 function finishMove(en: Enemy, attack: EnemyAttack) {
   clearEnemyAttack(en);
@@ -169,22 +223,35 @@ function executeMove(en: Enemy, attack: EnemyAttack) {
     for (let i = 0; i < move.arrows; i++) {
       shoot(en, move.angle * (2 * i / (move.arrows - 1) - 1), target, dmg);
     }
+  } else if (move.shape === 'arc' && move.heal) {
+    for (const ally of enemies) {
+      if (!rallyTarget(en, ally, origin, move.radius)) continue;
+      ally.hp = Math.min(ally.maxHp, ally.hp + Math.min(3, ally.maxHp * move.heal));
+      burst(ally.g.position.clone().add(new THREE.Vector3(0, 0.7, 0)), move.color, 26, 3, 0.12);
+    }
+    burst(origin.clone().add(new THREE.Vector3(0, 0.75, 0)), move.color, 45, 6, 0.16);
+    sfx.taiko(0.8);
   } else if (move.shape === 'arc') {
     const dx = player.pos.x - origin.x, dz = player.pos.z - origin.z;
-    if (Math.hypot(dx, dz) < move.radius && Math.abs(angDiff(Math.atan2(dx, dz), yaw)) <= move.angle) hurtPlayer(dmg);
+    const distance = Math.hypot(dx, dz);
+    if (distance >= (move.innerRadius ?? 0) && distance < move.radius && Math.abs(angDiff(Math.atan2(dx, dz), yaw)) <= move.angle) {
+      if (hurtPlayer(dmg) && move.pull) pullPlayer(dx, dz, distance, move.pull);
+    }
     const edge = origin.clone().add(new THREE.Vector3(Math.sin(yaw), 0.24, Math.cos(yaw)).multiplyScalar(move.angle < Math.PI ? move.radius * 0.55 : 1));
     burst(edge, move.color, 80, 8, 0.16);
     state.shake = Math.max(state.shake, move.angle === Math.PI ? 0.6 : 0.3);
     sfx.taiko(0.7);
   } else {
-    let hit = false;
-    for (const zone of zones) {
-      const p = new THREE.Vector3(zone.x, surfaceY(zone.x, zone.z) + 0.12, zone.z);
+    const centers = zones.map(({ x, z }) => new THREE.Vector3(x, surfaceY(x, z) + 0.12, z));
+    for (const p of centers) {
       if (move.effect === 'thunder') bolt(p);
       else burst(p, move.color, 54, 8, 0.18);
-      if (Math.hypot(player.pos.x - zone.x, player.pos.z - zone.z) < move.radius) hit = true;
     }
-    if (hit) hurtPlayer(dmg);
+    if (centers.some(p => Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < move.radius)) hurtPlayer(dmg);
+    if (move.effect === 'fire') {
+      fires.push({ owner: en, centers, warning: attack.warning, radius: move.radius, damage: Math.max(1, Math.round(dmg * 0.48)), life: 2.55, pulse: 0.6 });
+      en.attack = undefined;   // the fire keeps its own ground marker until it expires
+    }
     if (move.effect === 'thunder') { skyFlash(0.35); sfx.thunder(panOf(target.x, target.z), en.enraged); }
     else sfx.taiko(0.45);
   }
@@ -215,6 +282,7 @@ const tmp = new THREE.Vector3(), step = new THREE.Vector3();
 export function updateEnemies(dt: number) {
   updateArrows(dt);
   updateMarks(dt);
+  updateFire(dt);
   for (let i = enemies.length - 1; i >= 0; i--) {
     const en = enemies[i], g = en.g, camp = en.camp, def = KINDS[en.kind];
     if (en.hp <= 0) { kill(en, i, surfaceY(g.position.x, g.position.z) - wadeDepth(g.position.x, g.position.z) * WADE_SINK); continue; }
@@ -262,8 +330,11 @@ export function updateEnemies(dt: number) {
       en.state = 'return';
     } else if (en.state === 'chase') {
       const cycle = en.enraged ? def.boss?.enraged : def.moves;
-      if (cycle) {
-        const move = moveDef(cycle[en.swings % cycle.length]);
+      if (en.kind === 'sombra' && d > 5 && d < 12 && en.cd <= 0) blink(en, true);
+      else if (cycle) {
+        const planned = moveDef(cycle[en.swings % cycle.length]);
+        const move = planned.shape === 'arc' && planned.heal
+          && !enemies.some(ally => rallyTarget(en, ally, g.position, planned.radius)) ? moveDef('staffStrike') : planned;
         if (d <= move.range && en.t <= 0) {
           en.attack = prepareEnemyAttack(en, move, player.pos, Math.atan2(tmp.x, tmp.z));
           en.state = 'windup'; en.t = en.attack.windup; en.knock.set(0, 0, 0);
@@ -357,7 +428,7 @@ function kill(en: Enemy, i: number, gy: number) {
   burst(c, 0xffe0c0, 30, 4, 0.1);
   despawn(en); enemies.splice(i, 1); state.kills++;
   sfx.death({ big: en.big, pan: panOf(g.position.x, g.position.z) });
-  addPoints(Math.round(def.points * (1 + camp.tier * 0.5) / 10) * 10, def.name, true);
+  addPoints(Math.round(def.points * (1 + camp.tier * 0.5) * (1 + (camp.threat?.rank ?? 0) * 0.08) / 10) * 10, def.name, true);
   chargeKill();
   if (lifesteal()) player.hp = Math.min(player.maxHp, player.hp + lifesteal());
   if (en.big) state.shake = 0.6;

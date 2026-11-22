@@ -7,13 +7,14 @@
 // A group's oni only exist while you are near it; walk away and they vanish (keeping who is left),
 // clear a camp and it stays empty for a while. Also: starting a new run, and slow healing out of combat.
 import { enemies, spawnOni, despawn, ELITES, isBoss, isElite } from './enemies';
-import { clearArrows } from './enemy-ai';
+import { clearEnemyHazards } from './enemy-ai';
 import { collide, isFree } from './physics';
 import { WORLD_R, PLACES, ROADS, TORII_PATH, RIVER, place, inLake, lineDist, type P2 } from './map';
 import { CAMP_SPOTS, HIDDEN_CHESTS, POIS } from './landmarks';
 import { chests, makeChest, resetChests, updateLoot } from './loot';
 import { resetScore, updateScore } from './score';
 import { resetUpgrades } from './upgrades';
+import { equipmentThreat } from './equipment-threat';
 import { showMsg } from './hud';
 import { sfx } from './sfx';
 import { player, state } from './state';
@@ -32,7 +33,8 @@ function roster(size: number, tier: number, boss: boolean): EnemyKind[] {
   const pool: [EnemyKind, number][] = [
     ['oni', 3], ['ashigaru', 1.5 + tier * 2], ['arquero', tier > 0.25 ? 1 + tier * 2 : 0],
     ['bruto', tier > 0.45 ? tier * 2.2 : 0], ['escudero', tier > 0.2 ? 0.9 + tier : 0],
-    ['acechador', tier > 0.27 ? 1.7 * tier + 0.4 : 0], ['hechicero', tier > 0.42 ? 1.5 * tier + 0.3 : 0]
+    ['acechador', tier > 0.27 ? 1.7 * tier + 0.4 : 0], ['hechicero', tier > 0.42 ? 1.5 * tier + 0.3 : 0],
+    ['guadanero', tier > 0.19 ? 1 + tier : 0], ['piromante', tier > 0.36 ? 0.65 + tier : 0]
   ];
   const tot = pool.reduce((s, [, w]) => s + w, 0), out: EnemyKind[] = boss ? ['jefe'] : [];
   while (out.length < size) {
@@ -40,6 +42,36 @@ function roster(size: number, tier: number, boss: boolean): EnemyKind[] {
     for (const [k, kw] of pool) if ((w -= kw) < 0) { out.push(k); break; }
   }
   return out;
+}
+
+const REINFORCEMENTS: { kind: EnemyKind; rank: number; tier: number }[] = [
+  { kind: 'duelista', rank: 1, tier: 0 },
+  { kind: 'tambor', rank: 2, tier: 0.24 },
+  { kind: 'sombra', rank: 2, tier: 0.2 },
+  { kind: 'coloso', rank: 3, tier: 0.46 }
+];
+
+function prepareRoster(c: Camp) {
+  const threat = equipmentThreat(), previous = c.threat;
+  // A squad that has taken casualties keeps its survivors and stats until it is cleared.
+  if (previous && c.roster.length !== c.size) return;
+  c.threat = threat;
+  if (previous?.rank === threat.rank || threat.rank === 0) return;
+
+  c.roster = c.kinds.slice();
+  const slots = c.roster.flatMap((kind, i) => kind === c.boss || kind === c.elite ? [] : [i]);
+  const pool = REINFORCEMENTS.filter(foe => foe.rank <= threat.rank && foe.tier <= c.tier && (foe.kind !== 'tambor' || c.size > 1));
+  const count = threat.rank >= 2 && slots.length >= 3 ? 2 : 1;
+  for (let n = 0; n < count && slots.length && pool.length; n++) {
+    const chance = n === 0 ? 0.32 + threat.rank * 0.19 : 0.28 + (threat.rank - 2) * 0.22;
+    if (Math.random() >= chance) break;
+    const topRank = pool[pool.length - 1].rank;
+    const choices = Math.random() < 0.55 ? pool.filter(foe => foe.rank === topRank) : pool;
+    const foe = choices[Math.floor(Math.random() * choices.length)];
+    const [slot] = slots.splice(Math.floor(Math.random() * slots.length), 1);
+    c.roster[slot] = foe.kind;
+    pool.splice(pool.indexOf(foe), 1);
+  }
 }
 function makeCamp(x: number, z: number, kinds: EnemyKind[], r: number, extra: Partial<Camp> = {}): Camp {
   const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
@@ -77,9 +109,9 @@ function buildCamps() {
     ['cementerio', ['jefe', 'hechicero', 'oni', 'oni', 'acechador']],
     ['pagoda', ['tenguMayor', 'arquero', 'acechador', 'ashigaru'], [0, 13]],
     ['inari', ['raijinMayor', 'bruto', 'ashigaru'], [-2, -10]],
-    ['aldea', ['oni', 'oni', 'ashigaru', 'escudero']],
+    ['aldea', ['oni', 'guadanero', 'ashigaru', 'escudero']],
     ['campamento', ['ashigaru', 'acechador', 'escudero', 'arquero', 'bruto']],
-    ['torii', ['acechador', 'hechicero', 'ashigaru']]
+    ['torii', ['acechador', 'piromante', 'ashigaru']]
   ];
   for (const [id, kinds, [dx, dz] = [0, 0]] of guarded) {
     const p = place(id), r = Math.min(24, p.r * 0.5), c = makeCamp(p.x + dx, p.z + dz, kinds, r, { name: p.name });
@@ -119,6 +151,7 @@ function buildCamps() {
 }
 
 function activate(c: Camp) {
+  prepareRoster(c);
   c.active = true;
   for (const kind of c.roster) {
     // a free spot around the camp's centre (a guardian: right beside its chest)
@@ -145,10 +178,10 @@ export const placeCount = () => PLACES.length + POIS.length;
 
 export function reset() {
   for (const e of enemies) despawn(e);
-  enemies.length = 0; clearArrows();
+  enemies.length = 0; clearEnemyHazards();
   if (!camps.length) buildCamps();
   for (let i = camps.length - 1; i >= 0; i--) if (camps[i].temp) camps.splice(i, 1);
-  for (const c of camps) { c.active = false; c.roster = c.kinds.slice(); c.clearedAt = -1; }
+  for (const c of camps) { c.active = false; c.roster = c.kinds.slice(); c.threat = undefined; c.clearedAt = -1; }
   resetChests(); resetUpgrades();
   Object.assign(player, { hp: 100, maxHp: 100, attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1 });
   player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0; state.special = 0;
@@ -198,7 +231,9 @@ export function updateEncounters(dt: number) {
       if (!c.roster.length) {
         if (c.active) c.active = false;
         if (c.temp) { camps.splice(i, 1); continue; }
-        if (c.clearedAt >= 0 && state.time - c.clearedAt > RESPAWN && d > DESPAWN_R) { c.roster = c.kinds.slice(); c.clearedAt = -1; }
+        if (c.clearedAt >= 0 && state.time - c.clearedAt > RESPAWN && d > DESPAWN_R) {
+          c.roster = c.kinds.slice(); c.threat = undefined; c.clearedAt = -1;
+        }
       } else if (!c.active && d < SPAWN_R && Math.hypot(c.x, c.z) > SAFE_R) activate(c);
       else if (c.active && d > DESPAWN_R && !busy) deactivate(c);
     }

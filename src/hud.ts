@@ -5,6 +5,7 @@ import { upgradeList } from './upgrades';
 import { look } from './look';
 import { weapon } from './weapons';
 import { armor } from './armor';
+import { threatLabel } from './equipment-threat';
 import { enemies, KINDS } from './enemies';
 import { sfx } from './sfx';
 
@@ -54,7 +55,7 @@ export function updateHud(dt: number) {
     `${rayo}\n` +
     `PUNTOS <span class="y">${state.score}</span>${streak}   <span class="d">récord ${state.best}</span>\n` +
     `MON <span class="y">${state.mon}</span>   <span class="b">${weapon().name}</span>${state.armor !== 'kimono' ? ` · <span class="b">${armor().name}</span>` : ''}\n` +
-    `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}\n` +
+    `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}   <span class="y">${threatLabel()}</span>\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}\n` +
     (ups ? `<span class="y">${ups}</span>\n` : '') +
     foeBar +
