@@ -1,6 +1,8 @@
 # Ronin ASCII
 
 Un samurái sin señor, un mundo abierto bajo la luna y guaridas de onis que encuentras mientras exploras, todo dibujado con caracteres ASCII.
+**Jugar:** https://dr-ojos.github.io/ronin-ascii/
+
 Hecho con [three.js](https://threejs.org), TypeScript y [Vite](https://vite.dev).
 
 ## Comandos
