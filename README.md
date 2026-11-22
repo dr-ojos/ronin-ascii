@@ -22,7 +22,7 @@ npm run preview    # servir dist/ para probarla
 - `src/`: un módulo por responsabilidad (`ascii.ts` efecto ASCII, `world.ts` escenario,
   `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `encounters.ts` guaridas, patrullas y emboscadas, `loot.ts` cofres y botín, `upgrades.ts` mejoras, `special.ts` golpe de rayos, `score.ts` puntos y mon, `hud.ts` interfaz...).
 - Tienda y aspecto: `shop.ts` la tienda de Masa dentro del santuario del inicio (se entra por la puerta; el tejado se oculta),
-  `weapons.ts` armas, `armor.ts` armaduras, `menu.ts` menús, `custom.ts` + `look.ts` personalizar al ronin (se guarda en el navegador).
+  `weapons.ts` armas (cada una con su color, halo, estela y chispas en `katana-fx.ts`), `armor.ts` armaduras (`outfit.ts` las viste: peto, hombreras, casco y auras), `menu.ts` menús, `custom.ts` + `look.ts` personalizar al ronin (se guarda en el navegador).
   `state.ts` guarda el estado compartido y `types.ts` los tipos comunes.
 - `src/samurai.ts` y `src/rig.ts`: personajes (procedural y con esqueleto de mocap); `nature.ts`: paisaje; `audio.ts`: sonido.
 - Mundo abierto (~1,4 km de lado, cerrado por montañas):

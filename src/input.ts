@@ -10,6 +10,7 @@ import { tryTalk } from './shop';
 import { menuKey } from './menu';
 import { cycleWeapon, resetWeapons } from './weapons';
 import { resetArmor } from './armor';
+import { dressUp } from './outfit';
 import { sfx } from './sfx';
 import { toggleRain } from './world';
 import { showMsg, overlay } from './hud';
@@ -49,7 +50,7 @@ addEventListener('wheel', e => {
 }, { passive: true });
 overlay.addEventListener('click', () => {
   sfx.init(); overlay.style.display = 'none';
-  if (state.dead || !state.playing) { reset(); resetWeapons(); resetArmor(); }
+  if (state.dead || !state.playing) { reset(); resetWeapons(); resetArmor(); dressUp(); }
   state.playing = true;
 });
 

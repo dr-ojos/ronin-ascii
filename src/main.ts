@@ -4,6 +4,7 @@ import './assets';   // first: shows "cargando..." while the character model loa
 import { renderer, scene, camera } from './renderer';
 import { cellMat, renderAscii, resizeAscii } from './ascii';
 import { animSamurai } from './avatar';
+import { updateOutfit } from './outfit';
 import { updateSparks } from './katana-fx';
 import { updateRain, updateWorld, updateSky } from './world';
 import { updateMinimap } from './minimap';
@@ -20,6 +21,7 @@ function frame() {
   if (state.hitStop > 0) { state.hitStop -= dt; dt *= 0.1; }
   if (state.photo) { state.time += dt; state.yaw += dt * 0.35; } else update(dt);
   animSamurai(dt);
+  updateOutfit();
   updateSparks(dt, !state.dead);
   updateWorld();
   updateRain(dt);

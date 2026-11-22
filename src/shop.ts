@@ -14,6 +14,7 @@ import { sfx, panOf } from './sfx';
 import { showMsg } from './hud';
 import { openMenu, closeMenu, menuStatus, type MenuRow } from './menu';
 import { openCustom } from './custom';
+import { dressUp } from './outfit';
 import { WEAPONS, weapon, owns, buy, equip, weaponStats } from './weapons';
 import { ARMORS, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
@@ -199,8 +200,9 @@ function shopRows(): MenuRow[] {
       note: `${a.desc} · ${armorStats(a)}`,
       act() {
         if (on) return menuStatus('ya la llevas puesta');
-        if (mine) { wearArmor(a.id); sfx.dash(); return menuStatus(`te pones ${a.name}`); }
+        if (mine) { wearArmor(a.id); dressUp(); sfx.dash(); return menuStatus(`te pones ${a.name}`); }
         if (buyArmor(a) === 'poor') { sfx.warn(); return menuStatus(`te faltan ${a.price - state.mon} mon`); }
+        dressUp();
         sfx.chime(true); menuStatus(`«Te queda como hecha a medida.» · ${a.name}`);
       }
     });

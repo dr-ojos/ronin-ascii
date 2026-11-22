@@ -88,7 +88,8 @@ export function updatePlayer(dt: number) {
     if (p > 0.2 && p < 0.55) { player.pos.x += Math.sin(player.face) * 3 * dt; player.pos.z += Math.cos(player.face) * 3 * dt; }
     if (!player.hitDone && p > (spin ? 0.4 : 0.45)) {
       player.hitDone = true;
-      slashArc(spin, spin, player.combo);
+      const wfx = weapon().fx;
+      slashArc(spin, spin, player.combo, wfx.glow, Math.min(2.2, 0.8 + wfx.trail * 0.5));
       if (depth > 0.1) ripple(player.pos.x + Math.sin(player.face) * 1.2, player.pos.z + Math.cos(player.face) * 1.2, spin ? 1.3 : 0.9);
       const w = weapon();
       let hits = 0, hitPan = 0;
