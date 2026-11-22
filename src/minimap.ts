@@ -112,6 +112,8 @@ function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, 
   ctx.textBaseline = 'top'; ctx.textAlign = 'left';
 }
 let t = 0, lastPlace: Place | null = null, placeT = 1.5;
+/** heading the minimap is turned to: follows the camera, but holds still while photo mode orbits it */
+let mapYaw = 0;
 /** camps you have come close to (shown on the maps from then on) */
 const seen = new Set<Camp>();
 export function updateMinimap(dt: number) {
@@ -138,15 +140,16 @@ export function updateMinimap(dt: number) {
     }
   });
   // minimap window around the player, turned with the camera so "up" is always straight ahead
+  if (!state.photo) mapYaw = state.yaw;
   const W = mini.width, H = mini.height, D = Math.ceil(Math.hypot(W, H));
   const cx = (player.pos.x + HALF) / MINI.mx * MINI.cw, cy = (player.pos.z + HALF) / MINI.mz * MINI.ch;
   miniX.fillStyle = '#05060a'; miniX.fillRect(0, 0, W, H);
-  miniX.save(); miniX.translate(W / 2, H / 2); miniX.rotate(state.yaw);
+  miniX.save(); miniX.translate(W / 2, H / 2); miniX.rotate(mapYaw);
   miniX.drawImage(MINI.c, cx - D / 2, cy - D / 2, D, D, -D / 2, -D / 2, D, D);
   stamp(miniX, MINI, -cx, -cy, 1);
   miniX.restore();
   // north marker on the rim
-  const nx = Math.sin(state.yaw), ny = -Math.cos(state.yaw), k = Math.min((W / 2 - 8) / Math.max(1e-3, Math.abs(nx)), (H / 2 - 8) / Math.max(1e-3, Math.abs(ny)));
+  const nx = Math.sin(mapYaw), ny = -Math.cos(mapYaw), k = Math.min((W / 2 - 8) / Math.max(1e-3, Math.abs(nx)), (H / 2 - 8) / Math.max(1e-3, Math.abs(ny)));
   miniX.font = `bold 12px ${FONT}`; miniX.textAlign = 'center'; miniX.textBaseline = 'middle';
   miniX.fillStyle = COL.place; miniX.fillText('N', W / 2 + nx * k, H / 2 + ny * k);
   miniX.textAlign = 'left'; miniX.textBaseline = 'top';
