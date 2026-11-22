@@ -1,5 +1,7 @@
 // Shared type definitions.
 import type * as THREE from 'three';
+import type { EnemyAttack } from './enemy-moves';
+import type { LightAnchor } from './lights';
 
 export type Vec3 = [number, number, number];
 
@@ -37,9 +39,9 @@ export type Collider =
 export interface XZ { x: number; z: number }
 
 /** the kinds of oni: each looks and fights differently (enemies.ts KINDS) */
-export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'jefe' | 'kensei' | 'tengu' | 'raijin';
-/** idle: wandering its territory · chase / windup / recover: fighting · return: lost the player, walking home */
-export type EnemyState = 'idle' | 'chase' | 'windup' | 'recover' | 'return';
+export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 'acechador' | 'hechicero'
+  | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'kensei' | 'tengu' | 'raijin';
+export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
 
 /** the mocap-rigged oni returned by createOniWarrior (rig.js) */
 export interface OniWarrior {
@@ -62,12 +64,15 @@ interface EnemyBase {
   /** strike distance and wind-up time */
   reach: number;
   windup: number;
-  /** attacks done (the boss slams the ground every third one) */
+  /** attacks done in the current fight */
   swings: number;
+  enraged: boolean;
+  attack?: EnemyAttack;
+  strikeT: number;
   /** cooldown of a special move (the tengu's blink) */
   cd: number;
-  /** the coloured glow that follows a sub-boss around (lights.ts) */
-  aura?: { x: number; y: number; z: number };
+  /** the coloured glow that follows a boss or guardian */
+  aura?: LightAnchor;
   state: EnemyState;
   t: number;
   knock: THREE.Vector3;
@@ -86,7 +91,7 @@ export interface Camp {
   /** leash: how far from home they follow you before giving up */
   leash: number;
   size: number;
-  boss: boolean;
+  boss?: EnemyKind;
   /** the sub-boss guarding its chest, if any */
   elite?: EnemyKind;
   /** the oni it is made of, and those still alive (also while despawned) */

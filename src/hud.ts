@@ -35,14 +35,19 @@ export function updateHud(dt: number) {
   const rayo = state.special >= 1
     ? `RAYO  [<span class="y">${'#'.repeat(12)}</span>] ${state.time % 0.8 < 0.5 ? '<span class="y">¡ listo !  pulsa P</span>' : ''}`
     : `RAYO  [<span class="b">${'#'.repeat(rf)}</span>${'-'.repeat(12 - rf)}] <span class="d">${Math.floor(state.special * 100)} %</span>`;
-  // the life of the nearest giant or sub-boss fighting you
+  // Major boss health takes priority when a nearby guardian is also fighting.
   let foe: (typeof enemies)[number] | null = null, fd = 40;
   for (const e of enemies) {
-    if ((e.kind !== 'jefe' && !KINDS[e.kind].elite) || e.state === 'idle' || e.state === 'return') continue;
-    const d = Math.hypot(e.g.position.x - player.pos.x, e.g.position.z - player.pos.z); if (d < fd) { fd = d; foe = e; }
+    const def = KINDS[e.kind];
+    if ((!def.boss && !def.elite) || e.state === 'idle' || e.state === 'return') continue;
+    const d = Math.hypot(e.g.position.x - player.pos.x, e.g.position.z - player.pos.z);
+    if (d >= 40 || (foe && KINDS[foe.kind].boss && !def.boss)) continue;
+    if (d < fd || (def.boss && foe && !KINDS[foe.kind].boss)) { fd = d; foe = e; }
   }
   const ff = foe ? Math.max(0, Math.ceil(foe.hp / foe.maxHp * 16)) : 0;
-  const foeBar = foe ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n` : '';
+  const foeBar = foe
+    ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>${KINDS[foe.kind].boss ? ` · FASE ${foe.enraged ? 'II' : 'I'}` : ''}\n  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n`
+    : '';
   hud.innerHTML =
     `<span class="r">浪人</span> ${esc(look.name.toUpperCase() || 'RONIN')}\n` +
     `VIDA  [<span class="${player.hp < 30 ? 'r' : 'y'}">${bar}</span>] ${Math.ceil(player.hp)}\n` +

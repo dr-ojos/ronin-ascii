@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { enemies } from './enemies';
-import { provoke } from './enemy-ai';
+import { provoke, staggerEnemy } from './enemy-ai';
 import { burst } from './fx';
 import { sfx, panOf } from './sfx';
 import { showMsg } from './hud';
@@ -86,7 +86,7 @@ export function tryLightning() {
     bolt(new THREE.Vector3(p.x, p.y + 1.1 * e.scale, p.z));
     e.hp -= 6 * dmgMult(); e.flash = 1; provoke(e);
     e.knock.set(p.x - player.pos.x, 0, p.z - player.pos.z).normalize().multiplyScalar(e.big ? 5 : 12);
-    if (e.state !== 'return') { e.state = 'recover'; e.t = 1.4; }   // stunned
+    if (e.state !== 'return') staggerEnemy(e, 1.4);
     sfx.thunder(panOf(p.x, p.z), i === 0);
     flashT = Math.max(flashT, 0.25);
   } }));

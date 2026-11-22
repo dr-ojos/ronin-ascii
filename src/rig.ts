@@ -426,7 +426,15 @@ const oniMats = {
   rope: new THREE.MeshStandardMaterial({ color: 0x9a8352, roughness: 1 })
 };
 /** how one kind of oni looks: body tint, mask colour, weapon */
-export interface OniLook { big: boolean; tint: number; mask: number; eye?: number; weapon: 'club' | 'spear' | 'bow' | 'bigclub' }
+export interface OniLook {
+  big: boolean;
+  tint: number;
+  mask: number;
+  eye?: number;
+  weapon: 'club' | 'spear' | 'bow' | 'bigclub' | 'sword' | 'staff';
+  shield?: boolean;
+  crest?: 'crescent' | 'feathers' | 'halo';
+}
 const maskMats = new Map<number, THREE.MeshPhysicalMaterial>(), eyeMats = new Map<number, THREE.MeshBasicMaterial>();
 const maskMat = (c: number) => { let m = maskMats.get(c); if (!m) maskMats.set(c, m = new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.4, clearcoat: 0.8, clearcoatRoughness: 0.2 })); return m; };
 const eyeMat = (c: number) => { let m = eyeMats.get(c); if (!m) eyeMats.set(c, m = new THREE.MeshBasicMaterial({ color: c })); return m; };
@@ -458,6 +466,21 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
     strand.geometry.translate(0, -len / 2, 0);
     strand.position.set(Math.cos(a) * 0.1, 0.06 + Math.random() * 0.04, Math.sin(a) * -0.1 - 0.01);
     strand.rotation.set(-0.25 - Math.random() * 0.3, 0, Math.cos(a) * 0.4); h.add(strand);
+  }
+  if (look.crest === 'crescent') {
+    const crescent = mesh(new THREE.TorusGeometry(0.24, 0.022, 6, 24, Math.PI * 1.15), MAT.gold, h, 0, 0.26, 0.08);
+    crescent.rotation.z = -Math.PI * 1.075;
+  } else if (look.crest === 'feathers') {
+    for (const s of [-1, 1]) for (let i = 0; i < 4; i++) {
+      const plume = mesh(new THREE.ConeGeometry(0.025, 0.25 + i * 0.055, 4), i % 2 ? mEye : mMask, h, s * (0.12 + i * 0.035), 0.1 + i * 0.018, -0.04);
+      plume.rotation.set(-0.45, 0, -s * (0.45 + i * 0.2));
+    }
+  } else if (look.crest === 'halo') {
+    mesh(new THREE.TorusGeometry(0.27, 0.012, 6, 24), mEye, h, 0, 0.22, -0.17);
+    for (let i = 0; i < 8; i++) {
+      const a = i * TAU / 8;
+      mesh(new THREE.SphereGeometry(0.035, 8, 6), mMask, h, 0.27 * Math.sin(a), 0.22 + 0.27 * Math.cos(a), -0.17);
+    }
   }
   h.scale.setScalar((top.y - head.y) / 0.215);
   h.position.set(head.x, head.y + (top.y - head.y) * 0.45, head.z + 0.01);
@@ -499,6 +522,21 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
     yari.rotation.x = Math.PI / 2;
     yari.position.set(rHand.x - side * 0.03, rHand.y, rHand.z);
     attach('RightHand', yari);
+  } else if (look.weapon === 'sword') {
+    const sword = new THREE.Group();
+    mesh(new THREE.CylinderGeometry(0.022, 0.025, 0.29, 8), oniMats.hair, sword).rotation.x = Math.PI / 2;
+    mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.024, 8), MAT.gold, sword, 0, 0, 0.15).rotation.x = Math.PI / 2;
+    mesh(bladeGeometry(), MAT.steel, sword);
+    if (big) sword.scale.set(1.6, 1.6, 1.7);
+    sword.position.copy(rHand);
+    attach('RightHand', sword);
+  } else if (look.weapon === 'staff') {
+    const staff = new THREE.Group();
+    mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.65, 8), bowMats.wood, staff, 0, 0, 0.22).rotation.x = Math.PI / 2;
+    mesh(new THREE.TorusGeometry(0.095, 0.015, 6, 16), MAT.gold, staff, 0, 0, 1.08).rotation.y = Math.PI / 2;
+    mesh(new THREE.OctahedronGeometry(0.075), mEye, staff, 0, 0, 1.08);
+    staff.position.copy(rHand);
+    attach('RightHand', staff);
   } else {
     // yumi: a tall asymmetric bow in the left hand, and a quiver on the back
     const lHand = P('LeftHand'), yumi = new THREE.Group();
@@ -512,6 +550,16 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
     for (let i = 0; i < 5; i++) mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.3, 3), bowMats.string, quiver, Math.cos(i) * 0.03, 0.4, Math.sin(i) * 0.03);
     quiver.rotation.z = 0.5 * side; quiver.position.set(neck.x, neck.y - 0.25, neck.z - 0.15);
     attach('Spine2', quiver);
+  }
+  if (look.shield) {
+    const shield = new THREE.Group(), forearm = P('LeftForeArm');
+    const plate = mesh(new THREE.CylinderGeometry(0.38, 0.34, 0.075, 8), mMask, shield);
+    plate.rotation.x = Math.PI / 2;
+    plate.scale.z = 1.1;
+    mesh(new THREE.CircleGeometry(0.29, 8), MAT.iron, shield, 0, 0, 0.04).scale.y = 1.1;
+    mesh(new THREE.SphereGeometry(0.085, 12, 8), MAT.gold, shield, 0, 0, 0.046).scale.z = 0.6;
+    shield.position.set(forearm.x, forearm.y, forearm.z + 0.16);
+    attach('LeftForeArm', shield);
   }
 
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.05, 28), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
@@ -535,13 +583,26 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
     const want = s.state === 'windup' ? 1 : (s.state === 'strike' ? 2 : 0);
     lift += ((want === 1 ? 1 : 0) - lift) * (1 - Math.exp(-dt * 10));
     root.getWorldQuaternion(bq);
+    if (look.shield) {
+      tgt.set(side * 0.16, 1.13, 0.42).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
+      ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, tgt, pole.set(side, -0.5, 0).applyQuaternion(bq), want === 0 ? 0.85 : 0.3);
+    }
+    if (look.weapon === 'bow') {
+      if (lift > 0.02 || want === 2) {
+        tgt.set(side * 0.21, 1.48, 0.64).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
+        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, tgt, pole.set(side, -0.5, 0).applyQuaternion(bq), want === 2 ? 1 : lift);
+        tgt.set(-side * 0.17, 1.49, want === 2 ? -0.17 : 0.1).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
+        ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, 0, -0.5).applyQuaternion(bq), want === 2 ? 1 : lift);
+      }
+      return;
+    }
     if (want === 1 || lift > 0.02) {
-      tgt.set(-side * 0.25, 2.05, -0.05).applyQuaternion(bq).add(root.position);
+      tgt.set(-side * 0.25, 2.05, -0.05).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
       ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, 0, -0.5).applyQuaternion(bq), lift);
       rotateBoneWorld(B.Spine, new V(1, 0, 0).applyQuaternion(bq), -0.25 * lift);
     }
     if (want === 2) {
-      tgt.set(-side * 0.1, 0.8, 0.85).applyQuaternion(bq).add(root.position);
+      tgt.set(-side * 0.1, 0.8, 0.85).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
       ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, -0.5, 0).applyQuaternion(bq), 1);
       rotateBoneWorld(B.Spine, new V(1, 0, 0).applyQuaternion(bq), 0.4);
     }

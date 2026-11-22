@@ -2,8 +2,9 @@
 import * as THREE from 'three';
 import { sam } from './avatar';
 import { sparkBurst } from './katana-fx';
-import { enemies } from './enemies';
-import { provoke } from './enemy-ai';
+import { enemies, KINDS } from './enemies';
+import { provoke, staggerEnemy } from './enemy-ai';
+import { showMsg } from './hud';
 import { dmgMult, dashCdMult, runMult } from './upgrades';
 import { weapon } from './weapons';
 import { charge } from './special';
@@ -98,10 +99,19 @@ export function updatePlayer(dt: number) {
         const d = tmp.length(), reach = (spin ? 3.3 : 2.8) + w.reach + 0.45 * en.scale;
         const ang = Math.abs(angDiff(Math.atan2(tmp.x, tmp.z), player.face));
         if (d < reach && (spin || ang < 1.35)) {
-          hits++; hitPan += panOf(en.g.position.x, en.g.position.z); en.hp -= (spin ? 2 : 1) * dmgMult() * w.dmg; en.flash = 1; provoke(en);
-          en.knock.copy(tmp.normalize()).multiplyScalar((spin ? 12 : 8) / (en.big ? 3 : 1));
-          if (en.state === 'windup' && !en.big) { en.state = 'recover'; en.t = 0.5; }
-          burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), 0xffffff, 18, 5, 0.12);
+          const guarding = KINDS[en.kind].look.shield && (en.state === 'idle' || en.state === 'chase')
+            && Math.abs(angDiff(Math.atan2(-tmp.x, -tmp.z), en.g.rotation.y)) < 1.05;
+          const blocked = guarding && !spin;
+          hits++; hitPan += panOf(en.g.position.x, en.g.position.z);
+          en.hp -= (spin ? 2 : blocked ? 0.2 : 1) * dmgMult() * w.dmg;
+          en.flash = blocked ? 0.35 : 1;
+          provoke(en);
+          en.knock.copy(tmp.normalize()).multiplyScalar((spin ? 12 : 8) / (en.big || blocked ? 3 : 1));
+          if (guarding && spin) {
+            staggerEnemy(en, 0.9);
+            showMsg('¡ GUARDIA ROTA !', 0.9);
+          } else if ((en.state === 'windup' || en.state === 'charge') && !en.big) staggerEnemy(en, 0.5);
+          burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), blocked ? 0xffd889 : 0xffffff, 18, 5, 0.12);
           sparkBurst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(player.pos.y + 1.25), 0.35), spin ? 14 : 9, spin ? 5.5 : 4.5);
         }
       }

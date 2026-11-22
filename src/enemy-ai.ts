@@ -1,16 +1,8 @@
-// Oni behaviour. Each oni guards its camp: it ambles around its territory (idle), notices you when you
-// come close (the whole camp joins in), then fights in its own way:
-//  - oni: walks up, winds up, strikes in front          - lancero: fast, lunges from further away
-//  - arquero: keeps its distance and shoots arrows       - bruto: slams the ground all around it
-//  - jefe: strikes, and every third attack slams the ground
-// and the sub-bosses that guard chests:
-//  - kensei: three lunges in a row, then a long pause   - tengu: fans of arrows, blinks away when you close in
-//  - oni del trueno: strike, lightning where you stand (marked on the ground first), slam
-// They are leashed to the camp: lead them too far from home (or run away) and they give up, walk back
-// and heal. Also arrows in flight, knockback, crowding, hit flash, death, drops and the points they give.
+// Camp aggro, enemy attack cycles, projectiles, retreat and rewards.
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { enemies, KINDS, despawn } from './enemies';
+import { chargeBlocked, clearEnemyAttack, moveDef, prepareEnemyAttack, type EnemyAttack } from './enemy-moves';
 import { hurtPlayer } from './damage';
 import { burst } from './fx';
 import { sfx, panOf } from './sfx';
@@ -33,14 +25,21 @@ export function alertCamp(camp: Camp) {
   for (const o of enemies) {
     if (o.camp !== camp || (o.state !== 'idle' && o.state !== 'return')) continue;
     o.state = 'chase'; o.t = rnd(0, 0.4);
-    if (!roared) { roared = true; sfx.roar({ big: camp.boss || !!camp.elite, pan: panOf(o.g.position.x, o.g.position.z) }); }
+    if (!roared) { roared = true; sfx.roar({ big: !!(camp.boss || camp.elite), pan: panOf(o.g.position.x, o.g.position.z) }); }
   }
-  if (camp.boss && roared) { sfx.waveStart(true); showMsg('¡ un oni gigante te ha visto !', 1.6); }
+  if (camp.boss && roared && camp.roster.includes(camp.boss)) { sfx.waveStart(true); showMsg(`¡ ${KINDS[camp.boss].name.toUpperCase()} !`, 1.8); }
   else if (camp.elite && roared) { sfx.waveStart(true); showMsg(`¡ ${KINDS[camp.elite].name.toUpperCase()} !\nel guardián del cofre`, 1.8); }
 }
 /** the player hit this oni: it fights back unless you are already out of its camp's reach */
 export function provoke(en: Enemy) {
   if ((en.state === 'idle' || en.state === 'return') && Math.hypot(player.pos.x - en.camp.x, player.pos.z - en.camp.z) < en.camp.leash) alertCamp(en.camp);
+}
+
+export function staggerEnemy(en: Enemy, duration: number) {
+  clearEnemyAttack(en);
+  en.state = 'recover';
+  en.t = duration;
+  en.strikeT = 0;
 }
 
 function pickWander(en: Enemy) {
@@ -54,15 +53,15 @@ function pickWander(en: Enemy) {
 const ARROW = new THREE.CylinderGeometry(0.025, 0.025, 0.9, 4).rotateX(Math.PI / 2);
 const arrowMat = tagMat(new THREE.MeshBasicMaterial({ color: 0xffe2a0 }), CLS.fx);
 const arrows: { m: THREE.Mesh; v: THREE.Vector3; life: number; dmg: number }[] = [];
-function shoot(en: Enemy, yaw = 0) {
+function shoot(en: Enemy, yaw = 0, target?: THREE.Vector3, dmg = en.dmg) {
   const from = new THREE.Vector3(en.g.position.x, en.g.position.y + 1.4 * en.scale, en.g.position.z);
   // aim where you will be (a little), at chest height
-  const to = new THREE.Vector3(player.pos.x, player.pos.y + 1.1, player.pos.z);
+  const to = (target ?? player.pos).clone().addScaledVector(UP, 1.1);
   const flight = from.distanceTo(to) / 24;
-  if (player.moving > 0.5) to.addScaledVector(lastMove, 5.6 * flight * 0.6);
+  if (!target && player.moving > 0.5) to.addScaledVector(lastMove, 5.6 * flight * 0.6);
   const v = to.sub(from).normalize().multiplyScalar(24).applyAxisAngle(UP, yaw);
   const m = new THREE.Mesh(ARROW, arrowMat); m.position.copy(from); m.lookAt(from.clone().add(v)); scene.add(m);
-  arrows.push({ m, v, life: 1.4, dmg: en.dmg });
+  arrows.push({ m, v, life: 1.4, dmg });
   if (yaw === 0) sfx.arrow(panOf(from.x, from.z));
 }
 const UP = new THREE.Vector3(0, 1, 0);
@@ -84,7 +83,8 @@ function updateArrows(dt: number) {
 }
 export function clearArrows() {
   for (const a of arrows) scene.remove(a.m); arrows.length = 0;
-  for (const k of marks) scene.remove(k.m); marks.length = 0;
+  for (const k of marks) { scene.remove(k.m); k.m.material.dispose(); }
+  marks.length = 0;
 }
 
 // ------------------------------------------------------------ the thunder oni's lightning
@@ -146,6 +146,70 @@ function slam(en: Enemy, r: number) {
   if (Math.hypot(player.pos.x - g.position.x, player.pos.z - g.position.z) < r) hurtPlayer(en.dmg);
 }
 
+const CHARGE_T = 0.36;
+const moveDamage = (en: Enemy, attack: EnemyAttack) => Math.round(en.dmg * attack.move.power * (en.enraged ? 1.18 : 1));
+
+function finishMove(en: Enemy, attack: EnemyAttack) {
+  clearEnemyAttack(en);
+  en.state = 'recover';
+  en.t = attack.move.recovery * (en.enraged ? 0.9 : 1);
+}
+
+function executeMove(en: Enemy, attack: EnemyAttack) {
+  const { move, origin, yaw, target, zones } = attack, dmg = moveDamage(en, attack);
+  en.swings++;
+  en.strikeT = 0.24;
+  if (move.shape === 'charge') {
+    en.state = 'charge';
+    en.t = CHARGE_T;
+    sfx.dash();
+    return;
+  }
+  if (move.shape === 'volley') {
+    for (let i = 0; i < move.arrows; i++) {
+      shoot(en, move.angle * (2 * i / (move.arrows - 1) - 1), target, dmg);
+    }
+  } else if (move.shape === 'arc') {
+    const dx = player.pos.x - origin.x, dz = player.pos.z - origin.z;
+    if (Math.hypot(dx, dz) < move.radius && Math.abs(angDiff(Math.atan2(dx, dz), yaw)) <= move.angle) hurtPlayer(dmg);
+    const edge = origin.clone().add(new THREE.Vector3(Math.sin(yaw), 0.24, Math.cos(yaw)).multiplyScalar(move.angle < Math.PI ? move.radius * 0.55 : 1));
+    burst(edge, move.color, 80, 8, 0.16);
+    state.shake = Math.max(state.shake, move.angle === Math.PI ? 0.6 : 0.3);
+    sfx.taiko(0.7);
+  } else {
+    let hit = false;
+    for (const zone of zones) {
+      const p = new THREE.Vector3(zone.x, surfaceY(zone.x, zone.z) + 0.12, zone.z);
+      if (move.effect === 'thunder') bolt(p);
+      else burst(p, move.color, 54, 8, 0.18);
+      if (Math.hypot(player.pos.x - zone.x, player.pos.z - zone.z) < move.radius) hit = true;
+    }
+    if (hit) hurtPlayer(dmg);
+    if (move.effect === 'thunder') { skyFlash(0.35); sfx.thunder(panOf(target.x, target.z), en.enraged); }
+    else sfx.taiko(0.45);
+  }
+  finishMove(en, attack);
+}
+
+function advanceCharge(en: Enemy, attack: EnemyAttack) {
+  const { move, origin, yaw, length } = attack, p = en.g.position;
+  if (move.shape !== 'charge') return;
+  const fx = Math.sin(yaw), fz = Math.cos(yaw), distance = length * (1 - Math.max(en.t, 0) / CHARGE_T);
+  const prev = (p.x - origin.x) * fx + (p.z - origin.z) * fz;
+  const x = origin.x + distance * fx, z = origin.z + distance * fz;
+  const blocked = chargeBlocked(en, x, z);
+  if (!blocked) {
+    p.x = x; p.z = z;
+    const dx = player.pos.x - origin.x, dz = player.pos.z - origin.z;
+    const forward = dx * fx + dz * fz;
+    if (!attack.hit && length > 0 && forward >= prev - 0.2 && forward <= distance && Math.abs(dx * fz - dz * fx) < move.width) {
+      attack.hit = true;
+      hurtPlayer(moveDamage(en, attack));
+    }
+  }
+  if (blocked || en.t <= 0) finishMove(en, attack);
+}
+
 // ------------------------------------------------------------ every frame
 const tmp = new THREE.Vector3(), step = new THREE.Vector3();
 export function updateEnemies(dt: number) {
@@ -153,14 +217,24 @@ export function updateEnemies(dt: number) {
   updateMarks(dt);
   for (let i = enemies.length - 1; i >= 0; i--) {
     const en = enemies[i], g = en.g, camp = en.camp, def = KINDS[en.kind];
+    if (en.hp <= 0) { kill(en, i, surfaceY(g.position.x, g.position.z) - wadeDepth(g.position.x, g.position.z) * WADE_SINK); continue; }
     tmp.subVectors(player.pos, g.position); tmp.y = 0;
     const ranged = !!def.ranged, d = tmp.length(), reach = ranged ? en.reach : en.reach * en.scale + 0.3;
     const fromHome = Math.hypot(g.position.x - camp.x, g.position.z - camp.z);
     const youFromHome = Math.hypot(player.pos.x - camp.x, player.pos.z - camp.z);
     let walk = 0, heading: number | null = null;   // speed this frame (for the walk cycle) and where it looks
-    const speed = en.speed * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));   // the river slows them down too
+    const leaving = fromHome > camp.leash || youFromHome > camp.leash + 4 || state.dead;
+    if (def.boss && !en.enraged && en.hp <= en.maxHp * 0.5 && en.state !== 'idle' && en.state !== 'return' && !leaving) {
+      en.enraged = true;
+      burst(g.position.clone().add(new THREE.Vector3(0, 1.25, 0)), def.boss.aura, 90, 7, 0.16);
+      if (en.aura) en.aura.intensity = 4;
+      sfx.roar({ big: true, pan: panOf(g.position.x, g.position.z) });
+      showMsg(`¡ ${def.name.toUpperCase()} ENFURECIDO !`, 1.65);
+    }
+    const speed = en.speed * (en.enraged ? 1.13 : 1) * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));
     en.t -= dt; en.cd -= dt;
-    const slamming = en.kind === 'bruto' || ((en.kind === 'jefe' || en.kind === 'raijin') && en.swings % 3 === 2);
+    en.strikeT = Math.max(0, en.strikeT - dt);
+    const slamming = en.kind === 'bruto' || (en.kind === 'raijin' && en.swings % 3 === 2);
     const thunder = en.kind === 'raijin' && en.swings % 3 === 1;   // calls lightning from afar
     const combo = en.kind === 'kensei' && en.swings % 3 !== 0;     // the 2nd and 3rd lunge of a combo
 
@@ -170,19 +244,35 @@ export function updateEnemies(dt: number) {
       step.set(tx - g.position.x, 0, tz - g.position.z);
       const left = step.length();
       if (home) en.hp = Math.min(en.maxHp, en.hp + en.maxHp * 0.4 * dt);
-      if (home && fromHome < camp.r * 0.5) { en.state = 'idle'; en.hp = en.maxHp; pickWander(en); en.t = rnd(1, 3); }
+      if (home && fromHome < camp.r * 0.5) {
+        en.state = 'idle'; en.hp = en.maxHp; en.enraged = false; en.swings = 0;
+        if (en.aura) en.aura.intensity = 2.6;
+        pickWander(en); en.t = rnd(1, 3);
+      }
       else if (left > 0.6 && (home || en.t <= 0)) {
         walk = speed * (home ? 1.2 : 0.32);
         g.position.addScaledVector(step.multiplyScalar(1 / left), Math.min(left, walk * dt));
         heading = Math.atan2(step.x, step.z);
       } else if (!home && en.t <= 0) { pickWander(en); en.t = rnd(1.5, 5); }   // got there: rest a while, then pick a new spot
       // notice the player (only while idle: a returning oni ignores you until it is home)
-      const sight = (ranged ? 16 : def.heavy || def.elite ? 14 : 11) * (state.dead ? 0 : 1);
+      const sight = (def.boss || ranged ? 16 : def.heavy || def.elite ? 14 : 11) * (state.dead ? 0 : 1);
       if (!home && d < sight && youFromHome < camp.leash) alertCamp(camp);
-    } else if (fromHome > camp.leash || youFromHome > camp.leash + 4 || state.dead) {
-      en.state = 'return';   // too far from home: give up
+    } else if (leaving) {
+      clearEnemyAttack(en);
+      en.state = 'return';
     } else if (en.state === 'chase') {
-      if (en.kind === 'tengu' && d < 3.5 && en.cd <= 0) blink(en);
+      const cycle = en.enraged ? def.boss?.enraged : def.moves;
+      if (cycle) {
+        const move = moveDef(cycle[en.swings % cycle.length]);
+        if (d <= move.range && en.t <= 0) {
+          en.attack = prepareEnemyAttack(en, move, player.pos, Math.atan2(tmp.x, tmp.z));
+          en.state = 'windup'; en.t = en.attack.windup; en.knock.set(0, 0, 0);
+          sfx.warn(panOf(g.position.x, g.position.z));
+        } else if (d > move.range || (ranged && d < 5 && fromHome < camp.leash - 2)) {
+          walk = speed;
+          g.position.addScaledVector(step.copy(tmp).normalize(), (d > move.range ? 1 : -0.85) * speed * dt);
+        }
+      } else if (en.kind === 'tengu' && d < 3.5 && en.cd <= 0) blink(en);
       else if (ranged) {
         // keep a shooting distance: back off when you get close, come closer when you are out of range
         const want = d < 6 ? -1 : d > reach ? 1 : 0;
@@ -191,7 +281,8 @@ export function updateEnemies(dt: number) {
       } else if (d > reach && !(thunder && d < 13)) { walk = speed; g.position.addScaledVector(step.copy(tmp).normalize(), speed * dt); }
       else if (en.t <= 0) { en.state = 'windup'; en.t = en.windup * (slamming ? 1.25 : combo ? 0.55 : 1); sfx.warn(panOf(g.position.x, g.position.z)); }
     } else if (en.state === 'windup') {
-      if (en.t <= 0) {
+      if (en.t <= 0 && en.attack) executeMove(en, en.attack);
+      else if (en.t <= 0) {
         en.swings++;
         if (en.kind === 'tengu') {
           // a fan of three arrows, and every third time a wide one of five
@@ -210,12 +301,18 @@ export function updateEnemies(dt: number) {
           en.state = 'recover'; en.t = en.kind === 'kensei' ? (en.swings % 3 !== 0 ? 0.2 : 1.35) : en.kind === 'ashigaru' ? 0.55 : 0.7;
         }
       }
-    } else if (en.t <= 0) { en.state = 'chase'; en.t = ranged || (en.kind === 'kensei' && en.swings % 3 !== 0) ? 0 : rnd(0.05, 0.3); }
+    } else if (en.state === 'charge' && en.attack) {
+      walk = en.attack.length / CHARGE_T;
+      advanceCharge(en, en.attack);
+    } else if (en.t <= 0) {
+      en.state = 'chase';
+      en.t = ranged ? (def.moves ? 0.32 : 0) : combo ? 0 : rnd(0.05, 0.3);
+    }
 
-    g.position.addScaledVector(en.knock, dt);
+    if (!en.attack) g.position.addScaledVector(en.knock, dt);
     en.knock.multiplyScalar(Math.exp(-7 * dt));
     for (const o of enemies) {
-      if (o === en) continue;
+      if (o === en || en.attack) continue;
       const dx = g.position.x - o.g.position.x, dz = g.position.z - o.g.position.z, dd = Math.hypot(dx, dz), m = 0.6 * (en.scale + o.scale);
       if (dd < m && dd > 1e-4) { g.position.x += dx / dd * (m - dd) * 0.5; g.position.z += dz / dd * (m - dd) * 0.5; }
     }
@@ -224,24 +321,28 @@ export function updateEnemies(dt: number) {
     g.position.y = gy;
     let w = waders.get(en); if (!w) waders.set(en, w = wader());
     w(dt, g.position.x, gy + wd * WADE_SINK, g.position.z, wd, walk > 0 || en.knock.lengthSq() > 4 ? 1 : 0);
-    const fighting = en.state === 'chase' || en.state === 'windup' || en.state === 'recover';
-    if (fighting) heading = Math.atan2(tmp.x, tmp.z);
+    const fighting = en.state !== 'idle' && en.state !== 'return';
+    if (fighting) heading = en.attack ? en.attack.yaw : Math.atan2(tmp.x, tmp.z);
     if (heading !== null) g.rotation.y += angDiff(heading, g.rotation.y) * Math.min(1, dt * (fighting ? 14 : 5));
     const wind = en.state === 'windup';
     if (en.oni) {
       en.move += ((walk > 0 ? 1 : 0) - en.move) * Math.min(1, dt * 8);
-      en.oni.update(dt, { moving: en.move, speed: Math.max(walk, 1), state: wind ? 'windup' : (en.state === 'recover' && en.t > 0.45 ? 'strike' : 'idle') });
+      const strike = def.moves ? en.strikeT > 0 || en.state === 'charge' : en.state === 'recover' && en.t > 0.45;
+      en.oni.update(dt, { moving: en.move, speed: Math.max(walk, 1), state: wind ? 'windup' : strike ? 'strike' : 'idle' });
     } else {
       g.position.y = gy + 0.08 + Math.sin(state.time * 3 + en.seed) * 0.07;
       g.rotation.x = wind ? -0.25 : (en.state === 'recover' ? 0.15 : 0);
     }
     // the warning ring: wide for a slam, faint for an arrow being drawn
-    en.ring.material.opacity = wind ? (ranged || thunder ? 0.3 : 0.5 + 0.5 * Math.sin(state.time * 30)) : 0;
+    if (en.attack) {
+      const progress = wind ? 1 - Math.max(0, en.t) / en.attack.windup : 1;
+      en.attack.warning.material.opacity = 0.76 + 0.24 * progress;
+    }
+    en.ring.material.opacity = wind && !en.attack ? (ranged || thunder ? 0.3 : 0.5 + 0.5 * Math.sin(state.time * 30)) : 0;
     en.ring.scale.setScalar(wind ? (slamming ? 2.9 / 1.05 : 1 + (1 - Math.max(0, en.t) / en.windup) * 0.3) : 1);
     en.flash = Math.max(0, en.flash - dt * 6);
     if (en.oni) en.oni.setFlash(en.flash); else { en.robeMat.emissive.setScalar(en.flash); en.maskMat.emissive.setScalar(en.flash); }
     if (en.aura) { en.aura.x = g.position.x; en.aura.y = gy + 2.2 * en.scale; en.aura.z = g.position.z; }
-    if (en.hp <= 0) kill(en, i, gy);
   }
 }
 
@@ -260,16 +361,20 @@ function kill(en: Enemy, i: number, gy: number) {
   chargeKill();
   if (lifesteal()) player.hp = Math.min(player.maxHp, player.hp + lifesteal());
   if (en.big) state.shake = 0.6;
-  dropLoot(g.position.x, g.position.z, camp.tier, en.kind === 'jefe' || !!def.elite);
+  dropLoot(g.position.x, g.position.z, camp.tier, !!(def.boss || def.elite));
   const r = camp.roster.indexOf(en.kind); if (r >= 0) camp.roster.splice(r, 1);
-  if (camp.roster.length === 0) campCleared(camp);
+  if (camp.roster.length === 0) campCleared(camp, en.kind);
+  else if (def.boss) {
+    const escort = camp.chest?.state === 'sealed' ? '\nel cofre se abrirá cuando caiga su escolta' : '';
+    showMsg(`¡ ${def.name.toUpperCase()} ABATIDO !${escort}`, 2.2);
+  }
   else if (def.elite && camp.chest && camp.chest.state === 'sealed') {   // the guardian fell: its chest opens even if its escort lives
     unseal(camp.chest); sfx.taiko(1); addPoints(POINTS.eliteCamp, def.name);
     showMsg(`¡ ${def.name.toUpperCase()} ABATIDO !\n+${POINTS.eliteCamp}  ·  el cofre se ha abierto`, 2.2);
   }
 }
 
-function campCleared(camp: Camp) {
+function campCleared(camp: Camp, last: Enemy['kind']) {
   camp.clearedAt = state.time; state.campsCleared++;
   // (a guardian killed before its escort was already paid for)
   const eliteLast = camp.elite && camp.chest?.state === 'sealed';
@@ -277,7 +382,7 @@ function campCleared(camp: Camp) {
   addPoints(bonus, camp.temp ? 'emboscada superada' : camp.route ? 'patrulla abatida' : 'guarida limpia');
   player.hp = Math.min(player.maxHp, player.hp + 20);
   sfx.taiko(1.1);
-  const title = camp.boss ? '¡ JEFE ABATIDO !' : eliteLast && camp.elite ? `¡ ${KINDS[camp.elite].name.toUpperCase()} ABATIDO !` : camp.temp ? '— EMBOSCADA SUPERADA —' : camp.route ? '— PATRULLA ABATIDA —' : '— GUARIDA LIMPIA —';
+  const title = (camp.boss === last || (eliteLast && camp.elite === last)) ? `¡ ${KINDS[last].name.toUpperCase()} ABATIDO !` : camp.temp ? '— EMBOSCADA SUPERADA —' : camp.route ? '— PATRULLA ABATIDA —' : '— GUARIDA LIMPIA —';
   const chest = camp.chest && camp.chest.state === 'sealed' ? '\nel cofre se ha abierto' : '';
   if (camp.chest) unseal(camp.chest);
   showMsg(`${title}\n+${bonus}  ·  +20 vida${chest}`, 2.2);

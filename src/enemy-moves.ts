@@ -1,0 +1,143 @@
+import * as THREE from 'three';
+import { CLS, tagMat } from './materials';
+import { collide } from './physics';
+import { scene } from './renderer';
+import { surfaceY } from './structures';
+import type { Enemy, XZ } from './types';
+
+type Move = {
+  range: number;
+  windup: number;
+  recovery: number;
+  power: number;
+  color: number;
+} & (
+  | { shape: 'arc'; radius: number; angle: number }
+  | { shape: 'charge'; length: number; width: number }
+  | { shape: 'zones'; radius: number; layout: 'single' | 'line' | 'cross'; effect: 'curse' | 'wind' | 'thunder' }
+  | { shape: 'volley'; arrows: number; angle: number }
+);
+
+const MOVES = {
+  pounce:     { shape: 'charge', range: 5.8, length: 7, width: 0.95, windup: 0.55, recovery: 0.95, power: 1, color: 0xff663d },
+  curse:      { shape: 'zones', range: 11, radius: 2.2, layout: 'single', effect: 'curse', windup: 0.95, recovery: 1.45, power: 1, color: 0xed7dff },
+  crush:      { shape: 'arc', range: 3.3, radius: 4.2, angle: 1.12, windup: 0.67, recovery: 0.9, power: 0.9, color: 0xff5938 },
+  slam:       { shape: 'arc', range: 3.8, radius: 4.8, angle: Math.PI, windup: 0.9, recovery: 1.25, power: 1, color: 0xff8944 },
+  quake:      { shape: 'arc', range: 5, radius: 6.2, angle: Math.PI, windup: 1.1, recovery: 1.45, power: 1.17, color: 0xff5938 },
+  blade:      { shape: 'arc', range: 3.6, radius: 4.4, angle: 1.35, windup: 0.64, recovery: 0.85, power: 0.9, color: 0xff433e },
+  bladeRush:  { shape: 'charge', range: 8, length: 9, width: 1.45, windup: 0.76, recovery: 1.05, power: 1.1, color: 0xff433e },
+  whirlwind:  { shape: 'arc', range: 4.2, radius: 5.1, angle: Math.PI, windup: 0.88, recovery: 1.3, power: 1.12, color: 0xff433e },
+  arrows:     { shape: 'volley', range: 15, arrows: 5, angle: 0.35, windup: 0.83, recovery: 0.95, power: 1, color: 0xa9f9cb },
+  arrowStorm: { shape: 'volley', range: 15, arrows: 7, angle: 0.59, windup: 0.87, recovery: 1.05, power: 1.1, color: 0xa9f9cb },
+  gust:       { shape: 'zones', range: 13, radius: 2.2, layout: 'line', effect: 'wind', windup: 1.05, recovery: 1.15, power: 1.15, color: 0xa9f9cb },
+  thunder:    { shape: 'zones', range: 13, radius: 2, layout: 'line', effect: 'thunder', windup: 1.03, recovery: 1.05, power: 0.85, color: 0x9fbbff },
+  storm:      { shape: 'zones', range: 14, radius: 2.25, layout: 'cross', effect: 'thunder', windup: 1.2, recovery: 1.3, power: 1.05, color: 0x9fbbff }
+} satisfies Record<string, Move>;
+export type EnemyMove = keyof typeof MOVES;
+export const moveDef = (id: EnemyMove): Move => MOVES[id];
+
+export interface EnemyAttack {
+  move: Move;
+  origin: THREE.Vector3;
+  target: THREE.Vector3;
+  yaw: number;
+  windup: number;
+  zones: XZ[];
+  length: number;
+  hit: boolean;
+  warning: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+}
+
+// Project the filled warning and its brighter outline onto the ground, including slopes and bridges.
+function groundWarning(outlines: XZ[][], color: number) {
+  const positions: number[] = [], colors: number[] = [];
+  const fill = new THREE.Color(color), edge = fill.clone().lerp(new THREE.Color(0xfff4da), 0.42);
+  const bands = [0, 0.25, 0.5, 0.75, 0.88, 0.90, 1];
+  for (const outline of outlines) {
+    const center = { x: 0, z: 0 };
+    for (const p of outline) { center.x += p.x / outline.length; center.z += p.z / outline.length; }
+    const vertex = (point: XZ, fraction: number) => {
+      const x = THREE.MathUtils.lerp(center.x, point.x, fraction), z = THREE.MathUtils.lerp(center.z, point.z, fraction);
+      positions.push(x, surfaceY(x, z) + 0.09, z);
+      const rim = fraction >= 0.90, tint = rim ? edge : fill;
+      colors.push(tint.r, tint.g, tint.b, rim ? 0.95 : 0.22);
+    };
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i], b = outline[(i + 1) % outline.length];
+      for (let j = 1; j < bands.length; j++) {
+        const inner = bands[j - 1], outer = bands[j];
+        vertex(a, inner); vertex(a, outer); vertex(b, outer);
+        vertex(a, inner); vertex(b, outer); vertex(b, inner);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
+  const mat = tagMat(new THREE.MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.76, side: THREE.DoubleSide, fog: false, toneMapped: false,
+    depthWrite: false
+  }), CLS.fx);
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+  return mesh;
+}
+
+function arcOutline(center: XZ, yaw: number, radius: number, angle: number) {
+  const steps = Math.ceil(angle * 10), outline: XZ[] = [];
+  const sector = angle < Math.PI;
+  if (sector) outline.push(center);
+  for (let i = 0; i < steps + Number(sector); i++) {
+    const a = yaw - angle + i / steps * angle * 2;
+    outline.push({ x: center.x + Math.sin(a) * radius, z: center.z + Math.cos(a) * radius });
+  }
+  return outline;
+}
+
+/** The first obstacle also stops the stripe, so a charge cannot cross a wall. */
+export function chargeBlocked(en: Enemy, x: number, z: number) {
+  const p = { x, z };
+  collide(p, en.scale * 0.5);
+  return Math.hypot(p.x - x, p.z - z) > 0.04;
+}
+
+export function prepareEnemyAttack(en: Enemy, move: Move, target: THREE.Vector3, yaw: number): EnemyAttack {
+  const origin = en.g.position.clone(), fx = Math.sin(yaw), fz = Math.cos(yaw);
+  const windup = move.windup * (en.enraged ? 0.86 : 1);
+  const zones: XZ[] = [];
+  let outlines: XZ[][], length = 0;
+  if (move.shape === 'charge') {
+    for (let d = 0.25; d <= move.length; d += 0.25) {
+      if (chargeBlocked(en, origin.x + fx * d, origin.z + fz * d)) break;
+      length = d;
+    }
+    const point = (d: number, s: number) => ({ x: origin.x + fx * d + fz * s, z: origin.z + fz * d - fx * s });
+    const outline: XZ[] = [];
+    const steps = Math.max(1, Math.ceil(length));
+    for (let i = 0; i <= steps; i++) outline.push(point(i / steps * length, -move.width));
+    for (let i = steps; i >= 0; i--) outline.push(point(i / steps * length, move.width));
+    outlines = [outline];
+  } else if (move.shape === 'zones') {
+    zones.push({ x: target.x, z: target.z });
+    const gap = move.radius * 1.75;
+    if (move.layout !== 'single') {
+      zones.push({ x: target.x + fz * gap, z: target.z - fx * gap }, { x: target.x - fz * gap, z: target.z + fx * gap });
+    }
+    if (move.layout === 'cross') {
+      zones.push({ x: target.x + fx * gap, z: target.z + fz * gap }, { x: target.x - fx * gap, z: target.z - fz * gap });
+    }
+    outlines = zones.map(p => arcOutline(p, 0, move.radius, Math.PI));
+  } else {
+    outlines = [arcOutline(origin, yaw, move.shape === 'arc' ? move.radius : 4.5, move.angle)];
+  }
+  return { move, origin, target: target.clone(), yaw, windup, zones, length, hit: false, warning: groundWarning(outlines, move.color) };
+}
+
+export function clearEnemyAttack(en: Enemy) {
+  if (!en.attack) return;
+  const { warning } = en.attack;
+  scene.remove(warning);
+  warning.geometry.dispose();
+  warning.material.dispose();
+  en.attack = undefined;
+}

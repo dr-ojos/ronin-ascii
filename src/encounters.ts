@@ -6,7 +6,7 @@
 //    and by the fire of some camps of the wilds: their chest stays sealed while the guardian lives.
 // A group's oni only exist while you are near it; walk away and they vanish (keeping who is left),
 // clear a camp and it stays empty for a while. Also: starting a new run, and slow healing out of combat.
-import { enemies, spawnOni, despawn, ELITES, isElite } from './enemies';
+import { enemies, spawnOni, despawn, ELITES, isBoss, isElite } from './enemies';
 import { clearArrows } from './enemy-ai';
 import { collide, isFree } from './physics';
 import { WORLD_R, PLACES, ROADS, TORII_PATH, RIVER, place, inLake, lineDist, type P2 } from './map';
@@ -27,9 +27,13 @@ const SAFE_R = 75;        // nothing attacks you around the shrine you start at
 
 export const camps: Camp[] = [];
 
-/** who lives in a camp: weaker kinds near the shrine, archers and brutes further out */
+/** who lives in a camp: specialists become more frequent further from the shrine */
 function roster(size: number, tier: number, boss: boolean): EnemyKind[] {
-  const pool: [EnemyKind, number][] = [['oni', 3], ['ashigaru', 1.5 + tier * 2], ['arquero', tier > 0.25 ? 1 + tier * 2 : 0], ['bruto', tier > 0.45 ? tier * 2.2 : 0]];
+  const pool: [EnemyKind, number][] = [
+    ['oni', 3], ['ashigaru', 1.5 + tier * 2], ['arquero', tier > 0.25 ? 1 + tier * 2 : 0],
+    ['bruto', tier > 0.45 ? tier * 2.2 : 0], ['escudero', tier > 0.2 ? 0.9 + tier : 0],
+    ['acechador', tier > 0.27 ? 1.7 * tier + 0.4 : 0], ['hechicero', tier > 0.42 ? 1.5 * tier + 0.3 : 0]
+  ];
   const tot = pool.reduce((s, [, w]) => s + w, 0), out: EnemyKind[] = boss ? ['jefe'] : [];
   while (out.length < size) {
     let w = Math.random() * tot;
@@ -39,7 +43,7 @@ function roster(size: number, tier: number, boss: boolean): EnemyKind[] {
 }
 function makeCamp(x: number, z: number, kinds: EnemyKind[], r: number, extra: Partial<Camp> = {}): Camp {
   const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
-  return { x, z, r, leash: r + 18, size: kinds.length, boss: kinds.includes('jefe'), elite: kinds.find(isElite), tier, kinds, roster: kinds.slice(), active: false, clearedAt: -1, ...extra };
+  return { x, z, r, leash: r + 18, size: kinds.length, boss: kinds.find(isBoss), elite: kinds.find(isElite), tier, kinds, roster: kinds.slice(), active: false, clearedAt: -1, ...extra };
 }
 /** which sub-boss guards a chest (the thunder oni only far from the shrine) */
 const pickElite = (tier: number): EnemyKind => { const l = ELITES.filter(k => k !== 'raijin' || tier > 0.45); return l[Math.floor(Math.random() * l.length)]; };
@@ -67,19 +71,19 @@ function routeAt(pts: P2[], len: number, t: number): P2 {
 const lens = new Map<Camp, number>();
 
 function buildCamps() {
-  // guarded places: [place, roster]
-  const guarded: [string, EnemyKind[]][] = [
-    ['castillo', ['jefe', 'arquero', 'arquero', 'ashigaru', 'ashigaru', 'oni']],
-    ['cementerio', ['jefe', 'oni', 'oni', 'oni', 'arquero']],
-    ['pagoda', ['jefe', 'arquero', 'arquero', 'ashigaru']],
-    ['inari', ['jefe', 'bruto', 'arquero']],
-    ['aldea', ['oni', 'oni', 'ashigaru', 'ashigaru']],
-    ['campamento', ['ashigaru', 'ashigaru', 'ashigaru', 'arquero', 'bruto']],
-    ['torii', ['arquero', 'arquero', 'ashigaru']]
+  // Offset bosses into their courtyards so they have room to move and telegraph their attacks.
+  const guarded: [string, EnemyKind[], P2?][] = [
+    ['castillo', ['kuro', 'escudero', 'escudero', 'ashigaru', 'arquero', 'oni'], [0, 25]],
+    ['cementerio', ['jefe', 'hechicero', 'oni', 'oni', 'acechador']],
+    ['pagoda', ['tenguMayor', 'arquero', 'acechador', 'ashigaru'], [0, 13]],
+    ['inari', ['raijinMayor', 'bruto', 'ashigaru'], [-2, -10]],
+    ['aldea', ['oni', 'oni', 'ashigaru', 'escudero']],
+    ['campamento', ['ashigaru', 'acechador', 'escudero', 'arquero', 'bruto']],
+    ['torii', ['acechador', 'hechicero', 'ashigaru']]
   ];
-  for (const [id, kinds] of guarded) {
-    const p = place(id), r = Math.min(24, p.r * 0.5), c = makeCamp(p.x, p.z, kinds, r, { name: p.name });
-    const [cx, cz, ry] = chestSpot(p.x, p.z, 4, r * 0.8);
+  for (const [id, kinds, [dx, dz] = [0, 0]] of guarded) {
+    const p = place(id), r = Math.min(24, p.r * 0.5), c = makeCamp(p.x + dx, p.z + dz, kinds, r, { name: p.name });
+    const [cx, cz, ry] = chestSpot(c.x, c.z, 4, r * 0.8);
     c.chest = makeChest(cx, cz, ry, c.boss ? 'jefe' : 'guarida', c.tier, true);
     camps.push(c);
   }
@@ -121,7 +125,7 @@ function activate(c: Camp) {
     const guard = isElite(kind) && c.chest, ox = guard ? c.chest!.x : c.x, oz = guard ? c.chest!.z : c.z;
     let x = ox, z = oz;
     for (let k = 0; k < 12; k++) {
-      const a = Math.random() * Math.PI * 2, r = guard ? rnd(1.6, 2.6) : kind === 'jefe' ? rnd(0, 3) : rnd(2.5, c.r * 0.7);
+      const a = Math.random() * Math.PI * 2, r = guard ? rnd(1.6, 2.6) : kind === c.boss ? rnd(0, 3) : rnd(2.5, c.r * 0.7);
       x = ox + Math.cos(a) * r; z = oz + Math.sin(a) * r;
       if (isFree(x, z, 1) && !inLake(x, z, 2)) break;
     }
@@ -203,7 +207,7 @@ export function updateEncounters(dt: number) {
     if (!fighting && (ambushT -= 0.25) <= 0) ambushT = tryAmbush() ? rnd(60, 110) : rnd(4, 8);
   }
   // heal slowly when nobody is fighting you and you have not been hit for a while
-  const fighting = enemies.some(e => e.state === 'chase' || e.state === 'windup' || e.state === 'recover');
+  const fighting = enemies.some(e => e.state !== 'idle' && e.state !== 'return');
   if (!fighting && state.time - state.lastHurt > 5) player.hp = Math.min(player.maxHp, player.hp + 4 * dt);
 }
 
