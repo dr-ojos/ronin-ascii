@@ -37,7 +37,7 @@ export type Collider =
 export interface XZ { x: number; z: number }
 
 /** the kinds of oni: each looks and fights differently (enemies.ts KINDS) */
-export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'jefe';
+export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'jefe' | 'kensei' | 'tengu' | 'raijin';
 /** idle: wandering its territory · chase / windup / recover: fighting · return: lost the player, walking home */
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'recover' | 'return';
 
@@ -64,6 +64,10 @@ interface EnemyBase {
   windup: number;
   /** attacks done (the boss slams the ground every third one) */
   swings: number;
+  /** cooldown of a special move (the tengu's blink) */
+  cd: number;
+  /** the coloured glow that follows a sub-boss around (lights.ts) */
+  aura?: { x: number; y: number; z: number };
   state: EnemyState;
   t: number;
   knock: THREE.Vector3;
@@ -83,6 +87,8 @@ export interface Camp {
   leash: number;
   size: number;
   boss: boolean;
+  /** the sub-boss guarding its chest, if any */
+  elite?: EnemyKind;
   /** the oni it is made of, and those still alive (also while despawned) */
   kinds: EnemyKind[];
   roster: EnemyKind[];
@@ -103,7 +109,7 @@ export interface Camp {
 /** a chest in the world (loot.ts) */
 export interface Chest {
   x: number; z: number; ry: number;
-  kind: 'guarida' | 'jefe' | 'oculto';
+  kind: 'guarida' | 'jefe' | 'oculto' | 'guardian';
   tier: number;
   state: 'sealed' | 'closed' | 'open';
   g?: THREE.Object3D;

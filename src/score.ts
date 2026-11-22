@@ -7,7 +7,7 @@ const STREAK_WINDOW = 6;   // seconds to land the next kill and keep the streak
 const BEST_KEY = 'ronin-ascii.best';
 try { state.best = Number(localStorage.getItem(BEST_KEY)) || 0; } catch { /* no storage: best lives only this session */ }
 
-export const POINTS = { camp: 150, bossCamp: 800, place: 250, corner: 75 };
+export const POINTS = { camp: 150, bossCamp: 800, eliteCamp: 500, place: 250, corner: 75 };
 
 /** add points; `streak` ones are multiplied and extend the streak */
 export function addPoints(n: number, label: string, streak = false) {

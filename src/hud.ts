@@ -2,6 +2,7 @@
 import { player, state } from './state';
 import { camps, discovered, placeCount, chestsLeft } from './encounters';
 import { upgradeList } from './upgrades';
+import { enemies, KINDS } from './enemies';
 import { sfx } from './sfx';
 
 const hud = document.getElementById('hud')!, msgEl = document.getElementById('msg')!, promptEl = document.getElementById('prompt')!;
@@ -29,6 +30,14 @@ export function updateHud(dt: number) {
   const rayo = state.special >= 1
     ? `RAYO  [<span class="y">${'#'.repeat(12)}</span>] ${state.time % 0.8 < 0.5 ? '<span class="y">¡ listo !  pulsa P</span>' : ''}`
     : `RAYO  [<span class="b">${'#'.repeat(rf)}</span>${'-'.repeat(12 - rf)}] <span class="d">${Math.floor(state.special * 100)} %</span>`;
+  // the life of the nearest giant or sub-boss fighting you
+  let foe: (typeof enemies)[number] | null = null, fd = 40;
+  for (const e of enemies) {
+    if ((e.kind !== 'jefe' && !KINDS[e.kind].elite) || e.state === 'idle' || e.state === 'return') continue;
+    const d = Math.hypot(e.g.position.x - player.pos.x, e.g.position.z - player.pos.z); if (d < fd) { fd = d; foe = e; }
+  }
+  const ff = foe ? Math.max(0, Math.ceil(foe.hp / foe.maxHp * 16)) : 0;
+  const foeBar = foe ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n` : '';
   hud.innerHTML =
     `<span class="r">浪人</span> RONIN ASCII\n` +
     `VIDA  [<span class="${player.hp < 30 ? 'r' : 'y'}">${bar}</span>] ${Math.ceil(player.hp)}\n` +
@@ -37,6 +46,7 @@ export function updateHud(dt: number) {
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}\n` +
     (ups ? `<span class="y">${ups}</span>\n` : '') +
+    foeBar +
     `${gain}\n` +
     `<span class="d">esquiva ${player.dashCd > 0 ? '·'.repeat(Math.ceil(player.dashCd * 8)) : 'lista'}  ·  paleta ${modes[state.colorMode]}${sfx.muted ? '  ·  sin sonido' : ''}</span>`;
 }

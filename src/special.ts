@@ -42,8 +42,8 @@ function segment(g: THREE.Group, a: THREE.Vector3, b: THREE.Vector3, r: number, 
     const s = new THREE.Mesh(SEG, m); s.position.copy(mid); s.quaternion.copy(q); s.scale.set(k, len, k); g.add(s);
   }
 }
-/** a jagged bolt from the sky to `to`, with a couple of forks */
-function bolt(to: THREE.Vector3) {
+/** a jagged bolt from the sky to `to`, with a couple of forks (also the thunder oni's, enemy-ai.ts) */
+export function bolt(to: THREE.Vector3) {
   const g = new THREE.Group(), core = coreMat.clone(), glow = glowMat.clone();
   const top = new THREE.Vector3(to.x + rnd(-4, 4), to.y + 30, to.z + rnd(-4, 4));
   const n = 12, pts: THREE.Vector3[] = [];
@@ -67,6 +67,8 @@ function bolt(to: THREE.Vector3) {
 const flash = new THREE.PointLight(0xcfe0ff, 0, 60, 1);
 scene.add(flash);
 let flashT = 0;
+/** light the sky for an instant */
+export const skyFlash = (k = 0.25) => { flashT = Math.max(flashT, k); };
 
 /** P pressed */
 export function tryLightning() {

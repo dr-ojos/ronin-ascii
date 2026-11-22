@@ -93,13 +93,13 @@ function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, 
   for (const c of camps) {
     if (c.route || c.temp || !seen.has(c) || !near(c.x, c.z, 260)) continue;
     const [px, py] = toPx(c.x, c.z);
-    ctx.fillStyle = c.roster.length ? '#c0483a' : '#5c6478'; ctx.fillText(c.roster.length ? (c.boss ? 'X' : 'x') : '.', px, py);
+    ctx.fillStyle = c.roster.length ? '#c0483a' : '#5c6478'; ctx.fillText(c.roster.length ? (c.boss ? 'X' : c.elite ? '!' : 'x') : '.', px, py);
   }
   for (const c of chests) {
     if (c.state === 'open' || !near(c.x, c.z, c.kind === 'oculto' ? 45 : 140)) continue;
     if (isBig && c.kind === 'oculto' && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) > 45) continue;
     const [px, py] = toPx(c.x, c.z);
-    ctx.fillStyle = c.state === 'sealed' ? '#8a7440' : '#ffd060'; ctx.fillText('$', px, py);
+    ctx.fillStyle = c.kind === 'guardian' ? (c.state === 'sealed' ? '#7a5a9a' : '#d0a0ff') : c.state === 'sealed' ? '#8a7440' : '#ffd060'; ctx.fillText('$', px, py);
   }
   ctx.fillStyle = COL.oni;
   for (const e of enemies) { const [px, py] = toPx(e.g.position.x, e.g.position.z); ctx.fillText(KINDS[e.kind].glyph, px, py); }

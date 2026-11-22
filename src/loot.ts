@@ -1,5 +1,5 @@
 // Rewards. Chests: one in every camp (sealed with an ofuda until the camp is cleared), a lacquered one
-// where a giant lives, and plain ones hidden near the corners of the wilds. Walk up and press E:
+// where a giant lives, a violet one watched by a sub-boss (always an upgrade inside), and plain ones hidden near the corners of the wilds. Walk up and press E:
 // (or cut it open with the katana): mon (points), healing and often an upgrade (upgrades.ts). Slain oni also drop mon and onigiri.
 import * as THREE from 'three';
 import { scene } from './renderer';
@@ -19,7 +19,7 @@ import type { Chest } from './types';
 export const chests: Chest[] = [];
 export function makeChest(x: number, z: number, ry: number, kind: Chest['kind'], tier: number, sealed: boolean): Chest {
   const c: Chest = { x, z, ry, kind, tier, state: sealed ? 'sealed' : 'closed', openT: 0 };
-  addCollider({ x, z, r: kind === 'jefe' ? 0.9 : 0.7 });
+  addCollider({ x, z, r: kind === 'jefe' ? 0.9 : kind === 'guardian' ? 0.8 : 0.7 });
   chests.push(c);
   return c;
 }
@@ -28,6 +28,7 @@ export function makeChest(x: number, z: number, ry: number, kind: Chest['kind'],
 const CM = {
   red: tagMat(M(0x8e1d14, { roughness: 0.35, metalness: 0.1 }), CLS.wood),
   black: tagMat(M(0x141216, { roughness: 0.3, metalness: 0.2 }), CLS.wood),
+  violet: tagMat(M(0x3a1a5a, { roughness: 0.3, metalness: 0.15, emissive: 0x12061e }), CLS.wood),
   wood: tagMat(M(0x5a3e28, { roughness: 0.9 }), CLS.wood),
   gold: tagMat(M(0xffd060, { emissive: 0xb07a10, emissiveIntensity: 1.2, metalness: 0.7, roughness: 0.3 }), CLS.light),
   paper: tagMat(M(0xf2eee0, { roughness: 1, side: THREE.DoubleSide, emissive: 0x3a1a10 }), CLS.wood),
@@ -38,7 +39,7 @@ const part = (p: THREE.Object3D, m: THREE.Material, x: number, y: number, z: num
   const o = new THREE.Mesh(BOX, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); p.add(o); return o;
 };
 function buildChest(c: Chest) {
-  const g = new THREE.Group(), body = c.kind === 'jefe' ? CM.black : c.kind === 'oculto' ? CM.wood : CM.red;
+  const g = new THREE.Group(), body = c.kind === 'jefe' ? CM.black : c.kind === 'guardian' ? CM.violet : c.kind === 'oculto' ? CM.wood : CM.red;
   part(g, body, 0, 0.3, 0, 1.1, 0.6, 0.7);
   for (const x of [-0.38, 0.38]) part(g, CM.gold, x, 0.3, 0, 0.08, 0.62, 0.72);
   const lid = new THREE.Group(); lid.position.set(0, 0.6, -0.35); g.add(lid);
@@ -47,7 +48,7 @@ function buildChest(c: Chest) {
   part(lid, CM.gold, 0, 0.02, 0.72, 0.16, 0.18, 0.05);               // lock
   if (c.state === 'sealed') { const seal = part(g, CM.paper, 0, 0.42, 0.36, 0.22, 0.55, 0.01); seal.name = 'seal'; }
   const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), CM.glow.clone()); glow.position.y = 0.75; glow.scale.set(1, 0.6, 0.8); glow.name = 'glow'; g.add(glow);
-  if (c.kind === 'jefe') g.scale.setScalar(1.35);
+  if (c.kind === 'jefe') g.scale.setScalar(1.35); else if (c.kind === 'guardian') g.scale.setScalar(1.18);
   shadowTree(g); glow.castShadow = false;
   g.position.set(c.x, surfaceY(c.x, c.z), c.z); g.rotation.y = c.ry;
   if (c.state === 'open') lid.rotation.x = -1.9;
@@ -76,16 +77,16 @@ function openChest(c: Chest) {
   c.state = 'open'; c.openT = 0.0001; removeLights(c);
   state.chests++;
   const lines: string[] = [];
-  const mon = Math.round((c.kind === 'jefe' ? 500 : c.kind === 'oculto' ? 220 : 120) * (1 + c.tier * 1.5) / 10) * 10;
+  const mon = Math.round((c.kind === 'jefe' ? 500 : c.kind === 'guardian' ? 360 : c.kind === 'oculto' ? 220 : 120) * (1 + c.tier * 1.5) / 10) * 10;
   addPoints(mon, 'mon del cofre'); lines.push(`+${mon} mon`);
-  if (c.kind !== 'oculto') { const h = c.kind === 'jefe' ? 50 : 30; player.hp = Math.min(player.maxHp, player.hp + h); lines.push(`+${h} vida`); }
-  const chance = c.kind === 'jefe' ? 1 : c.kind === 'oculto' ? 0.75 : 0.4;
+  if (c.kind !== 'oculto') { const h = c.kind === 'jefe' ? 50 : c.kind === 'guardian' ? 40 : 30; player.hp = Math.min(player.maxHp, player.hp + h); lines.push(`+${h} vida`); }
+  const chance = c.kind === 'jefe' || c.kind === 'guardian' ? 1 : c.kind === 'oculto' ? 0.75 : 0.4;
   const up = Math.random() < chance ? rollUpgrade() : null;
   if (up) { grant(up); lines.push(`${UPGRADES[up].name} ${roman(lvl(up))}`, UPGRADES[up].desc); }
   const y = c.g ? c.g.position.y : surfaceY(c.x, c.z);
   burst(new THREE.Vector3(c.x, y + 0.9, c.z), 0xffd060, up ? 120 : 60, up ? 6 : 4, 0.14);
   sfx.chime(!!up);
-  showMsg(`— ${c.kind === 'oculto' ? 'COFRE ESCONDIDO' : c.kind === 'jefe' ? 'TESORO DEL JEFE' : 'COFRE DE LA GUARIDA'} —\n${lines.join('\n')}`, up ? 3.4 : 2.4);
+  showMsg(`— ${c.kind === 'oculto' ? 'COFRE ESCONDIDO' : c.kind === 'jefe' ? 'TESORO DEL JEFE' : c.kind === 'guardian' ? 'TESORO DEL GUARDIÁN' : 'COFRE DE LA GUARIDA'} —\n${lines.join('\n')}`, up ? 3.4 : 2.4);
 }
 
 // ------------------------------------------------------------ drops: mon and onigiri
@@ -126,7 +127,7 @@ export function updateLoot(dt: number) {
     glow.material.opacity = c.state === 'closed' ? 0.18 + 0.1 * Math.sin(state.time * 3 + c.x) : 0;
     if (c.state !== 'open' && d < nd) { nd = d; near = c; }
   }
-  if (near && !state.dead) state.prompt = near.state === 'sealed' ? 'sellado con un ofuda · limpia la guarida para abrirlo' : '[ E ] o un tajo para abrir el cofre';
+  if (near && !state.dead) state.prompt = near.state === 'sealed' ? (near.kind === 'guardian' ? 'sellado con un ofuda · vence a su guardián para abrirlo' : 'sellado con un ofuda · limpia la guarida para abrirlo') : '[ E ] o un tajo para abrir el cofre';
   nearest = near;
   // drops: pop up, settle, bob; drawn to you when close
   for (let i = pickups.length - 1; i >= 0; i--) {
@@ -158,7 +159,7 @@ export function hitChests(px: number, pz: number, face: number, reach: number, s
     if (c.state === 'closed') openChest(c);
     else {
       burst(new THREE.Vector3(c.x, c.g.position.y + 0.7, c.z), 0xfff0c0, 14, 4, 0.1);
-      showMsg('el ofuda no se rompe mientras quede un oni en la guarida', 1.6);
+      sealedMsg(c);
     }
   }
   return n;
@@ -173,5 +174,6 @@ export function chestInReach(px: number, pz: number, r: number) {
 export function tryOpen() {
   if (!state.playing || state.dead || !nearest) return;
   if (nearest.state === 'closed') openChest(nearest);
-  else if (nearest.state === 'sealed') showMsg('el ofuda no se rompe mientras quede un oni en la guarida', 1.6);
+  else if (nearest.state === 'sealed') sealedMsg(nearest);
 }
+const sealedMsg = (c: Chest) => showMsg(c.kind === 'guardian' ? 'el ofuda no se rompe mientras su guardián siga en pie' : 'el ofuda no se rompe mientras quede un oni en la guarida', 1.6);

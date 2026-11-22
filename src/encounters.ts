@@ -2,10 +2,11 @@
 //  - camps: the strong ones at the named places, and many small ones in the wilds (landmarks.ts),
 //  - patrols: small groups walking the roads back and forth,
 //  - ambushes: now and then, out in the wilds, a group waiting a little ahead of you.
+//  - guardians: a sub-boss (kensei, tengu, oni del trueno) standing by many of the hidden chests,
+//    and by the fire of some camps of the wilds: their chest stays sealed while the guardian lives.
 // A group's oni only exist while you are near it; walk away and they vanish (keeping who is left),
 // clear a camp and it stays empty for a while. Also: starting a new run, and slow healing out of combat.
-import { scene } from './renderer';
-import { enemies, spawnOni } from './enemies';
+import { enemies, spawnOni, despawn, ELITES, isElite } from './enemies';
 import { clearArrows } from './enemy-ai';
 import { collide, isFree } from './physics';
 import { WORLD_R, PLACES, ROADS, TORII_PATH, RIVER, place, inLake, lineDist, type P2 } from './map';
@@ -38,8 +39,11 @@ function roster(size: number, tier: number, boss: boolean): EnemyKind[] {
 }
 function makeCamp(x: number, z: number, kinds: EnemyKind[], r: number, extra: Partial<Camp> = {}): Camp {
   const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
-  return { x, z, r, leash: r + 18, size: kinds.length, boss: kinds.includes('jefe'), tier, kinds, roster: kinds.slice(), active: false, clearedAt: -1, ...extra };
+  return { x, z, r, leash: r + 18, size: kinds.length, boss: kinds.includes('jefe'), elite: kinds.find(isElite), tier, kinds, roster: kinds.slice(), active: false, clearedAt: -1, ...extra };
 }
+/** which sub-boss guards a chest (the thunder oni only far from the shrine) */
+const pickElite = (tier: number): EnemyKind => { const l = ELITES.filter(k => k !== 'raijin' || tier > 0.45); return l[Math.floor(Math.random() * l.length)]; };
+const GUARD_MIN = SAFE_R + 45;   // no guardians this close to the shrine
 /** a free spot for a chest near a place's centre */
 function chestSpot(x: number, z: number, r0: number, r1: number): [number, number, number] {
   for (let k = 0; k < 40; k++) {
@@ -80,9 +84,12 @@ function buildCamps() {
     camps.push(c);
   }
   // the camps of the wilds, with their chest by the fire
+  // (a third of the ones further out also have a guardian by the chest)
   for (const s of CAMP_SPOTS) {
-    const c = makeCamp(s.x, s.z, roster(s.size, s.tier, s.boss), s.r);
-    c.chest = makeChest(s.chest[0], s.chest[1], s.chest[2], c.boss ? 'jefe' : 'guarida', s.tier, true);
+    const kinds = roster(s.size, s.tier, s.boss);
+    if (!s.boss && s.tier > 0.3 && Math.hypot(s.x, s.z) > GUARD_MIN && Math.random() < 0.33) kinds.push(pickElite(s.tier));
+    const c = makeCamp(s.x, s.z, kinds, s.r);
+    c.chest = makeChest(s.chest[0], s.chest[1], s.chest[2], c.boss ? 'jefe' : c.elite ? 'guardian' : 'guarida', s.tier, true);
     camps.push(c);
   }
   // patrols along the roads (two on the long ones)
@@ -96,16 +103,26 @@ function buildCamps() {
       lens.set(c, len); camps.push(c);
     }
   }
-  for (const [x, z, ry] of HIDDEN_CHESTS) makeChest(x, z, ry, 'oculto', Math.min(1, Math.hypot(x, z) / WORLD_R), false);
+  // hidden chests: half of those out in the wilds have a guardian (with an escort, far out)
+  for (const [x, z, ry] of HIDDEN_CHESTS) {
+    const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
+    if (Math.hypot(x, z) < GUARD_MIN || Math.random() > 0.5) { makeChest(x, z, ry, 'oculto', tier, false); continue; }
+    const escort = tier > 0.7 ? 2 : tier > 0.45 ? 1 : 0;
+    const c = makeCamp(x, z, [pickElite(tier), ...roster(escort, tier, false)], 8);
+    c.chest = makeChest(x, z, ry, 'guardian', tier, true);
+    camps.push(c);
+  }
 }
 
 function activate(c: Camp) {
   c.active = true;
   for (const kind of c.roster) {
-    let x = c.x, z = c.z;
-    for (let k = 0; k < 12; k++) {   // a free spot around the camp's centre
-      const a = Math.random() * Math.PI * 2, r = kind === 'jefe' ? rnd(0, 3) : rnd(2.5, c.r * 0.7);
-      x = c.x + Math.cos(a) * r; z = c.z + Math.sin(a) * r;
+    // a free spot around the camp's centre (a guardian: right beside its chest)
+    const guard = isElite(kind) && c.chest, ox = guard ? c.chest!.x : c.x, oz = guard ? c.chest!.z : c.z;
+    let x = ox, z = oz;
+    for (let k = 0; k < 12; k++) {
+      const a = Math.random() * Math.PI * 2, r = guard ? rnd(1.6, 2.6) : kind === 'jefe' ? rnd(0, 3) : rnd(2.5, c.r * 0.7);
+      x = ox + Math.cos(a) * r; z = oz + Math.sin(a) * r;
       if (isFree(x, z, 1) && !inLake(x, z, 2)) break;
     }
     const p = { x, z }; collide(p, 0.6);
@@ -114,7 +131,7 @@ function activate(c: Camp) {
 }
 function deactivate(c: Camp) {
   c.active = false;
-  for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].camp === c) { scene.remove(enemies[i].g); enemies.splice(i, 1); }
+  for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].camp === c) { despawn(enemies[i]); enemies.splice(i, 1); }
   if (c.temp) camps.splice(camps.indexOf(c), 1);
 }
 
@@ -123,7 +140,7 @@ export const discovered = new Set<string>();
 export const placeCount = () => PLACES.length + POIS.length;
 
 export function reset() {
-  for (const e of enemies) scene.remove(e.g);
+  for (const e of enemies) despawn(e);
   enemies.length = 0; clearArrows();
   if (!camps.length) buildCamps();
   for (let i = camps.length - 1; i >= 0; i--) if (camps[i].temp) camps.splice(i, 1);
