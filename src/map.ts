@@ -160,8 +160,9 @@ export function biomeAt(x: number, z: number): Biome {
 // ground mask (2048², ~0.8 m / px): R = road, G = water, B = built (plazas, floors). No grass on any of them.
 // tree mask (1024², ~1.6 m / px): anything > 0 keeps trees and rocks away (roads, water, places).
 export const MASK_RES = 2048, TREE_RES = 1024;
-/** footprints added by structures.ts before the masks are drawn: [x, z, w, d, rotY] rectangles and [x, z, r] discs */
-export const FOOTPRINTS: { rects: [number, number, number, number, number][]; discs: P2[]; discR: number[] } = { rects: [], discs: [], discR: [] };
+/** footprints added by structures.ts / landmarks.ts before the masks are drawn: [x, z, w, d, rotY] rectangles and [x, z, r] discs
+ *  (both bare ground), and clearings [x, z, r] that only keep trees and rocks away */
+export const FOOTPRINTS: { rects: [number, number, number, number, number][]; discs: P2[]; discR: number[]; clearings: [number, number, number][] } = { rects: [], discs: [], discR: [], clearings: [] };
 
 function drawLine(ctx: CanvasRenderingContext2D, pts: P2[], w: number) {
   ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -200,6 +201,7 @@ export function buildMasks() {
   for (const p of PLACES) if (p.flat > 0 && p.id !== 'claro') { t.beginPath(); t.arc(p.x, p.z, p.r, 0, Math.PI * 2); t.fill(); }
   for (const [x, z, w, d, ry] of FOOTPRINTS.rects) { t.save(); t.translate(x, z); t.rotate(-ry); t.fillRect(-w / 2 - 3, -d / 2 - 3, w + 6, d + 6); t.restore(); }
   FOOTPRINTS.discs.forEach(([x, z], i) => { t.beginPath(); t.arc(x, z, FOOTPRINTS.discR[i] + 3, 0, Math.PI * 2); t.fill(); });
+  for (const [x, z, r] of FOOTPRINTS.clearings) { t.beginPath(); t.arc(x, z, r, 0, Math.PI * 2); t.fill(); }
   const td = t.getImageData(0, 0, TREE_RES, TREE_RES).data;
   treeMask = new Uint8Array(TREE_RES * TREE_RES);
   for (let i = 0; i < treeMask.length; i++) treeMask[i] = td[i * 4];

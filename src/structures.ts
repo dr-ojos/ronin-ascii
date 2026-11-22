@@ -15,7 +15,7 @@ let R = seeded(7331);
 const rnd = (a: number, b: number) => a + R() * (b - a);
 
 // ------------------------------------------------------------ materials
-const MT = {
+export const MT = {
   wood: tagMat(M(0x3e2b22, { roughness: 0.9 }), CLS.wood),
   woodL: tagMat(M(0x6a4630, { roughness: 0.8 }), CLS.wood),
   red: tagMat(M(0xb3261e, { roughness: 0.6 }), CLS.wood),
@@ -87,7 +87,7 @@ function shojiTexture(dark = false) {
 }
 
 // ------------------------------------------------------------ geometry helpers (unit shapes, scaled per mesh)
-const G = {
+export const G = {
   box: new THREE.BoxGeometry(1, 1, 1),
   cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 10),
   cyl6: new THREE.CylinderGeometry(0.5, 0.5, 1, 6),
@@ -96,15 +96,15 @@ const G = {
   plane: new THREE.PlaneGeometry(1, 1)
 };
 // a ridge tent: triangular prism along local z, apex up
-const TENT = new THREE.CylinderGeometry(1.8, 1.8, 4.2, 3, 1, true).rotateX(-Math.PI / 2).translate(0, 0.9, 0);
-type Obj = THREE.Object3D;
-function add(parent: Obj, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number, ry = 0) {
+export const TENT = new THREE.CylinderGeometry(1.8, 1.8, 4.2, 3, 1, true).rotateX(-Math.PI / 2).translate(0, 0.9, 0);
+export type Obj = THREE.Object3D;
+export function add(parent: Obj, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number, ry = 0) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.y = ry; parent.add(m); return m;
 }
-const box = (p: Obj, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, ry = 0) => add(p, G.box, mat, x, y + h / 2, z, w, h, d, ry);
-const post = (p: Obj, r: number, h: number, mat: THREE.Material, x: number, y: number, z: number) => add(p, G.cyl, mat, x, y + h / 2, z, r * 2, h, r * 2);
+export const box = (p: Obj, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, ry = 0) => add(p, G.box, mat, x, y + h / 2, z, w, h, d, ry);
+export const post = (p: Obj, r: number, h: number, mat: THREE.Material, x: number, y: number, z: number) => add(p, G.cyl, mat, x, y + h / 2, z, r * 2, h, r * 2);
 /** hip roof / pyramid: footprint w x d, height h, base at y */
-const pyr = (p: Obj, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, ry = 0) => add(p, G.pyr, mat, x, y, z, w, h, d, ry);
+export const pyr = (p: Obj, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, ry = 0) => add(p, G.pyr, mat, x, y, z, w, h, d, ry);
 
 /** world-space helpers for a group placed at (x, y, z) rotated by ry */
 function toWorld(gx: number, gz: number, ry: number, lx: number, lz: number): P2 {
@@ -112,19 +112,19 @@ function toWorld(gx: number, gz: number, ry: number, lx: number, lz: number): P2
   return [gx + lx * c + lz * s, gz - lx * s + lz * c];
 }
 /** a rotated rectangle as a capsule along its long side (+ its footprint in the masks) */
-function solidBox(x: number, z: number, w: number, d: number, ry: number, footprint = true) {
+export function solidBox(x: number, z: number, w: number, d: number, ry: number, footprint = true) {
   const long = Math.max(w, d), short = Math.min(w, d), along = w >= d;
   const [ax, az] = toWorld(x, z, ry, along ? -(long - short) / 2 : 0, along ? 0 : -(long - short) / 2);
   const [bx, bz] = toWorld(x, z, ry, along ? (long - short) / 2 : 0, along ? 0 : (long - short) / 2);
   addCollider({ seg: [ax, az, bx, bz], r: short / 2 });
   if (footprint) FOOTPRINTS.rects.push([x, z, w, d, ry]);
 }
-function disc(x: number, z: number, r: number) { FOOTPRINTS.discs.push([x, z]); FOOTPRINTS.discR.push(r); }
+export function disc(x: number, z: number, r: number) { FOOTPRINTS.discs.push([x, z]); FOOTPRINTS.discR.push(r); }
 
 /** big things far from the player are hidden outright (cheaper than letting three cull every mesh) */
 const sites: { o: Obj; x: number; z: number; r: number }[] = [];
 export const blockers: { o: Obj; x: number; z: number; r: number }[] = [];
-function site(o: Obj, x: number, z: number, r: number, blocker = true) {
+export function site(o: Obj, x: number, z: number, r: number, blocker = true) {
   shadowTree(o); scene.add(o); sites.push({ o, x, z, r });
   if (blocker) blockers.push({ o, x, z, r });
   o.traverse(c => { const m = (c as THREE.Mesh).material; if (m && ((m as THREE.Material) === MT.fire || m === MT.chochin || m === MT.shoji || m === MT.gold)) c.castShadow = false; });
@@ -135,7 +135,7 @@ export function updateStructures(px: number, pz: number) {
 }
 
 // ------------------------------------------------------------ small props
-function stoneLantern(p: Obj, x: number, y: number, z: number, wx: number, wz: number, k = 1, light = true) {
+export function stoneLantern(p: Obj, x: number, y: number, z: number, wx: number, wz: number, k = 1, light = true) {
   const l = new THREE.Group(); l.position.set(x, y, z); l.scale.setScalar(k); p.add(l);
   box(l, 0.7, 0.25, 0.7, MT.stone, 0, 0, 0);
   post(l, 0.15, 0.9, MT.stone, 0, 0.25, 0);
@@ -144,13 +144,13 @@ function stoneLantern(p: Obj, x: number, y: number, z: number, wx: number, wz: n
   addCollider({ x: wx, z: wz, r: 0.45 * k });
   if (light) addLight({ x: wx, y: groundY(wx, wz) + 1.4 * k, z: wz, color: 0xff9a40, intensity: 5, distance: 13, decay: 1.4 });
 }
-function hangingLantern(p: Obj, x: number, y: number, z: number, s = 1) {
+export function hangingLantern(p: Obj, x: number, y: number, z: number, s = 1) {
   const l = add(p, G.sphere, MT.chochin, x, y, z, 0.5 * s, 0.68 * s, 0.5 * s);
   add(p, G.cyl, MT.wood, x, y + 0.36 * s, z, 0.42 * s, 0.07 * s, 0.42 * s);
   add(p, G.cyl, MT.wood, x, y - 0.36 * s, z, 0.42 * s, 0.07 * s, 0.42 * s);
   return l;
 }
-function torii(p: Obj, x: number, y: number, z: number, ry: number, k = 1) {
+export function torii(p: Obj, x: number, y: number, z: number, ry: number, k = 1) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry; g.scale.setScalar(k); p.add(g);
   for (const sx of [-2.3, 2.3]) add(g, G.cyl, MT.red, sx, 2.2, 0, 0.48, 4.4, 0.48);
   box(g, 6.6, 0.32, 0.55, MT.black, 0, 4.35, 0);
@@ -160,7 +160,7 @@ function torii(p: Obj, x: number, y: number, z: number, ry: number, k = 1) {
   return g;
 }
 /** a small shrine hall (the main one, scaled down) */
-function miniShrine(p: Obj, x: number, y: number, z: number, ry: number, k: number) {
+export function miniShrine(p: Obj, x: number, y: number, z: number, ry: number, k: number) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry; g.scale.setScalar(k); p.add(g);
   box(g, 10, 0.7, 7, MT.stone, 0, 0, 0);
   box(g, 7.9, 2.6, 5, MT.wood, 0, 0.85, -0.1);

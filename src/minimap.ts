@@ -4,9 +4,12 @@
 // (the first time, it counts as discovered and gives points).
 import { HALF, SIZE, WORLD_R, PLACES, ROADS, RIVER, TORII_PATH, BRIDGES, biomeAt, groundAt, treeBlocked, type Place } from './map';
 import { groundY } from './terrain';
-import { enemies } from './enemies';
+import { enemies, KINDS } from './enemies';
 import { showMsg } from './hud';
-import { discovered } from './encounters';
+import { discovered, camps } from './encounters';
+import { POIS } from './landmarks';
+import { chests } from './loot';
+import type { Camp } from './types';
 import { addPoints, POINTS } from './score';
 import { player, state } from './state';
 
@@ -80,17 +83,34 @@ const bigEl = document.getElementById('bigmap') as HTMLCanvasElement;
 const bigX = bigEl.getContext('2d')!;
 
 const arrow = () => { const a = ((player.face % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2), k = Math.round(a / (Math.PI / 2)) % 4; return ['v', '>', '^', '<'][k]; };
-function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, s: number) {
+function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, s: number, isBig = false) {
   const toPx = (x: number, z: number): [number, number] => [ox + (x + HALF) / a.mx * a.cw * s, oy + (z + HALF) / a.mz * a.ch * s];
   ctx.font = `bold ${Math.round(a.ch * 1.2 * Math.max(1, s))}px ${FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  const near = (x: number, z: number, r: number) => isBig || Math.hypot(x - player.pos.x, z - player.pos.z) < r;
+  // corners you have found, camps you have seen (red while guarded), chests nearby (gold, dim while sealed)
+  ctx.fillStyle = COL.place;
+  POIS.forEach((p, i) => { if (discovered.has('poi' + i) && near(p.x, p.z, 400)) { const [px, py] = toPx(p.x, p.z); ctx.fillText(p.glyph, px, py); } });
+  for (const c of camps) {
+    if (c.route || c.temp || !seen.has(c) || !near(c.x, c.z, 260)) continue;
+    const [px, py] = toPx(c.x, c.z);
+    ctx.fillStyle = c.roster.length ? '#c0483a' : '#5c6478'; ctx.fillText(c.roster.length ? (c.boss ? 'X' : 'x') : '.', px, py);
+  }
+  for (const c of chests) {
+    if (c.state === 'open' || !near(c.x, c.z, c.kind === 'oculto' ? 45 : 140)) continue;
+    if (isBig && c.kind === 'oculto' && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) > 45) continue;
+    const [px, py] = toPx(c.x, c.z);
+    ctx.fillStyle = c.state === 'sealed' ? '#8a7440' : '#ffd060'; ctx.fillText('$', px, py);
+  }
   ctx.fillStyle = COL.oni;
-  for (const e of enemies) { const [px, py] = toPx(e.g.position.x, e.g.position.z); ctx.fillText(e.big ? 'O' : 'o', px, py); }
+  for (const e of enemies) { const [px, py] = toPx(e.g.position.x, e.g.position.z); ctx.fillText(KINDS[e.kind].glyph, px, py); }
   const [px, py] = toPx(player.pos.x, player.pos.z);
   ctx.fillStyle = '#000'; ctx.fillRect(px - 5, py - 6, 10, 12);
   ctx.fillStyle = COL.you; ctx.fillText(state.time % 1 < 0.75 ? arrow() : '@', px, py);
   ctx.textBaseline = 'top'; ctx.textAlign = 'left';
 }
 let t = 0, lastPlace: Place | null = null, placeT = 1.5;
+/** camps you have come close to (shown on the maps from then on) */
+const seen = new Set<Camp>();
 export function updateMinimap(dt: number) {
   t -= dt; placeT -= dt;
   if (t > 0) return; t = 0.1;
@@ -105,6 +125,15 @@ export function updateMinimap(dt: number) {
     lastPlace = here; placeT = 0;
   }
   zone.textContent = here ? here.name.toLowerCase() : 'tierras salvajes';
+  if (!state.playing) seen.clear();
+  for (const c of camps) if (!seen.has(c) && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < 140) seen.add(c);
+  // the corners of the wilds count as discovered when you walk up to them
+  POIS.forEach((p, i) => {
+    if (state.playing && !state.dead && !discovered.has('poi' + i) && Math.hypot(p.x - player.pos.x, p.z - player.pos.z) < 11) {
+      discovered.add('poi' + i); addPoints(POINTS.corner, 'rincón descubierto');
+      showMsg(`— ${p.name.toUpperCase()} —\n+${POINTS.corner}`, 2);
+    }
+  });
   // minimap window around the player, turned with the camera so "up" is always straight ahead
   const W = mini.width, H = mini.height, D = Math.ceil(Math.hypot(W, H));
   const cx = (player.pos.x + HALF) / MINI.mx * MINI.cw, cy = (player.pos.z + HALF) / MINI.mz * MINI.ch;
@@ -125,7 +154,7 @@ export function updateMinimap(dt: number) {
     bigEl.width = Math.round(big.c.width * s); bigEl.height = Math.round(big.c.height * s);
     bigX.imageSmoothingEnabled = true;
     bigX.drawImage(big.c, 0, 0, bigEl.width, bigEl.height);
-    stamp(bigX, big, 0, 0, s);
+    stamp(bigX, big, 0, 0, s, true);
   }
   bigEl.style.display = state.bigMap ? 'block' : 'none';
 }

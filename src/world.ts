@@ -10,6 +10,7 @@ import { buildTerrainMesh, buildSkyline } from './terrain';
 import { buildStructures, updateStructures, blockers } from './structures';
 import { updateChunks, chunkBlockers } from './chunks';
 import { buildMasks } from './map';
+import { buildLandmarks } from './landmarks';
 import { player, state } from './state';
 import { rnd } from './utils';
 
@@ -92,6 +93,7 @@ scene.add(buildTerrainMesh());
 
 // the rest of the world: landmarks, roads, water. They register the footprints the masks are drawn from.
 buildStructures();
+buildLandmarks();   // oni camps and corners of the wilds
 buildMasks();
 
 // stone path + gravel courtyard

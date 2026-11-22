@@ -1,6 +1,6 @@
 // Cinematic combat audio with WebAudio:
 // master bus with compressor + long hall reverb, layered katana swings, steel rings, body impacts,
-// taiko drums for waves, oni roars, and a rain / wind / drone ambience bed.
+// taiko drums, oni roars, temple bells for loot, arrows, and a rain / wind / drone ambience bed.
 //
 // Recorded samples: every sound first looks for files listed in sounds/manifest.json (see sounds/LEEME.md).
 // A sample plays through the same reverb / panning / compressor chain; if a slot has no files (or they
@@ -260,6 +260,33 @@ export function createAudio() {
     const g = ctx.createGain(); env(g, t, 0.15, 0.08, 0.35); o.connect(g); out(g, { wet: 0.3, pan }); o.start(t); o.stop(t + 0.6);
   }
 
+  // ------------------------------------------------------------ loot and arrows (synth only)
+  function bell(t: number, f: number, peak: number, dur: number) {
+    for (const [mul, g0] of [[1, 1], [2.76, 0.35], [5.4, 0.12]] as const) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * mul;
+      const g = ctx.createGain(); env(g, t, 0.004, peak * g0, dur / mul); o.connect(g); out(g, { wet: 0.55 }); o.start(t); o.stop(t + dur + 0.1);
+    }
+  }
+  function chime(big = false) { // chest opened: a rising pentatonic arpeggio of temple bells
+    if (!ok()) return; const t = ctx.currentTime;
+    const notes = big ? [523, 659, 784, 1047, 1319] : [587, 784, 1047];
+    notes.forEach((f, i) => bell(t + i * 0.09, f, 0.12, 1.6));
+    if (big) taiko(0.8, 0);
+  }
+  function coin(heal = false) {
+    if (!ok()) return; const t = ctx.currentTime;
+    if (heal) { bell(t, 440, 0.06, 0.5); bell(t + 0.07, 660, 0.05, 0.5); return; }
+    bell(t, 1760 + rnd(-60, 60), 0.05, 0.25); bell(t + 0.05, 2350 + rnd(-60, 60), 0.04, 0.3);
+  }
+  function arrow(pan = 0) { // bowstring twang + the hiss of the arrow
+    if (!ok()) return; const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(110, t + 0.15);
+    const g = ctx.createGain(); env(g, t, 0.002, 0.12, 0.18); o.connect(g); out(g, { wet: 0.2, pan }); o.start(t); o.stop(t + 0.25);
+    const n = noiseSrc(t, 0.45), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3;
+    bp.frequency.setValueAtTime(2500, t); bp.frequency.exponentialRampToValueAtTime(900, t + 0.45);
+    const g2 = ctx.createGain(); env(g2, t, 0.03, 0.07, 0.4); n.connect(bp).connect(g2); out(g2, { wet: 0.25, pan });
+  }
+
   // ------------------------------------------------------------ ambience bed
   function startAmbience() {
     const t = ctx.currentTime;
@@ -301,7 +328,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, warn, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, warn, chime, coin, arrow, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

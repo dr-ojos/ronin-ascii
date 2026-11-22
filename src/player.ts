@@ -4,6 +4,7 @@ import { sam } from './avatar';
 import { sparkBurst } from './katana-fx';
 import { enemies } from './enemies';
 import { provoke } from './enemy-ai';
+import { dmgMult, dashCdMult, runMult } from './upgrades';
 import { burst, slashArc } from './fx';
 import { sfx, panOf } from './sfx';
 import { collide } from './physics';
@@ -29,7 +30,7 @@ export function tryDash() {
   if (!state.playing || state.dead || player.dashCd > 0) return;
   const mv = moveInput();
   if (mv.lengthSq() < 0.01) mv.set(Math.sin(player.face), 0, Math.cos(player.face));
-  player.dashDir.copy(mv.normalize()); player.dashT = 0.2; player.dashCd = 0.75; player.invuln = 0.3;
+  player.dashDir.copy(mv.normalize()); player.dashT = 0.2; player.dashCd = 0.75 * dashCdMult(); player.invuln = 0.3;
   player.face = Math.atan2(mv.x, mv.z);
   sfx.dash();
 }
@@ -46,7 +47,7 @@ export function updatePlayer(dt: number) {
   player.dashCd = Math.max(0, player.dashCd - dt);
   const mv = moveInput();
   // Shift: run (to cross the open world); attacking slows you down
-  let speed = keys.ShiftLeft || keys.ShiftRight ? 10 : 5.6;
+  let speed = (keys.ShiftLeft || keys.ShiftRight ? 10 : 5.6) * runMult();
   if (player.attackT >= 0) speed = 5.6 * 0.35;
   if (player.dashT > 0) {
     player.dashT -= dt;
@@ -78,7 +79,7 @@ export function updatePlayer(dt: number) {
         const d = tmp.length(), reach = (spin ? 3.3 : 2.8) + 0.45 * en.scale;
         const ang = Math.abs(angDiff(Math.atan2(tmp.x, tmp.z), player.face));
         if (d < reach && (spin || ang < 1.35)) {
-          hits++; hitPan += panOf(en.g.position.x, en.g.position.z); en.hp -= spin ? 2 : 1; en.flash = 1; provoke(en);
+          hits++; hitPan += panOf(en.g.position.x, en.g.position.z); en.hp -= (spin ? 2 : 1) * dmgMult(); en.flash = 1; provoke(en);
           en.knock.copy(tmp.normalize()).multiplyScalar((spin ? 12 : 8) / (en.big ? 3 : 1));
           if (en.state === 'windup' && !en.big) { en.state = 'recover'; en.t = 0.5; }
           burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), 0xffffff, 18, 5, 0.12);

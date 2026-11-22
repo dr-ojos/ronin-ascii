@@ -1,6 +1,6 @@
 # Ronin ASCII
 
-Un samurái sin señor, un mundo abierto bajo la luna y guaridas de onis que encuentras mientras exploras, todo dibujado con caracteres ASCII.
+Un samurái sin señor, un mundo abierto bajo la luna, guaridas de onis, patrullas, emboscadas y cofres que encuentras mientras exploras, todo dibujado con caracteres ASCII.
 **Jugar:** https://dr-ojos.github.io/ronin-ascii/
 
 Hecho con [three.js](https://threejs.org), TypeScript y [Vite](https://vite.dev).
@@ -20,19 +20,21 @@ npm run preview    # servir dist/ para probarla
 - `index.html`: página, HUD y estilos.
 - `src/main.ts`: punto de entrada y bucle de frames.
 - `src/`: un módulo por responsabilidad (`ascii.ts` efecto ASCII, `world.ts` escenario,
-  `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `encounters.ts` guaridas y encuentros, `score.ts` puntos, `hud.ts` interfaz...).
+  `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `encounters.ts` guaridas, patrullas y emboscadas, `loot.ts` cofres y botín, `upgrades.ts` mejoras, `score.ts` puntos, `hud.ts` interfaz...).
   `state.ts` guarda el estado compartido y `types.ts` los tipos comunes.
 - `src/samurai.ts` y `src/rig.ts`: personajes (procedural y con esqueleto de mocap); `nature.ts`: paisaje; `audio.ts`: sonido.
 - Mundo abierto (~1,4 km de lado, cerrado por montañas):
   - `map.ts`: el plano (lugares, caminos, lago, río y puentes, biomas del bosque, máscaras de hierba).
   - `terrain.ts`: relieve (colinas, explanadas bajo cada lugar, cuenca del lago, montañas del borde).
   - `structures.ts`: aldea, castillo, pagoda, senda de los mil torii, campamento, cementerio, puentes y farolillos.
+  - `landmarks.ts`: guaridas de onis (hoguera, tiendas, estandartes) y rincones de las tierras salvajes
+    (hokoras, jizos, torii caídos, árboles sagrados, círculos de piedra, ruinas, campos de batalla).
   - `chunks.ts`: el bosque se genera por zonas al acercarse y se descarta al alejarse (con semilla fija).
   - `lights.ts`: unas pocas luces reales se reparten cada frame entre los farolillos más cercanos.
   - `physics.ts`: colisiones en una rejilla espacial; `minimap.ts`: minimapa y mapa del mundo en ASCII.
 
 ## Controles
 
-WASD moverse · SHIFT correr · clic / K tajo · L giro pesado · ESPACIO esquivar · N mapa del mundo ·
+WASD moverse · SHIFT correr · clic / K tajo · L giro pesado · ESPACIO esquivar · E abrir cofre · N mapa del mundo ·
 C paleta · T vista sin ASCII · F modo foto · R lluvia · M sonido · + / - densidad de caracteres.
 - `public/`: modelos 3D y sonidos, copiados tal cual a `dist/`.

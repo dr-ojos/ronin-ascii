@@ -36,6 +36,8 @@ export type Collider =
 /** minimal 2D position (THREE.Vector3 fits: only x / z are used) */
 export interface XZ { x: number; z: number }
 
+/** the kinds of oni: each looks and fights differently (enemies.ts KINDS) */
+export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'jefe';
 /** idle: wandering its territory · chase / windup / recover: fighting · return: lost the player, walking home */
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'recover' | 'return';
 
@@ -48,6 +50,7 @@ export interface OniWarrior {
 }
 
 interface EnemyBase {
+  kind: EnemyKind;
   g: THREE.Object3D;
   ring: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   big: boolean;
@@ -56,6 +59,11 @@ interface EnemyBase {
   maxHp: number;
   speed: number;
   dmg: number;
+  /** strike distance and wind-up time */
+  reach: number;
+  windup: number;
+  /** attacks done (the boss slams the ground every third one) */
+  swings: number;
   state: EnemyState;
   t: number;
   knock: THREE.Vector3;
@@ -75,14 +83,32 @@ export interface Camp {
   leash: number;
   size: number;
   boss: boolean;
+  /** the oni it is made of, and those still alive (also while despawned) */
+  kinds: EnemyKind[];
+  roster: EnemyKind[];
   /** 0 = near the shrine .. 1 = the edge of the world (tougher oni) */
   tier: number;
-  /** oni still alive (also while despawned) */
-  left: number;
   active: boolean;
   /** state.time when cleared (-1 = not cleared) */
   clearedAt: number;
   name?: string;
+  /** patrols walk a road: their home moves along it */
+  route?: [number, number][];
+  routeT?: number;
+  /** ambushes are one-off camps that vanish once cleared or left behind */
+  temp?: boolean;
+  /** camps with a chest at their centre (opened once cleared) */
+  chest?: Chest;
+}
+/** a chest in the world (loot.ts) */
+export interface Chest {
+  x: number; z: number; ry: number;
+  kind: 'guarida' | 'jefe' | 'oculto';
+  tier: number;
+  state: 'sealed' | 'closed' | 'open';
+  g?: THREE.Object3D;
+  lid?: THREE.Object3D;
+  openT: number;
 }
 /** rigged oni (when the character model loaded) */
 export interface RiggedEnemy extends EnemyBase { oni: OniWarrior; move: number }

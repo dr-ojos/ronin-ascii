@@ -411,18 +411,22 @@ export function createRealSamurai(gltf: GLTF): Avatar {
 
 // ------------------------------------------------------------ oni warrior
 const oniMats = {
-  mask: new THREE.MeshPhysicalMaterial({ color: 0x8e1d14, roughness: 0.4, clearcoat: 0.8, clearcoatRoughness: 0.2 }),
-  maskBig: new THREE.MeshPhysicalMaterial({ color: 0x24302a, roughness: 0.4, clearcoat: 0.8, clearcoatRoughness: 0.2 }),
   horn: new THREE.MeshStandardMaterial({ color: 0xd9ccaa, roughness: 0.55 }),
   fang: new THREE.MeshStandardMaterial({ color: 0xf2ecdc, roughness: 0.4 }),
-  eye: new THREE.MeshBasicMaterial({ color: 0xffd040 }),
   hair: new THREE.MeshStandardMaterial({ color: 0x0c0b0d, roughness: 1 }),
   club: new THREE.MeshStandardMaterial({ color: 0x2a2a2f, metalness: 0.8, roughness: 0.45 }),
   stud: new THREE.MeshStandardMaterial({ color: 0x8a8a92, metalness: 0.9, roughness: 0.3 }),
   rope: new THREE.MeshStandardMaterial({ color: 0x9a8352, roughness: 1 })
 };
-export function createOniWarrior(gltf: GLTF, big: boolean): OniWarrior {
-  const rig = prepareRig(gltf, big ? 0x3a1512 : 0x23202a);
+/** how one kind of oni looks: body tint, mask colour, weapon */
+export interface OniLook { big: boolean; tint: number; mask: number; eye?: number; weapon: 'club' | 'spear' | 'bow' | 'bigclub' }
+const maskMats = new Map<number, THREE.MeshPhysicalMaterial>(), eyeMats = new Map<number, THREE.MeshBasicMaterial>();
+const maskMat = (c: number) => { let m = maskMats.get(c); if (!m) maskMats.set(c, m = new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.4, clearcoat: 0.8, clearcoatRoughness: 0.2 })); return m; };
+const eyeMat = (c: number) => { let m = eyeMats.get(c); if (!m) eyeMats.set(c, m = new THREE.MeshBasicMaterial({ color: c })); return m; };
+const bowMats = { wood: new THREE.MeshStandardMaterial({ color: 0x3a2214, roughness: 0.6 }), string: new THREE.MeshBasicMaterial({ color: 0xd8d0b8 }), steel: new THREE.MeshStandardMaterial({ color: 0xb8bcc8, metalness: 0.9, roughness: 0.25 }) };
+export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
+  const big = look.big, mMask = maskMat(look.mask), mEye = eyeMat(look.eye ?? 0xffd040);
+  const rig = prepareRig(gltf, look.tint);
   const { root, B, P, side, attach, act, mixer } = rig;
   const head = P('Head'), top = P('HeadTop_End'), hips = P('Hips'), neck = P('Neck');
   const rHand = P('RightHand'), rArm = P('RightArm'), lArm = P('LeftArm');
@@ -430,11 +434,11 @@ export function createOniWarrior(gltf: GLTF, big: boolean): OniWarrior {
 
   // hannya-style mask, horns, fangs and wild hair
   const h = new THREE.Group();
-  const face = mesh(new THREE.SphereGeometry(0.112, 24, 14, Math.PI / 2 - 1.3, 2.6, 0.5, 2.1), big ? oniMats.maskBig : oniMats.mask, h);
+  const face = mesh(new THREE.SphereGeometry(0.112, 24, 14, Math.PI / 2 - 1.3, 2.6, 0.5, 2.1), mMask, h);
   face.scale.set(1, 1.12, 1.08);
   for (const s of [-1, 1]) {
-    const brow = mesh(new THREE.BoxGeometry(0.06, 0.018, 0.03), big ? oniMats.maskBig : oniMats.mask, h, 0.04 * s, 0.045, 0.105); brow.rotation.z = 0.45 * s;
-    mesh(new THREE.SphereGeometry(0.014, 8, 6), oniMats.eye, h, 0.037 * s, 0.022, 0.112);
+    const brow = mesh(new THREE.BoxGeometry(0.06, 0.018, 0.03), mMask, h, 0.04 * s, 0.045, 0.105); brow.rotation.z = 0.45 * s;
+    mesh(new THREE.SphereGeometry(0.014, 8, 6), mEye, h, 0.037 * s, 0.022, 0.112);
     const horn = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.26, 8), oniMats.horn);
     horn.geometry.translate(0, 0.13, 0);
     horn.position.set(0.06 * s, 0.09, 0.03); horn.rotation.set(-0.35, 0, -0.55 * s); h.add(horn);
@@ -460,23 +464,48 @@ export function createOniWarrior(gltf: GLTF, big: boolean): OniWarrior {
   const rope = mesh(new THREE.TorusGeometry(0.2, 0.02, 6, 28), oniMats.rope, belt); rope.rotation.x = Math.PI / 2; rope.scale.y = 0.8;
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU, len = 0.3 + Math.random() * 0.15;
-    const st = mesh(new THREE.BoxGeometry(0.1, len, 0.01), big ? oniMats.mask : MAT.hakama, belt, Math.sin(a) * 0.21, -len / 2, Math.cos(a) * 0.17);
+    const st = mesh(new THREE.BoxGeometry(0.1, len, 0.01), big ? mMask : MAT.hakama, belt, Math.sin(a) * 0.21, -len / 2, Math.cos(a) * 0.17);
     st.rotation.y = a; st.rotation.x = -0.15;
   }
   belt.scale.set(sw / 0.2, 1, sw / 0.2);
   belt.position.set(hips.x, hips.y + 0.03, hips.z); attach('Hips', belt);
 
-  // kanabo (studded iron club) in the right hand
-  const club = new THREE.Group();
-  mesh(new THREE.CylinderGeometry(0.06, 0.03, 0.95, 10), oniMats.club, club, 0, 0.42, 0);
-  for (let r = 0; r < 6; r++) for (let j = 0; j < 8; j++) {
-    const a = (j / 8) * TAU + r * 0.4, y = 0.25 + r * 0.11, rad = 0.035 + (y / 0.95) * 0.028;
-    const st = mesh(new THREE.ConeGeometry(0.011, 0.03, 5), oniMats.stud, club, Math.cos(a) * rad, y, Math.sin(a) * rad);
-    st.lookAt(Math.cos(a) * 2, y, Math.sin(a) * 2); st.rotateX(Math.PI / 2);
+  if (look.weapon === 'club' || look.weapon === 'bigclub') {
+    // kanabo (studded iron club) in the right hand
+    const club = new THREE.Group();
+    mesh(new THREE.CylinderGeometry(0.06, 0.03, 0.95, 10), oniMats.club, club, 0, 0.42, 0);
+    for (let r = 0; r < 6; r++) for (let j = 0; j < 8; j++) {
+      const a = (j / 8) * TAU + r * 0.4, y = 0.25 + r * 0.11, rad = 0.035 + (y / 0.95) * 0.028;
+      const st = mesh(new THREE.ConeGeometry(0.011, 0.03, 5), oniMats.stud, club, Math.cos(a) * rad, y, Math.sin(a) * rad);
+      st.lookAt(Math.cos(a) * 2, y, Math.sin(a) * 2); st.rotateX(Math.PI / 2);
+    }
+    if (look.weapon === 'bigclub') club.scale.set(1.7, 1.35, 1.7);
+    club.rotation.x = Math.PI / 2; // points forward from the fist
+    club.position.set(rHand.x - side * 0.05, rHand.y - 0.02, rHand.z - 0.12);
+    attach('RightHand', club);
+  } else if (look.weapon === 'spear') {
+    // yari: a long shaft with a steel blade, held forward
+    const yari = new THREE.Group();
+    mesh(new THREE.CylinderGeometry(0.016, 0.016, 2.1, 6), bowMats.wood, yari, 0, 0.55, 0);
+    mesh(new THREE.ConeGeometry(0.03, 0.28, 4), bowMats.steel, yari, 0, 1.74, 0);
+    mesh(new THREE.BoxGeometry(0.12, 0.02, 0.02), bowMats.steel, yari, 0, 1.6, 0);
+    yari.rotation.x = Math.PI / 2;
+    yari.position.set(rHand.x - side * 0.03, rHand.y, rHand.z);
+    attach('RightHand', yari);
+  } else {
+    // yumi: a tall asymmetric bow in the left hand, and a quiver on the back
+    const lHand = P('LeftHand'), yumi = new THREE.Group();
+    const arc = mesh(new THREE.TorusGeometry(0.75, 0.014, 5, 24, Math.PI * 0.75), bowMats.wood, yumi); arc.rotation.z = Math.PI * 0.625; arc.position.x = -0.55;
+    mesh(new THREE.CylinderGeometry(0.003, 0.003, 1.38, 3), bowMats.string, yumi, -0.27, 0.05, 0);
+    yumi.rotation.y = Math.PI / 2;
+    yumi.position.set(lHand.x, lHand.y + 0.1, lHand.z + 0.05);
+    attach('LeftHand', yumi);
+    const quiver = new THREE.Group();
+    mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.55, 8), oniMats.rope, quiver);
+    for (let i = 0; i < 5; i++) mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.3, 3), bowMats.string, quiver, Math.cos(i) * 0.03, 0.4, Math.sin(i) * 0.03);
+    quiver.rotation.z = 0.5 * side; quiver.position.set(neck.x, neck.y - 0.25, neck.z - 0.15);
+    attach('Spine2', quiver);
   }
-  club.rotation.x = Math.PI / 2; // points forward from the fist
-  club.position.set(rHand.x - side * 0.05, rHand.y - 0.02, rHand.z - 0.12);
-  attach('RightHand', club);
 
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.05, 28), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; root.add(ring);
