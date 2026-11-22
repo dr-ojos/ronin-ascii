@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { sam } from './avatar';
 import { sparkBurst } from './katana-fx';
 import { enemies } from './enemies';
+import { provoke } from './enemy-ai';
 import { burst, slashArc } from './fx';
 import { sfx, panOf } from './sfx';
 import { collide } from './physics';
@@ -77,7 +78,7 @@ export function updatePlayer(dt: number) {
         const d = tmp.length(), reach = (spin ? 3.3 : 2.8) + 0.45 * en.scale;
         const ang = Math.abs(angDiff(Math.atan2(tmp.x, tmp.z), player.face));
         if (d < reach && (spin || ang < 1.35)) {
-          hits++; hitPan += panOf(en.g.position.x, en.g.position.z); en.hp -= spin ? 2 : 1; en.flash = 1;
+          hits++; hitPan += panOf(en.g.position.x, en.g.position.z); en.hp -= spin ? 2 : 1; en.flash = 1; provoke(en);
           en.knock.copy(tmp.normalize()).multiplyScalar((spin ? 12 : 8) / (en.big ? 3 : 1));
           if (en.state === 'windup' && !en.big) { en.state = 'recover'; en.t = 0.5; }
           burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), 0xffffff, 18, 5, 0.12);

@@ -1,4 +1,5 @@
-// Oni: the live list and spawning (mocap-rigged or procedural). Their behaviour is in enemy-ai.js.
+// Oni: the live list and spawning (mocap-rigged or procedural) at a camp. Their behaviour is in enemy-ai.ts,
+// where they stand and when they appear in encounters.ts.
 import * as THREE from 'three';
 import { rigGltf } from './assets';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
@@ -6,11 +7,9 @@ import { createOniWarrior } from './rig';
 import { scene } from './renderer';
 import { ACTOR_LAYER } from './ascii';
 import { M, CLS, tagTree } from './materials';
-import { WORLD_R } from './map';
 import { surfaceY } from './structures';
-import { player } from './state';
 import { rnd } from './utils';
-import type { Enemy } from './types';
+import type { Camp, Enemy } from './types';
 
 const oniGeo = {
   robe: new THREE.ConeGeometry(0.55, 1.5, 7), head: new THREE.SphereGeometry(0.28, 12, 10),
@@ -19,8 +18,13 @@ const oniGeo = {
 };
 const hornMat = M(0xdccca2), eyeMat = new THREE.MeshBasicMaterial({ color: 0xff5a3a });
 export const enemies: Enemy[] = [];
-export function spawnOni(big: boolean) {
-  if (rigGltf) return spawnRealOni(rigGltf, big);
+/** stats for one oni of a camp: tougher further from the shrine */
+function stats(camp: Camp, big: boolean, x: number, z: number) {
+  const t = camp.tier, hp = big ? 12 + Math.round(t * 8) : 3 + Math.round(t * 2.4);
+  return { hp, maxHp: hp, dmg: Math.round((big ? 24 : 11) * (1 + t * 0.5)), camp, wander: { x, z } };
+}
+export function spawnOni(camp: Camp, big: boolean, x: number, z: number) {
+  if (rigGltf) return spawnRealOni(rigGltf, camp, big, x, z);
   const g = new THREE.Group();
   const robeMat = M(big ? 0x8a1a14 : 0x6a2a6a, { roughness: 0.8, emissive: 0x000000 });
   const maskMat = M(big ? 0xc0402a : 0xe6ddc8, { roughness: 0.6, emissive: 0x000000 });
@@ -34,32 +38,24 @@ export function spawnOni(big: boolean) {
   const ring = new THREE.Mesh(oniGeo.ring, new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring);
   const k = big ? 1.9 : rnd(0.9, 1.1); g.scale.setScalar(k);
-  const a = Math.random() * Math.PI * 2, r = rnd(18, 28);
-  let x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
-  const d = Math.hypot(x, z); if (d > WORLD_R - 4) { x *= (WORLD_R - 4) / d; z *= (WORLD_R - 4) / d; }
-  g.position.set(x, surfaceY(x, z), z);
+  g.position.set(x, surfaceY(x, z), z); g.rotation.y = Math.random() * Math.PI * 2;
   g.traverse(o => { if ((o as THREE.Mesh).isMesh && o !== ring) { o.castShadow = true; o.layers.enable(ACTOR_LAYER); } });
   tagTree(g, CLS.actor);
   scene.add(g);
   enemies.push({
-    g, robeMat, maskMat, ring, big, scale: k, hp: big ? 12 : 3, speed: big ? 2.0 : rnd(2.6, 3.6),
-    dmg: big ? 24 : 11, state: 'chase', t: 0, knock: new THREE.Vector3(), flash: 0, seed: Math.random() * 10
+    g, robeMat, maskMat, ring, big, scale: k, speed: big ? 2.0 : rnd(2.6, 3.6), ...stats(camp, big, x, z), state: 'idle', t: 0, knock: new THREE.Vector3(), flash: 0, seed: Math.random() * 10
   });
 }
 
-function spawnRealOni(gltf: GLTF, big: boolean) {
+function spawnRealOni(gltf: GLTF, camp: Camp, big: boolean, x: number, z: number) {
   const oni = createOniWarrior(gltf, big);
   const g = oni.root;
   const k = big ? 1.45 : 1; g.scale.setScalar(k);
-  const a = Math.random() * Math.PI * 2, r = rnd(18, 28);
-  let x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
-  const d = Math.hypot(x, z); if (d > WORLD_R - 4) { x *= (WORLD_R - 4) / d; z *= (WORLD_R - 4) / d; }
-  g.position.set(x, surfaceY(x, z), z);
+  g.position.set(x, surfaceY(x, z), z); g.rotation.y = Math.random() * Math.PI * 2;
   g.traverse(o => { if ((o as THREE.Mesh).isMesh && o !== oni.ring) o.layers.enable(ACTOR_LAYER); });
   tagTree(g, CLS.actor);
   scene.add(g);
   enemies.push({
-    g, oni, ring: oni.ring, big, scale: k, hp: big ? 12 : 3, speed: big ? 2.2 : rnd(2.8, 3.8), move: 0,
-    dmg: big ? 24 : 11, state: 'chase', t: 0, knock: new THREE.Vector3(), flash: 0, seed: Math.random() * 10
+    g, oni, ring: oni.ring, big, scale: k, speed: big ? 2.2 : rnd(2.8, 3.8), move: 0, ...stats(camp, big, x, z), state: 'idle', t: 0, knock: new THREE.Vector3(), flash: 0, seed: Math.random() * 10
   });
 }

@@ -5,10 +5,11 @@ import { burst } from './fx';
 import { sfx } from './sfx';
 import { showDeathScreen } from './hud';
 import { player, state } from './state';
+import { breakStreak } from './score';
 
 export function hurtPlayer(dmg: number) {
   if (player.invuln > 0 || state.dead) return;
-  player.hp -= dmg; player.invuln = 0.5; cellMat.uniforms.uHit.value = 1; state.shake = 0.5; sfx.hurt();
+  player.hp -= dmg; player.invuln = 0.5; state.lastHurt = state.time; breakStreak(); cellMat.uniforms.uHit.value = 1; state.shake = 0.5; sfx.hurt();
   if (player.hp <= 0) {
     player.hp = 0; state.dead = true;
     burst(new THREE.Vector3(player.pos.x, player.pos.y + 1.2, player.pos.z), 0xff3030, 120, 8);

@@ -1,6 +1,6 @@
 # Ronin ASCII
 
-Un samurái sin señor, un mundo abierto bajo la luna y oleadas de onis, todo dibujado con caracteres ASCII.
+Un samurái sin señor, un mundo abierto bajo la luna y guaridas de onis que encuentras mientras exploras, todo dibujado con caracteres ASCII.
 Hecho con [three.js](https://threejs.org), TypeScript y [Vite](https://vite.dev).
 
 ## Comandos
@@ -18,7 +18,7 @@ npm run preview    # servir dist/ para probarla
 - `index.html`: página, HUD y estilos.
 - `src/main.ts`: punto de entrada y bucle de frames.
 - `src/`: un módulo por responsabilidad (`ascii.ts` efecto ASCII, `world.ts` escenario,
-  `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `waves.ts` oleadas, `hud.ts` interfaz...).
+  `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `encounters.ts` guaridas y encuentros, `score.ts` puntos, `hud.ts` interfaz...).
   `state.ts` guarda el estado compartido y `types.ts` los tipos comunes.
 - `src/samurai.ts` y `src/rig.ts`: personajes (procedural y con esqueleto de mocap); `nature.ts`: paisaje; `audio.ts`: sonido.
 - Mundo abierto (~1,4 km de lado, cerrado por montañas):

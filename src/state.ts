@@ -11,7 +11,9 @@ export const state = {
   // camera
   yaw: 0, pitch: 0.92, camDistUser: 21, photoDist: 3.2,
   // match
-  wave: 0, kills: 0, waveTimer: 1.5, playing: false, dead: false,
+  kills: 0, playing: false, dead: false, lastHurt: -99,
+  // points: a kill streak raises the multiplier, getting hit resets it
+  score: 0, best: 0, mult: 1, streakT: 0, campsCleared: 0, gain: '', gainT: 0,
   // feel
   shake: 0, hitStop: 0, time: 0,
   // toggles

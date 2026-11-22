@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { canvas } from './renderer';
 import { changeDensity } from './ascii';
 import { tryAttack, tryDash } from './player';
-import { reset } from './waves';
+import { reset } from './encounters';
 import { sfx } from './sfx';
 import { showMsg, overlay } from './hud';
 import { state, keys } from './state';

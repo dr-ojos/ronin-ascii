@@ -1,10 +1,10 @@
-// One simulation step: player, oni, waves and effects.
+// One simulation step: player, oni, encounters and effects.
 import { cellMat } from './ascii';
 import { sam } from './avatar';
 import { updatePetals } from './world';
 import { updatePlayer } from './player';
 import { updateEnemies } from './enemy-ai';
-import { updateWaves } from './waves';
+import { updateEncounters } from './encounters';
 import { updateFx } from './fx';
 import { updateMsg } from './hud';
 import { state } from './state';
@@ -22,6 +22,6 @@ export function update(dt: number) {
 
   updatePlayer(dt);
   updateEnemies(dt);
-  updateWaves(dt);
+  updateEncounters(dt);
   updateFx(dt);
 }

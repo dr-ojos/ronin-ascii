@@ -36,7 +36,8 @@ export type Collider =
 /** minimal 2D position (THREE.Vector3 fits: only x / z are used) */
 export interface XZ { x: number; z: number }
 
-export type EnemyState = 'chase' | 'windup' | 'recover';
+/** idle: wandering its territory · chase / windup / recover: fighting · return: lost the player, walking home */
+export type EnemyState = 'idle' | 'chase' | 'windup' | 'recover' | 'return';
 
 /** the mocap-rigged oni returned by createOniWarrior (rig.js) */
 export interface OniWarrior {
@@ -52,6 +53,7 @@ interface EnemyBase {
   big: boolean;
   scale: number;
   hp: number;
+  maxHp: number;
   speed: number;
   dmg: number;
   state: EnemyState;
@@ -59,6 +61,28 @@ interface EnemyBase {
   knock: THREE.Vector3;
   flash: number;
   seed: number;
+  /** the camp it belongs to (its home and territory) */
+  camp: Camp;
+  /** where it is ambling to while idle */
+  wander: { x: number; z: number };
+}
+/** a group of oni guarding a spot of the world (encounters.ts) */
+export interface Camp {
+  x: number; z: number;
+  /** territory radius: they wander inside it and only notice you near it */
+  r: number;
+  /** leash: how far from home they follow you before giving up */
+  leash: number;
+  size: number;
+  boss: boolean;
+  /** 0 = near the shrine .. 1 = the edge of the world (tougher oni) */
+  tier: number;
+  /** oni still alive (also while despawned) */
+  left: number;
+  active: boolean;
+  /** state.time when cleared (-1 = not cleared) */
+  clearedAt: number;
+  name?: string;
 }
 /** rigged oni (when the character model loaded) */
 export interface RiggedEnemy extends EnemyBase { oni: OniWarrior; move: number }

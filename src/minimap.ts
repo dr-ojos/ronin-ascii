@@ -1,10 +1,13 @@
 // The world drawn in characters: a minimap in the corner (follows the player) and a full map (N).
 // Both are rendered once from the world data into offscreen canvases; each frame only copies a window
-// of them and stamps the samurai and the oni on top. Also announces each place as you walk into it.
+// of them and stamps the samurai and the oni on top. Also announces each place as you walk into it
+// (the first time, it counts as discovered and gives points).
 import { HALF, SIZE, WORLD_R, PLACES, ROADS, RIVER, TORII_PATH, BRIDGES, biomeAt, groundAt, treeBlocked, type Place } from './map';
 import { groundY } from './terrain';
 import { enemies } from './enemies';
 import { showMsg } from './hud';
+import { discovered } from './encounters';
+import { addPoints, POINTS } from './score';
 import { player, state } from './state';
 
 const FONT = '"Courier New", Courier, monospace';
@@ -95,7 +98,10 @@ export function updateMinimap(dt: number) {
   let here: Place | null = null;
   for (const p of PLACES) if (Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < p.r && (!here || p.r < here.r)) here = p;
   if (here !== lastPlace) {
-    if (here && placeT <= 0 && state.playing) showMsg(`— ${here.name} —`, 2.4);
+    if (here && state.playing && !state.dead && !discovered.has(here.id)) {
+      discovered.add(here.id); addPoints(POINTS.place, 'lugar descubierto');
+      showMsg(`— ${here.name} —\n+${POINTS.place} lugar descubierto`, 2.6);
+    } else if (here && placeT <= 0 && state.playing) showMsg(`— ${here.name} —`, 2.4);
     lastPlace = here; placeT = 0;
   }
   zone.textContent = here ? here.name.toLowerCase() : 'tierras salvajes';
