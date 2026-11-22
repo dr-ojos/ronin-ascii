@@ -21,7 +21,7 @@ type ManifestEntry = string[] | (Partial<SlotCfg> & { files?: string[] });
 type PlayOpts = { t?: number; pan?: number; gain?: number; rate?: number };
 /** 'slot' or ['slot', { rate, gain }] for a re-pitched fallback */
 type Candidate = string | [string, PlayOpts];
-interface Ambience { rainBus: GainNode; windBus: GainNode; drone: GainNode; rainOn: boolean; rainSample?: GainNode }
+interface Ambience { rainBus: GainNode; windBus: GainNode; drone: GainNode; rainLevel: number; rainSample?: GainNode }
 
 const SLOTS = {
   swing:      { wet: 0.2,  gain: 0.9 },
@@ -36,7 +36,7 @@ const SLOTS = {
   death:      { wet: 0.4,  gain: 1 },
   deathBig:   { wet: 0.5,  gain: 1 },
   taiko:      { wet: 0.5,  gain: 1 },
-  rain:       { wet: 0.15, gain: 0.35, loop: true, pitch: 0 },
+  rain:       { wet: 0.15, gain: 0.14, loop: true, pitch: 0 },
   wind:       { wet: 0.25, gain: 0.3,  loop: true, pitch: 0 },
 } satisfies Record<string, SlotCfg>;
 type SlotName = keyof typeof SLOTS;
@@ -250,6 +250,17 @@ export function createAudio() {
     if (!ok()) return;
     voice(['dash', ['swing', { rate: 0.8, gain: 0.9 }]], {}, () => swingSynth({ power: 0.6 }));
   }
+  function splash({ power = 1, pan = 0 }: { power?: number; pan?: number } = {}) { // stepping into the river
+    if (!ok()) return; const t = ctx.currentTime, len = 0.28 + power * 0.18;
+    // the slosh: band-passed noise falling in pitch, then a hiss of droplets
+    const n = noiseSrc(t, len), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(1800, t); bp.frequency.exponentialRampToValueAtTime(420, t + len);
+    const g = ctx.createGain(); env(g, t, 0.012, 0.32 * power, len); n.connect(bp).connect(g); out(g, { wet: 0.25, pan });
+    const n2 = noiseSrc(t + 0.05, len), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4200;
+    const g2 = ctx.createGain(); env(g2, t + 0.05, 0.02, 0.09 * power, len * 0.9); n2.connect(hp).connect(g2); out(g2, { wet: 0.35, pan: pan * 1.3 });
+    const n3 = noiseSrc(t, 0.25, 0.5), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 300;
+    const g3 = ctx.createGain(); env(g3, t, 0.005, 0.4 * power, 0.18); n3.connect(lp).connect(g3); out(g3, { wet: 0.1, pan: pan * 0.5 });
+  }
   function warn(pan = 0) { // oni wind-up: a short rising growl
     if (!ok()) return;
     voice(['warn'], { pan }, () => warnSynth(pan));
@@ -301,9 +312,9 @@ export function createAudio() {
     const t = ctx.currentTime;
     const rain = noiseSrc(t, 3600, 1), rh = ctx.createBiquadFilter(); rh.type = 'highpass'; rh.frequency.value = 1400;
     const rl = ctx.createBiquadFilter(); rl.type = 'lowpass'; rl.frequency.value = 7000;
-    // rainBus is the on/off switch (R key); rg is the synth rain, muted if a recorded rain loop loads
-    const rainBus = ctx.createGain(); rainBus.gain.value = 1;
-    const rg = ctx.createGain(); rg.gain.value = 0.05; rain.connect(rh).connect(rl).connect(rg).connect(rainBus); out(rainBus, { wet: 0.2 });
+    // rainBus follows the weather (0..1, see setRain); rg is the synth rain, muted if a recorded rain loop loads
+    const rainBus = ctx.createGain(); rainBus.gain.value = rainLevel;
+    const rg = ctx.createGain(); rg.gain.value = 0.02; rain.connect(rh).connect(rl).connect(rg).connect(rainBus); out(rainBus, { wet: 0.2 });
     const wind = noiseSrc(t, 3600, 0.5), wl = ctx.createBiquadFilter(); wl.type = 'lowpass'; wl.frequency.value = 420;
     const wg = ctx.createGain(); wg.gain.value = 0.05;
     const lfo = ctx.createOscillator(); lfo.frequency.value = 0.08; const lg = ctx.createGain(); lg.gain.value = 0.035; lfo.connect(lg).connect(wg.gain); lfo.start(t);
@@ -313,7 +324,7 @@ export function createAudio() {
     const drone = ctx.createGain(); drone.gain.value = 0.022;
     for (const f of [55, 82.4, 110.3]) { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f; o.detune.value = rnd(-6, 6); o.connect(drone); o.start(t); }
     const dl = ctx.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 300; drone.connect(dl); out(dl, { wet: 0.6 });
-    amb = { rainBus, windBus, drone, rainOn: true };
+    amb = { rainBus, windBus, drone, rainLevel };
   }
   // Swap the synth rain / wind for recorded loops once they have decoded (crossfade over ~1 s).
   function startSampleAmbience() {
@@ -326,18 +337,19 @@ export function createAudio() {
       bus.gain.setTargetAtTime(0, t, 0.3); // fade out the synth version
       src.connect(g); const o = out(g, { wet: s.wet });
       src.start(t, Math.random() * src.buffer!.duration);
-      if (name === 'rain') { amb.rainSample = o; if (!amb.rainOn) o.gain.value = 0; }
+      if (name === 'rain') { amb.rainSample = o; o.gain.value = amb.rainLevel; }
     }
   }
-  function setRain(on: boolean) {
-    if (!amb) return; amb.rainOn = on; const t = ctx.currentTime;
-    if (amb.rainSample) amb.rainSample.gain.setTargetAtTime(on ? 1 : 0, t, 0.4);
-    else amb.rainBus.gain.setTargetAtTime(on ? 1 : 0, t, 0.4);
+  /** how hard it rains, 0 (dry) .. 1 (downpour); world.ts eases it in and out */
+  function setRain(level: number) {
+    rainLevel = level; if (!amb) return; amb.rainLevel = level; const t = ctx.currentTime;
+    if (amb.rainSample) amb.rainSample.gain.setTargetAtTime(level, t, 0.15);
+    else amb.rainBus.gain.setTargetAtTime(level, t, 0.15);
   }
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, warn, chime, coin, arrow, thunder, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, splash, warn, chime, coin, arrow, thunder, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

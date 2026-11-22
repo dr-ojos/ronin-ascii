@@ -29,6 +29,8 @@ npm run preview    # servir dist/ para probarla
   - `structures.ts`: aldea, castillo, pagoda, senda de los mil torii, campamento, cementerio, puentes y farolillos.
   - `landmarks.ts`: guaridas de onis (hoguera, tiendas, estandartes) y rincones de las tierras salvajes
     (hokoras, jizos, torii caídos, árboles sagrados, círculos de piedra, ruinas, campos de batalla).
+  - `water.ts`: el río se puede vadear (te hundes hasta las rodillas y vas más lento) y el agua hace
+    ondas allí donde la tocan pies, esquivas, tajos u onis que caen.
   - `chunks.ts`: el bosque se genera por zonas al acercarse y se descarta al alejarse (con semilla fija).
   - `lights.ts`: unas pocas luces reales se reparten cada frame entre los farolillos más cercanos.
   - `physics.ts`: colisiones en una rejilla espacial; `minimap.ts`: minimapa y mapa del mundo en ASCII.

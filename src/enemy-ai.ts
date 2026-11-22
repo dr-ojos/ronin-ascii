@@ -13,7 +13,8 @@ import { burst } from './fx';
 import { sfx, panOf } from './sfx';
 import { showMsg } from './hud';
 import { collide } from './physics';
-import { surfaceY } from './structures';
+import { surfaceY, wadeDepth } from './structures';
+import { wader, splash, WADE_SINK } from './water';
 import { addPoints, POINTS } from './score';
 import { dropLoot, unseal } from './loot';
 import { lifesteal } from './upgrades';
@@ -95,6 +96,7 @@ export function updateEnemies(dt: number) {
     const fromHome = Math.hypot(g.position.x - camp.x, g.position.z - camp.z);
     const youFromHome = Math.hypot(player.pos.x - camp.x, player.pos.z - camp.z);
     let walk = 0, heading: number | null = null;   // speed this frame (for the walk cycle) and where it looks
+    const speed = en.speed * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));   // the river slows them down too
     en.t -= dt;
     const slamming = en.kind === 'bruto' || (en.kind === 'jefe' && en.swings % 3 === 2);
 
@@ -106,7 +108,7 @@ export function updateEnemies(dt: number) {
       if (home) en.hp = Math.min(en.maxHp, en.hp + en.maxHp * 0.4 * dt);
       if (home && fromHome < camp.r * 0.5) { en.state = 'idle'; en.hp = en.maxHp; pickWander(en); en.t = rnd(1, 3); }
       else if (left > 0.6 && (home || en.t <= 0)) {
-        walk = en.speed * (home ? 1.2 : 0.32);
+        walk = speed * (home ? 1.2 : 0.32);
         g.position.addScaledVector(step.multiplyScalar(1 / left), Math.min(left, walk * dt));
         heading = Math.atan2(step.x, step.z);
       } else if (!home && en.t <= 0) { pickWander(en); en.t = rnd(1.5, 5); }   // got there: rest a while, then pick a new spot
@@ -119,9 +121,9 @@ export function updateEnemies(dt: number) {
       if (en.kind === 'arquero') {
         // keep a shooting distance: back off when you get close, come closer when you are out of range
         const want = d < 6 ? -1 : d > reach ? 1 : 0;
-        if (want) { walk = en.speed * (want < 0 ? 0.9 : 1); g.position.addScaledVector(step.copy(tmp).normalize(), want * walk * dt); }
+        if (want) { walk = speed * (want < 0 ? 0.9 : 1); g.position.addScaledVector(step.copy(tmp).normalize(), want * walk * dt); }
         if (d < reach + 1 && en.t <= 0) { en.state = 'windup'; en.t = en.windup; }
-      } else if (d > reach) { walk = en.speed; g.position.addScaledVector(step.copy(tmp).normalize(), en.speed * dt); }
+      } else if (d > reach) { walk = speed; g.position.addScaledVector(step.copy(tmp).normalize(), speed * dt); }
       else if (en.t <= 0) { en.state = 'windup'; en.t = en.windup * (slamming ? 1.25 : 1); sfx.warn(panOf(g.position.x, g.position.z)); }
     } else if (en.state === 'windup') {
       if (en.t <= 0) {
@@ -145,8 +147,10 @@ export function updateEnemies(dt: number) {
       if (dd < m && dd > 1e-4) { g.position.x += dx / dd * (m - dd) * 0.5; g.position.z += dz / dd * (m - dd) * 0.5; }
     }
     collide(g.position, 0.5 * en.scale);
-    const gy = surfaceY(g.position.x, g.position.z);
+    const wd = wadeDepth(g.position.x, g.position.z), gy = surfaceY(g.position.x, g.position.z) - wd * WADE_SINK;
     g.position.y = gy;
+    let w = waders.get(en); if (!w) waders.set(en, w = wader());
+    w(dt, g.position.x, gy + wd * WADE_SINK, g.position.z, wd, walk > 0 || en.knock.lengthSq() > 4 ? 1 : 0);
     const fighting = en.state === 'chase' || en.state === 'windup' || en.state === 'recover';
     if (fighting) heading = Math.atan2(tmp.x, tmp.z);
     if (heading !== null) g.rotation.y += angDiff(heading, g.rotation.y) * Math.min(1, dt * (fighting ? 14 : 5));
@@ -167,8 +171,12 @@ export function updateEnemies(dt: number) {
   }
 }
 
+const waders = new WeakMap<Enemy, ReturnType<typeof wader>>();
+
 function kill(en: Enemy, i: number, gy: number) {
   const g = en.g, camp = en.camp, def = KINDS[en.kind];
+  const wd = wadeDepth(g.position.x, g.position.z);
+  if (wd > 0.1) splash(g.position.x, gy + wd * WADE_SINK, g.position.z, en.big ? 1.8 : 1.2);
   const c = new THREE.Vector3(g.position.x, gy + 1.2 * en.scale, g.position.z);
   burst(c, 0xff3a2a, en.big ? 160 : 70, en.big ? 10 : 7);
   burst(c, 0xffe0c0, 30, 4, 0.1);

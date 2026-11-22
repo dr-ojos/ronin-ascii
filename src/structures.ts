@@ -8,6 +8,7 @@ import { wind } from './nature';
 import { addCollider } from './physics';
 import { addLight } from './lights';
 import { groundY, lakeLevel } from './terrain';
+import { rippleUniforms, riverDepth, RIPPLES } from './water';
 import { ROADS, RIVER, LAKES, BRIDGES, TORII_PATH, FOOTPRINTS, lakeRadius, lineDist, place, seeded, type P2, type Line } from './map';
 
 const TAU = Math.PI * 2;
@@ -44,9 +45,9 @@ export const MT = {
 function waterMaterial() {
   const m = new THREE.MeshStandardMaterial({ color: 0x07121f, metalness: 0.5, roughness: 0.22, envMapIntensity: 1.1 });
   m.onBeforeCompile = sh => {
-    sh.uniforms.uTime = wind.uTime;
+    sh.uniforms.uTime = wind.uTime; sh.uniforms.uRip = rippleUniforms.uRip;
     sh.vertexShader = 'varying vec3 vWp;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = 'uniform float uTime; varying vec3 vWp;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+    sh.fragmentShader = `uniform float uTime; uniform vec4 uRip[${RIPPLES}]; varying vec3 vWp;\n` + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       {
         vec2 p = vWp.xz;
         float a = sin(p.x * 0.55 + sin(p.y * 0.21 + uTime * 0.3) * 2.4 + uTime * 0.8);
@@ -54,6 +55,17 @@ function waterMaterial() {
         float r = smoothstep(0.55, 0.98, a * b);                  // crests where the two swells meet
         float g = smoothstep(0.93, 1.0, sin(p.x * 2.1 + p.y * 1.3 + uTime * 1.7) * sin(p.y * 1.9 - uTime * 1.1)) * 0.6;
         totalEmissiveRadiance += vec3(0.06, 0.1, 0.17) * (r + g) + vec3(0.012, 0.02, 0.035);
+        // ripples where something touched the water: a few rings behind a front spreading at ~2 m/s
+        float w = 0.0;
+        for (int i = 0; i < ${RIPPLES}; i++) {
+          vec4 R = uRip[i]; float age = uTime - R.z;
+          if (age < 0.0 || age > 2.4) continue;
+          float d = distance(p, R.xy), x = d - (0.2 + age * 2.1);
+          float rings = max(0.0, cos(x * 9.0)) * smoothstep(-1.4, -0.05, x) * (1.0 - smoothstep(-0.05, 0.2, x));
+          float k = 1.0 - age / 2.4;
+          w += rings * R.w * k * k / (1.0 + d * 0.5);
+        }
+        totalEmissiveRadiance += vec3(0.22, 0.34, 0.5) * min(w, 1.5);
       }`);
   };
   m.customProgramCacheKey = () => 'water-ripples';
@@ -266,14 +278,8 @@ function buildWater() {
     site(g, l.x, l.z, l.R + 20, false);
   });
 
-  // the river: a dark ribbon following the valley, impassable except over the bridges
+  // the river: a dark ribbon following the valley. Shallow enough to wade (water.ts), or cross dry over the bridges
   ribbon(RIVER, RIVER.width, MT.water, 0.12);
-  for (let i = 0; i < RIVER.pts.length - 1; i++) {
-    const a = RIVER.pts[i], b = RIVER.pts[i + 1], mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
-    if (BRIDGES.some(br => Math.hypot(br.x - mx, br.z - mz) < br.width / 2 + 2.2)) continue;
-    if (LAKES.some(l => Math.hypot(l.x - mx, l.z - mz) < l.R * 0.9)) continue;
-    addCollider({ seg: [a[0], a[1], b[0], b[1]], r: RIVER.width / 2 - 0.6 });
-  }
   // reeds along the banks
   const reeds = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.07, 1.6, 4).translate(0, 0.8, 0), MT.reed, 2400);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(); let n = 0;
@@ -326,6 +332,11 @@ export function surfaceY(x: number, z: number) {
     }
   }
   return gy;
+}
+/** how deep in the river a walker stands (0..1), 0 on a bridge or dry land */
+export function wadeDepth(x: number, z: number) {
+  const d = riverDepth(x, z);
+  return d > 0 && surfaceY(x, z) > groundY(x, z) + 0.2 ? 0 : d;
 }
 
 // ------------------------------------------------------------ the village of Kiri

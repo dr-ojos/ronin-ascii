@@ -9,7 +9,8 @@ import { hitChests, chestInReach } from './loot';
 import { burst, slashArc, dashGhost, dashRing } from './fx';
 import { sfx, panOf } from './sfx';
 import { collide } from './physics';
-import { surfaceY } from './structures';
+import { surfaceY, wadeDepth } from './structures';
+import { ripple, splash, wader, WADE_SINK } from './water';
 import { keyLight, rimLight } from './world';
 import { player, state, keys } from './state';
 import { angDiff } from './utils';
@@ -36,6 +37,7 @@ export function tryDash() {
   player.face = Math.atan2(mv.x, mv.z);
   dashRing(player.pos);
   sfx.dash();
+  if (depth > 0.1) splash(player.pos.x, player.pos.y + depth * WADE_SINK, player.pos.z, 0.9);
 }
 export function moveInput() {
   const ix = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), iz = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
@@ -45,7 +47,8 @@ export function moveInput() {
 }
 
 const tmp = new THREE.Vector3();
-let ghostGap = 0;
+let ghostGap = 0, depth = 0;
+const wade = wader();
 export function updatePlayer(dt: number) {
   player.invuln = Math.max(0, player.invuln - dt);
   player.dashCd = Math.max(0, player.dashCd - dt);
@@ -53,9 +56,10 @@ export function updatePlayer(dt: number) {
   // Shift: run (to cross the open world); attacking slows you down
   let speed = (keys.ShiftLeft || keys.ShiftRight ? 10 : 5.6) * runMult();
   if (player.attackT >= 0) speed = 5.6 * 0.35;
+  speed *= 1 - 0.4 * depth;                     // wading through the river is slow
   if (player.dashT > 0) {
     player.dashT -= dt;
-    player.pos.addScaledVector(player.dashDir, 18 * dt);
+    player.pos.addScaledVector(player.dashDir, 18 * (1 - 0.3 * depth) * dt);
     // the halo: an after-image every few centimetres, brighter at the start of the dodge
     if ((ghostGap -= 18 * dt) <= 0) { ghostGap = 0.45; dashGhost(player.pos, player.face, 0.4 + player.dashT * 3); }
   } else if (mv.lengthSq() > 0) {
@@ -63,8 +67,12 @@ export function updatePlayer(dt: number) {
     if (player.attackT < 0) player.face += angDiff(Math.atan2(mv.x, mv.z), player.face) * Math.min(1, dt * 12);
   }
   collide(player.pos, 0.45);
-  player.pos.y = surfaceY(player.pos.x, player.pos.z);
+  // in the river the feet sink into the bed, so the water comes up to the knees
+  const want = wadeDepth(player.pos.x, player.pos.z);
+  depth += (want - depth) * Math.min(1, dt * 8);
+  player.pos.y = surfaceY(player.pos.x, player.pos.z) - depth * WADE_SINK;
   player.moving += ((mv.lengthSq() > 0 ? 1 : 0) - player.moving) * Math.min(1, dt * 10);
+  wade(dt, player.pos.x + mv.x * 0.35, player.pos.y + depth * WADE_SINK, player.pos.z + mv.z * 0.35, want, player.dashT > 0 ? 1 : player.moving, keys.ShiftLeft || keys.ShiftRight || player.dashT > 0);
   player.walk += dt * 10 * player.moving;
   sam.root.position.copy(player.pos);
   sam.root.rotation.y = player.face;
@@ -79,6 +87,7 @@ export function updatePlayer(dt: number) {
     if (!player.hitDone && p > (spin ? 0.4 : 0.45)) {
       player.hitDone = true;
       slashArc(spin, spin, player.combo);
+      if (depth > 0.1) ripple(player.pos.x + Math.sin(player.face) * 1.2, player.pos.z + Math.cos(player.face) * 1.2, spin ? 1.3 : 0.9);
       let hits = 0, hitPan = 0;
       for (const en of enemies) {
         tmp.subVectors(en.g.position, player.pos); tmp.y = 0;
