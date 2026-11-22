@@ -27,8 +27,8 @@ const SLOTS = {
   swing:      { wet: 0.2,  gain: 0.9 },
   swingHeavy: { wet: 0.22, gain: 1 },
   dash:       { wet: 0.15, gain: 0.7 },
-  hit:        { wet: 0.3,  gain: 1, layer: 0.5 },
-  hitHeavy:   { wet: 0.35, gain: 1, layer: 0.6 },
+  hit:        { wet: 0.3,  gain: 1 },
+  hitHeavy:   { wet: 0.35, gain: 1 },
   hurt:       { wet: 0.15, gain: 1 },
   warn:       { wet: 0.3,  gain: 0.7 },
   roar:       { wet: 0.4,  gain: 0.8 },
@@ -165,29 +165,24 @@ export function createAudio() {
     const g2 = ctx.createGain(); env(g2, t + len * 0.25, 0.04, 0.18 * power, len * 0.4);
     n2.connect(hp).connect(g2); out(g2, { wet: 0.3, pan: pan * 1.4 });
     // low cloth / body movement
-    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(55, t + len);
-    const g3 = ctx.createGain(); env(g3, t, 0.05, 0.18 * power, len);
-    o.connect(g3); out(g3, { wet: 0.05 }); o.start(t); o.stop(t + len + 0.1);
+    const n3 = noiseSrc(t, len), lp3 = ctx.createBiquadFilter(); lp3.type = 'lowpass'; lp3.frequency.value = 260;
+    const g3 = ctx.createGain(); env(g3, t, 0.05, 0.3 * power, len);
+    n3.connect(lp3).connect(g3); out(g3, { wet: 0.05 });
   }
+  // Fallback synth only (recorded samples normally play instead). Everything here is filtered noise:
+  // pitched oscillators read as beeps and pitch-dropping sines as rubber "boings", so none are used.
   function steel(t: number, pan: number, bright = 1) {
-    // inharmonic partials = struck blade ringing in the hall
-    const f0 = rnd(1500, 2100) * bright;
-    for (const [m, amp, dec] of [[1, 0.16, 1.4], [2.76, 0.09, 0.9], [5.4, 0.06, 0.6], [8.93, 0.035, 0.35], [1.008, 0.1, 1.6]]) {
-      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f0 * m;
-      const g = ctx.createGain(); env(g, t, 0.002, amp, dec);
-      o.connect(g); out(g, { wet: 0.45, pan }); o.start(t); o.stop(t + dec + 0.1);
+    // bright metallic scrape: two narrow noise bands that decay at different speeds
+    for (const [f, q, amp, dec] of [[4200 * bright, 6, 0.35, 0.35], [7600 * bright, 4, 0.2, 0.18]]) {
+      const n = noiseSrc(t, dec + 0.05), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
+      const g = ctx.createGain(); env(g, t, 0.001, amp, dec); n.connect(bp).connect(g); out(g, { wet: 0.35, pan });
     }
-    const n = noiseSrc(t, 0.05), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3000;
-    const g = ctx.createGain(); env(g, t, 0.001, 0.5, 0.04); n.connect(hp).connect(g); out(g, { wet: 0.2, pan });
   }
   function body(t: number, heavy: boolean, pan: number) {
-    // sub drop + flesh slap + distortion grit
-    const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(heavy ? 140 : 170, t); o.frequency.exponentialRampToValueAtTime(heavy ? 32 : 45, t + (heavy ? 0.45 : 0.25));
-    const sh = ctx.createWaveShaper(); const c = new Float32Array(256);
-    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; c[i] = Math.tanh(x * 3); } sh.curve = c;
-    const g = ctx.createGain(); env(g, t, 0.003, heavy ? 1.0 : 0.75, heavy ? 0.5 : 0.28);
-    o.connect(sh).connect(g); out(g, { wet: 0.12, pan: pan * 0.5 }); o.start(t); o.stop(t + 0.7);
+    // low thud (low-passed noise, no pitch sweep) + flesh slap
+    const sub = noiseSrc(t, 0.4, 0.5), sl = ctx.createBiquadFilter(); sl.type = 'lowpass'; sl.frequency.value = heavy ? 160 : 220; sl.Q.value = 0.7;
+    const g = ctx.createGain(); env(g, t, 0.003, heavy ? 1.6 : 1.1, heavy ? 0.3 : 0.18);
+    sub.connect(sl).connect(g); out(g, { wet: 0.12, pan: pan * 0.5 });
     const n = noiseSrc(t, 0.2, 0.6), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
     const g2 = ctx.createGain(); env(g2, t, 0.002, heavy ? 0.7 : 0.5, 0.14); n.connect(lp).connect(g2); out(g2, { wet: 0.15, pan });
   }
@@ -207,8 +202,9 @@ export function createAudio() {
     voice(['taiko'], { t, rate: 0.85 + power * 0.15, gain: Math.min(1.2, power) }, () => taikoSynth(t, power));
   }
   function taikoSynth(t: number, power: number) {
-    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(110 * power, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.5);
-    const g = ctx.createGain(); env(g, t, 0.004, 0.9, 0.9); o.connect(g); out(g, { wet: 0.5 }); o.start(t); o.stop(t + 1.2);
+    // drum skin: resonant low-passed noise (a body, not a pitch sweep) + the stick slap below
+    const b = noiseSrc(t, 1), bl = ctx.createBiquadFilter(); bl.type = 'lowpass'; bl.frequency.value = 70 * power; bl.Q.value = 6;
+    const g = ctx.createGain(); env(g, t, 0.004, 2.2, 0.7); b.connect(bl).connect(g); out(g, { wet: 0.5 });
     const n = noiseSrc(t, 0.2), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
     const g2 = ctx.createGain(); env(g2, t, 0.002, 0.6, 0.18); n.connect(lp).connect(g2); out(g2, { wet: 0.6 });
   }
@@ -239,8 +235,7 @@ export function createAudio() {
   }
   function deathSynth(big: boolean, pan: number) {
     const t = ctx.currentTime;
-    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(big ? 80 : 110, t); o.frequency.exponentialRampToValueAtTime(22, t + (big ? 1.6 : 0.9));
-    const g = ctx.createGain(); env(g, t, 0.005, big ? 1 : 0.7, big ? 1.6 : 0.9); o.connect(g); out(g, { wet: 0.5, pan }); o.start(t); o.stop(t + 2);
+    body(t, big, pan); // body hitting the ground
     roar({ big, pan, delay: 0.02 });
     const n = noiseSrc(t, 0.6, 0.4), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(2500, t); lp.frequency.exponentialRampToValueAtTime(200, t + 0.6);
     const g2 = ctx.createGain(); env(g2, t, 0.005, 0.4, 0.55); n.connect(lp).connect(g2); out(g2, { wet: 0.5, pan });
@@ -248,9 +243,6 @@ export function createAudio() {
   function hurt() {
     if (!ok()) return; const t = ctx.currentTime;
     voice(['hurt'], {}, () => body(t, true, 0));
-    // tinnitus ring: the cinematic "ears ringing" after a heavy blow
-    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 3150;
-    const g = ctx.createGain(); env(g, t + 0.05, 0.05, 0.05, 1.6); o.connect(g); out(g, { wet: 0.1 }); o.start(t); o.stop(t + 2);
     // duck the world for a moment
     master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(0.4, t); master.gain.linearRampToValueAtTime(0.85, t + 0.9);
   }
