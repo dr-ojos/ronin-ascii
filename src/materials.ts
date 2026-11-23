@@ -5,7 +5,7 @@ import * as THREE from 'three';
 export const M = (color: THREE.ColorRepresentation, o: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.05, ...o });
 // material class goes into the alpha channel; the ASCII pass picks a glyph ramp per class
-export const CLS = { grass: 0.1, ground: 0.2, wood: 0.3, foliage: 0.4, light: 0.5, actor: 0.6, fx: 0.7, sky: 1.0 };
+export const CLS = { grass: 0.1, ground: 0.2, wood: 0.3, foliage: 0.4, light: 0.5, actor: 0.6, fx: 0.7, water: 0.8, sky: 1.0 };
 
 export function keepAlpha<T extends THREE.Material>(mat: T, additive: boolean): T {
   Object.assign(mat, {
@@ -22,7 +22,12 @@ export function tagMat<T extends THREE.Material>(mat: T, cls: number): T {
   const prev = mat.onBeforeCompile, key = mat.customProgramCacheKey.bind(mat);
   mat.onBeforeCompile = (sh, r) => {
     prev.call(mat, sh, r);
-    sh.fragmentShader = sh.fragmentShader.replace(/}\s*$/, `  gl_FragColor.a = ${cls.toFixed(2)};\n}`);
+    // a shader that #defines PIXEL_CLS can reclass single pixels (a road's puddles draw as water)
+    sh.fragmentShader = sh.fragmentShader.replace(/}\s*$/, `  gl_FragColor.a = ${cls.toFixed(2)};
+#ifdef PIXEL_CLS
+  if (pixelCls > 0.0) gl_FragColor.a = pixelCls;
+#endif
+}`);
   };
   mat.customProgramCacheKey = () => key() + '|cls' + cls;
   return mat;

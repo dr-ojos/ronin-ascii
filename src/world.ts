@@ -17,6 +17,7 @@ import { buildSettlements } from './settlements';
 import { player, state } from './state';
 import { rnd } from './utils';
 import { sfx } from './sfx';
+import { buildDrift, updateDrift, updateWaterWeather } from './water';
 
 /** objects of the clearing the camera pulls in front of (the rest of the world: structures.ts / chunks.ts) */
 const camBlockers: THREE.Object3D[] = [];
@@ -99,6 +100,7 @@ scene.add(buildTerrainMesh());
 buildStructures();
 buildSettlements();   // the town of Asagiri and the ruins of Takamori
 buildLandmarks();   // oni camps and corners of the wilds
+buildDrift();       // leaves riding the river, petals on the lake
 buildMasks();
 
 function wornFlagstone(width: number, depth: number, index: number) {
@@ -344,6 +346,8 @@ export function updateRain(dt: number) {
   const target = state.raining ? 1 : 0, step = dt / FADE;
   state.rainAmt = state.rainAmt < target ? Math.min(target, state.rainAmt + step) : Math.max(target, state.rainAmt - step);
   if (Math.abs(state.rainAmt - rainSent) > 0.01 || (state.rainAmt === target && rainSent !== target)) { rainSent = state.rainAmt; sfx.setRain(rainSent); }
+  updateWaterWeather(dt, state.rainAmt);   // raindrops on the water, puddles on the roads
+  updateDrift(dt);
   // fewer streaks in a drizzle: only the first `count` are drawn and moved
   const count = Math.round(RAIN * state.rainAmt);
   rain.visible = count > 0; if (!count) return;

@@ -25,7 +25,8 @@ const CLASS_CHARS = [
   " .:-=+|#H",              // 3 wood / structures
   " .,ow*x&%@",             // 4 foliage
   " .:+*oO#@",              // 5 light
-  " .:-=+szSZN#%@"          // 6 actor
+  " .:-=+szSZN#%@",         // 6 actor
+  " .-~~=*"                 // 7 water: still dots, rolling tildes, moonlit crests
 ];
 const ACTOR_CHARS = " .':;=+xzo#@"; // punctuation and short strokes stay distinct on the smallest grid
 const EDGE_CHARS = '|\\-/';  // row 7: outline strokes, picked by edge direction
@@ -200,19 +201,23 @@ export const cellMat = new THREE.ShaderMaterial({
         else if (cls < 4.5) row = 4.0;
         else if (cls < 5.5) row = 5.0;
         else if (cls < 6.5) row = 6.0;
-        else row = 5.0;
+        else if (cls < 7.5) row = 5.0;
+        else row = 7.0;
         bool light = abs(row - 5.0) < 0.1;
         float l = luma(col);
         // muted night palette: desaturate and push towards indigo; lights stay warm and saturated
         bool grassRow = row > 0.5 && row < 1.5;
         bool foliageRow = row > 3.5 && row < 4.5;
-        if (grassRow) col = mix(vec3(l), col, 0.85) * vec3(0.8, 1.05, 0.95);          // dark teal-green woven grass
+        bool waterRow = row > 6.5;
+        if (waterRow) col = mix(vec3(l), col, 0.8) * vec3(0.72, 0.95, 1.3);                  // cold blue water, cyan where the moon hits
+        else if (grassRow) col = mix(vec3(l), col, 0.85) * vec3(0.8, 1.05, 0.95);          // dark teal-green woven grass
         else if (foliageRow) col = mix(vec3(l), col, 1.15) * vec3(0.95, 0.95, 1.05);  // canopies keep their colour: pink sakura, green pine
         else if (!light) col = mix(vec3(l), col, 0.5) * vec3(0.86, 0.9, 1.12);        // indigo stone / wood
-        float gain = light ? 1.4 : (grassRow ? 0.95 : (row < 3.5 && row > 1.5 ? 1.0 : 1.05));
+        float gain = light ? 1.4 : (grassRow ? 0.95 : (waterRow ? 1.15 : (row < 3.5 && row > 1.5 ? 1.0 : 1.05)));
         l = clamp(luma(col) * gain, 0.0, 0.999);
         l = smoothstep(0.0, 1.0, l) * 0.55 + l * 0.45;                 // contrast curve: shadows sink, lit areas pop
         if (row > 0.5 && row < 4.5) l = max(l, 0.1);   // shadows keep a faint woven texture
+        if (waterRow) l = max(l, 0.09);                // still water in the dark: a field of dots
         idx = floor(l * uN);
         vec3 tint = col / max(max(max(col.r, col.g), col.b), 0.04);
         c = light ? mix(tint, vec3(1.0), 0.25) * (0.75 + 0.6 * l) : tint * (0.2 + 0.6 * l);
@@ -269,7 +274,7 @@ const postMat = new THREE.ShaderMaterial({
         vec4 cd = texelFetch(cells, ivec2(nc), 0);
         float code = floor(cd.a + 0.5);
         float row = floor(code / uN), idx = code - row * uN;
-        if (idx < 0.5 && row < 7.5) continue;                       // blank cell
+        if (idx < 0.5 && row < ${(EDGE_ROW - 0.5).toFixed(1)}) continue;   // blank cell (the edge row has no blank)
         // grass / foliage glyphs get a small fixed scatter so the weave doesn't look like a grid
         vec2 jit = scatter && ((row > 0.5 && row < 1.5) || (row > 3.5 && row < 4.5))
           ? (vec2(hash(nc), hash(nc + 17.3)) - 0.5) * C * 0.5 : vec2(0.0);

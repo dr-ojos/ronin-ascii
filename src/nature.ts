@@ -8,7 +8,7 @@ import { addRoundedSurface, detailedSurfaces, surfaceMaterial } from './surfaces
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
 import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, treeBlocked } from './map';
 import type { Collider, XZ } from './types';
-import { rippleUniforms, RIPPLES } from './water';
+import { waterMaterial } from './water';
 
 /** what world.ts hands to the landscape builder */
 export interface NatureCtx {
@@ -474,44 +474,14 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
       p.setXY(i, p.getX(i) * k, p.getY(i) * k);
     }
   }
-  const pondGrid = new THREE.PlaneGeometry(POND.r * 2.3, POND.r * 2.3, 48, 48);
-  const water = new THREE.Mesh(pondGrid, new THREE.MeshStandardMaterial({ color: 0x050c16, metalness: 0.9, roughness: 0.07, envMapIntensity: 2.2 }));
+  const pondGrid = new THREE.PlaneGeometry(POND.r * 2.3, POND.r * 2.3);
+  // the shared water shader (water.ts), clipped to the wobbly shoreline: shallow and clear, calm little swells
+  const water = new THREE.Mesh(pondGrid, waterMaterial({
+    key: 'pond', swell: 0.4, foam: 0.35, clear: 1.8, colour: 0x06121a, head: POND_SHORE_GLSL,
+    shore: `vec2 l = vec2(p.x - ${POND.x.toFixed(2)}, ${POND.z.toFixed(2)} - p.y); shore = pondRadius(l) - length(l); q = p * 1.6;`
+  }));
   water.rotation.x = -Math.PI / 2; water.position.set(POND.x, 0.06, POND.z);
-  // clip the square ripple grid to the shoreline with a stencil-free trick: discard outside the shore radius
-  water.material.onBeforeCompile = sh => {
-    sh.uniforms.uDetailedSurfaces = detailedSurfaces;
-    sh.uniforms.uPondTime = wind.uTime; sh.uniforms.uRip = rippleUniforms.uRip;
-    sh.vertexShader = 'varying vec2 vLocal;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position.xy;');
-    sh.fragmentShader = `varying vec2 vLocal;
-      uniform float uDetailedSurfaces, uPondTime; uniform vec4 uRip[${RIPPLES}];
-      ${POND_SHORE_GLSL}` + sh.fragmentShader
-      .replace('void main() {', 'void main() { if (length(vLocal) > pondRadius(vLocal)) discard;')
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        if (uDetailedSurfaces > 0.5) {
-          float swell = sin(vLocal.x * 2.1 + vLocal.y * 9.0 + uPondTime * 1.1 + sin(vLocal.x * 1.9 + vLocal.y) * 1.3);
-          float crossing = sin(vLocal.y * 2.2 - vLocal.x * 1.4 - uPondTime * 0.8);
-          float glint = smoothstep(0.57, 1.0, swell) * smoothstep(-0.77, 0.9, crossing);
-          totalEmissiveRadiance += vec3(0.007, 0.017, 0.023) * (0.38 + glint);
-          roughnessFactor = 0.29 - glint * 0.06;
-          metalnessFactor = 0.52;
-        }
-        { // rings wherever a foot, a blade or a body touches the water (same ring buffer as the river)
-          vec2 p = vec2(${POND.x.toFixed(2)} + vLocal.x, ${POND.z.toFixed(2)} - vLocal.y);
-          float w = 0.0;
-          for (int i = 0; i < ${RIPPLES}; i++) {
-            vec4 R = uRip[i]; float age = uPondTime - R.z;
-            if (age < 0.0 || age > 2.0) continue;
-            float d = distance(p, R.xy), x = d - (0.12 + age * 1.6);
-            float rings = max(0.0, cos(x * 11.0)) * smoothstep(-1.1, -0.04, x) * (1.0 - smoothstep(-0.04, 0.16, x));
-            float k = 1.0 - age / 2.0;
-            w += rings * R.w * k * k / (1.0 + d * 0.6);
-          }
-          totalEmissiveRadiance += vec3(0.2, 0.32, 0.46) * min(w, 1.4);
-        }`);
-  };
-  water.material.customProgramCacheKey = () => 'pond';
-  tagMat(water.material, CLS.ground); water.receiveShadow = true; scene.add(water);
-  const pondBase = Float32Array.from(pondGrid.attributes.position.array);
+  water.receiveShadow = true; scene.add(water);
   const bed = new THREE.Mesh(waterGeo, tagMat(new THREE.MeshStandardMaterial({ color: 0x0b1410, roughness: 1 }), CLS.ground));
   bed.rotation.x = -Math.PI / 2; bed.position.set(POND.x, 0.03, POND.z); scene.add(bed);
   const lilyMat = surfaceMaterial(new THREE.MeshStandardMaterial({
@@ -572,7 +542,6 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
   const ffMat = tagMat(new THREE.PointsMaterial({ color: 0xd8ff7a, size: 0.12, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.light);
   const fireflies = new THREE.Points(ffGeo, ffMat); fireflies.frustumCulled = false; scene.add(fireflies);
 
-  let frame = 0;
   return function update(t: number, center: XZ) {
     wind.uTime.value = t;
     wind.uCenter.value.set(center.x, center.z);
@@ -599,14 +568,6 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
       if (PF) pfGeo.attributes.position.needsUpdate = true;
     }
     ffMat.opacity = 0.55 + 0.45 * Math.sin(t * 2.3);
-    if (nearClearing && (frame++ & 1) === 0) { // pond ripples
-      const p = pondGrid.attributes.position;
-      for (let i = 0; i < p.count; i++) {
-        const x = pondBase[i * 3], y = pondBase[i * 3 + 1];
-        p.setZ(i, Math.sin(x * 2.1 + t * 1.6) * 0.018 + Math.sin(y * 2.7 - t * 1.3) * 0.015 + Math.sin((x + y) * 4.3 + t * 2.4) * 0.007);
-      }
-      p.needsUpdate = true; pondGrid.computeVertexNormals();
-    }
   };
 }
 

@@ -299,7 +299,7 @@ function buildRuins() {
   }
   dense.push([cx + pts[pts.length - 1][0], cz + pts[pts.length - 1][1]]);
   const moatLine: Line = { pts: dense, width: 9 };
-  ribbon(moatLine, 9, MT.water, 0.1);
+  ribbon(moatLine, 9, MT.moat, 0.1);
   for (let i = 0; i < dense.length - 1; i++) addCollider({ seg: [dense[i][0], dense[i][1], dense[i + 1][0], dense[i + 1][1]], r: 4.2 });
   for (const [x, z, w, d] of [[0, -MOAT, 2 * MOAT, 10], [MOAT, 0, 10, 2 * MOAT], [-MOAT, 0, 10, 2 * MOAT], [(MOAT + CAUSE) / 2, MOAT, MOAT - CAUSE, 10], [-(MOAT + CAUSE) / 2, MOAT, MOAT - CAUSE, 10]] as const)
     FOOTPRINTS.rects.push([cx + x, cz + z, w, d, 0]);

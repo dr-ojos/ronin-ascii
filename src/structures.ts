@@ -10,7 +10,7 @@ import { addCollider } from './physics';
 import { addLight } from './lights';
 import { campfire } from './campfire';
 import { groundY, lakeLevel } from './terrain';
-import { rippleUniforms, riverDepth, RIPPLES } from './water';
+import { riverDepth, lakeWater, ribbonWater, RIVER_FLOW, WATER_GLSL, rippleUniforms, weatherUniforms } from './water';
 import { ROADS, RIVER, LAKES, BRIDGES, TORII_PATH, FOOTPRINTS, lakeRadius, lineDist, place, seeded, type P2, type Line } from './map';
 
 const TAU = Math.PI * 2;
@@ -40,7 +40,9 @@ export const MT = {
   gold: tagMat(M(0xffd060, { emissive: 0xffb030, emissiveIntensity: 1.6, metalness: 0.6 }), CLS.light),
   cloth: tagMat(surfaceMaterial(M(0xd8d0b8, { roughness: 1, side: THREE.DoubleSide }), 'cloth'), CLS.wood),
   banner: [0xb3261e, 0xe8e0cc, 0x1c2a4a].map(c => tagMat(M(c, { roughness: 1, side: THREE.DoubleSide }), CLS.wood)),
-  water: waterMaterial(),
+  water: lakeWater(),
+  river: ribbonWater('river', RIVER.width, RIVER_FLOW),
+  moat: ribbonWater('moat', 9, 0, { colour: 0x07120f, clear: 1.2 }),
   road: roadMaterial(),
   lily: tagMat(M(0x2f5a2a, { roughness: 0.7, side: THREE.DoubleSide }), CLS.foliage),
   reed: tagMat(M(0x4f6a3a, { roughness: 0.8 }), CLS.grass),
@@ -65,38 +67,38 @@ function roadMaterial() {
         roadFringe = 0.012 + smoothstep(0.33, 0.74, wear.r) * 0.129 + wear.g * 0.028;
         if (edge < roadFringe) discard;
       }`);
-  };
-  return tagMat(mat, CLS.ground);
-}
-/** dark water with slow interfering ripples and moonlit glints (drawn as ~ - = in ASCII) */
-function waterMaterial() {
-  const m = new THREE.MeshStandardMaterial({ color: 0x07121f, metalness: 0.5, roughness: 0.22, envMapIntensity: 1.1 });
-  m.onBeforeCompile = sh => {
-    sh.uniforms.uTime = wind.uTime; sh.uniforms.uRip = rippleUniforms.uRip;
-    sh.vertexShader = 'varying vec3 vWp;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = `uniform float uTime; uniform vec4 uRip[${RIPPLES}]; varying vec3 vWp;\n` + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-      {
-        vec2 p = vWp.xz;
-        float a = sin(p.x * 0.55 + sin(p.y * 0.21 + uTime * 0.3) * 2.4 + uTime * 0.8);
-        float b = sin(p.y * 0.73 - sin(p.x * 0.17 - uTime * 0.25) * 2.0 - uTime * 0.6);
-        float r = smoothstep(0.55, 0.98, a * b);                  // crests where the two swells meet
-        float g = smoothstep(0.93, 1.0, sin(p.x * 2.1 + p.y * 1.3 + uTime * 1.7) * sin(p.y * 1.9 - uTime * 1.1)) * 0.6;
-        totalEmissiveRadiance += vec3(0.06, 0.1, 0.17) * (r + g) + vec3(0.012, 0.02, 0.035);
-        // ripples where something touched the water: a few rings behind a front spreading at ~2 m/s
-        float w = 0.0;
-        for (int i = 0; i < ${RIPPLES}; i++) {
-          vec4 R = uRip[i]; float age = uTime - R.z;
-          if (age < 0.0 || age > 2.4) continue;
-          float d = distance(p, R.xy), x = d - (0.2 + age * 2.1);
-          float rings = max(0.0, cos(x * 9.0)) * smoothstep(-1.4, -0.05, x) * (1.0 - smoothstep(-0.05, 0.2, x));
-          float k = 1.0 - age / 2.4;
-          w += rings * R.w * k * k / (1.0 + d * 0.5);
+    // rain soaks the road dark and glossy, then puddles gather in the low spots and the cart ruts,
+    // pocked by raindrops and reflecting the moon; they shrink again as it dries (weatherUniforms.uWet)
+    Object.assign(sh.uniforms, { uWTime: wind.uTime, uRip: rippleUniforms.uRip }, weatherUniforms);
+    sh.vertexShader = 'varying vec3 vRoadWp;\n' + sh.vertexShader.replace('#include <project_vertex>',
+      '#include <project_vertex>\nvRoadWp = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = `#define PIXEL_CLS\nfloat pixelCls = 0.0;\nvarying vec3 vRoadWp;\n${WATER_GLSL}\n` + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      if (uWet > 0.01) {
+        vec2 p = vRoadWp.xz; float across = vMapUv.x;
+        float rut = max(1.0 - smoothstep(0.0, 0.1, abs(across - 0.3)), 1.0 - smoothstep(0.0, 0.1, abs(across - 0.7)));
+        float dip = wNoise(p * 0.55) * 0.6 + wNoise(p * 1.5 + 4.0) * 0.28 + rut * 0.1 * wNoise(p * 0.9 + 2.0);
+        float level = 1.02 - 0.4 * uWet;                            // the wetter, the higher the water climbs
+        float puddle = smoothstep(level, level + 0.035, dip) * smoothstep(0.05, 0.14, min(across, 1.0 - across));
+        float damp = uWet * (0.6 + 0.4 * smoothstep(level - 0.2, level, dip));   // darker and glossier round the puddles
+        diffuseColor.rgb *= 1.0 - 0.45 * damp;
+        roughnessFactor = mix(roughnessFactor, 0.35, damp * 0.8);
+        if (puddle > 0.0) {
+          vec3 rr = rainRings(p, uWTime, uRain), tr = touchRipples(p, uWTime);
+          vec2 slope = rr.xy + tr.xy + vec2(sin(p.x * 6.0 + uWTime * 2.3), cos(p.y * 5.0 - uWTime * 1.9)) * 0.012;
+          vec3 nW = normalize(vec3(-slope.x, 1.0, -slope.y));
+          normal = normalize(mix(normal, (viewMatrix * vec4(nW, 0.0)).xyz, puddle));
+          float edge = puddle * (1.0 - puddle) * 4.0;                // a muddy lip round each puddle
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.04, 0.06), puddle) * (1.0 - edge * 0.4);
+          roughnessFactor = mix(roughnessFactor, 0.04, puddle);
+          metalnessFactor = mix(metalnessFactor, 0.6, puddle);
+          totalEmissiveRadiance += puddle * (vec3(0.005, 0.01, 0.018) + vec3(0.16, 0.24, 0.34) * min(rr.z, 1.0) + vec3(0.22, 0.34, 0.5) * min(tr.z, 1.5));
+          if (puddle > 0.5) pixelCls = ${CLS.water.toFixed(2)};
         }
-        totalEmissiveRadiance += vec3(0.22, 0.34, 0.5) * min(w, 1.5);
       }`);
   };
-  m.customProgramCacheKey = () => 'water-ripples';
-  return tagMat(m, CLS.ground);
+  const key = mat.customProgramCacheKey;
+  mat.customProgramCacheKey = () => key() + '|puddles';
+  return tagMat(mat, CLS.ground);
 }
 /** packed earth with pebbles and ruts: gives the road's characters some grain */
 function gravelTexture() {
@@ -329,7 +331,7 @@ function buildWater() {
   });
 
   // the river: a dark ribbon following the valley. Shallow enough to wade (water.ts), or cross dry over the bridges
-  ribbon(RIVER, RIVER.width, MT.water, 0.12);
+  ribbon(RIVER, RIVER.width, MT.river, 0.12);
   // reeds along the banks
   const reeds = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.07, 1.6, 4).translate(0, 0.8, 0), MT.reed, 2400);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(); let n = 0;
