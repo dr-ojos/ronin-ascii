@@ -20,7 +20,7 @@ npm run preview    # servir dist/ para probarla
 - `index.html`: página, HUD y estilos.
 - `src/main.ts`: punto de entrada y bucle de frames.
 - `src/`: un módulo por responsabilidad (`ascii.ts` efecto ASCII, `world.ts` escenario,
-  `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `encounters.ts` guaridas, patrullas y emboscadas, `loot.ts` cofres y botín, `upgrades.ts` mejoras, `special.ts` golpe de rayos, `score.ts` puntos y mon, `hud.ts` interfaz...).
+  `player.ts` movimiento y ataques, `enemy-ai.ts` onis, `encounters.ts` guaridas, patrullas y emboscadas, `loot.ts` cofres y botín, `upgrades.ts` mejoras, `special.ts` carga y técnicas especiales, `score.ts` puntos y mon, `hud.ts` interfaz...).
 - Tienda y aspecto: `shop.ts` la tienda de Masa dentro del santuario del inicio (se entra por la puerta; el tejado se oculta),
   `weapons.ts` armas (cada una con su color, halo, estela y chispas en `katana-fx.ts`), `armor.ts` armaduras (`outfit.ts` las viste: peto, hombreras, casco y auras), `menu.ts` menús, `custom.ts` + `look.ts` personalizar al ronin (se guarda en el navegador).
   `state.ts` guarda el estado compartido y `types.ts` los tipos comunes.
@@ -39,9 +39,20 @@ npm run preview    # servir dist/ para probarla
 
 ## Controles
 
-WASD moverse · SHIFT correr · clic / K tajo · L giro pesado · ESPACIO esquivar · E o tajo abrir cofre · E en el mostrador de Masa: tienda · Q cambiar de arma · P rayo · N mapa del mundo ·
+WASD moverse · SHIFT correr · clic / K tajo · L giro pesado · ESPACIO esquivar · E o tajo abrir cofre · E hablar con Masa o un maestro · Q cambiar de arma · P usar técnica cargada · O cambiar de técnica · N mapa del mundo ·
 C paleta · T vista sin ASCII · F modo foto · R lluvia · M sonido · + / - densidad de caracteres.
 - `public/`: modelos 3D y sonidos, copiados tal cual a `dist/`.
+
+## Técnicas de los templos
+
+Los templos aparecen con un ◆ verde en el mapa. Cada cofre da al menos un sello de jade. Lleva los sellos al maestro correspondiente y pulsa **E** para aprender su técnica durante la partida. Todas comparten la carga del Rayo de Raijin.
+
+| Templo | Maestro | Técnica | Sellos de jade |
+| --- | --- | --- | --- |
+| Viento | Haru | Corte del Vendaval, un tajo que atraviesa onis en línea recta | 2 |
+| Brasas | Enji | Anillo de Brasas, que aturde y empuja a los enemigos cercanos | 3 |
+| Brasas | Enji | Cuatro Llamas, cuatro golpes simultáneos que queman. Si hay tres o más onis al alcance, las llamas se reparten entre los más cercanos | 5 |
+| Marea | Nami | Marea Lunar, una ola en abanico que recupera vida al acertar | 4 |
 
 ## Créditos
 

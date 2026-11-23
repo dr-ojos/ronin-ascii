@@ -9,6 +9,7 @@ import { updateFx } from './fx';
 import { updateSpecial } from './special';
 import { updateMsg } from './hud';
 import { updateShop } from './shop';
+import { updateTemples } from './temples';
 import { shopStageActive } from './shop-stage';
 import { updateArmor } from './armor';
 import { updateMenu } from './menu';
@@ -25,7 +26,7 @@ export function update(dt: number) {
   if (state.menu) {
     sam.root.visible = true;   // a menu can open mid-blink (invulnerable): never leave the ronin hidden
     if (shopStageActive()) updateShop(dt);
-    else state.yaw += dt * 0.5;
+    else if (state.menu === 'custom') state.yaw += dt * 0.5;
     return;
   }
 
@@ -37,6 +38,7 @@ export function update(dt: number) {
   updateEnemies(dt);
   updateEncounters(dt);
   updateShop(dt);
+  updateTemples(dt);
   updateArmor(dt);
   updateSpecial(dt);
   updateFx(dt);

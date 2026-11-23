@@ -5,7 +5,9 @@ import { changeDensity } from './ascii';
 import { tryAttack, tryDash } from './player';
 import { reset } from './encounters';
 import { tryOpen } from './loot';
-import { tryLightning } from './special';
+import { trySpecial } from './special';
+import { cycleTechnique } from './techniques';
+import { tryTalkTemple } from './temples';
 import { tryTalk } from './shop';
 import { menuKey } from './menu';
 import { cycleWeapon, resetWeapons } from './weapons';
@@ -24,12 +26,16 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); tryDash(); }
   if (!e.repeat && e.code === 'KeyK' && state.playing && !state.dead) tryAttack(false);
   if (!e.repeat && e.code === 'KeyL' && state.playing && !state.dead) tryAttack(true);
-  if (!e.repeat && e.code === 'KeyE' && !tryTalk()) tryOpen();
+  if (!e.repeat && e.code === 'KeyE' && !tryTalk() && !tryTalkTemple()) tryOpen();
   if (!e.repeat && e.code === 'KeyQ' && state.playing && !state.dead) {
     const w = cycleWeapon();
     showMsg(w ? `— ${w.name} —` : 'solo tienes esta katana · Masa vende más en la casa del santuario', w ? 1.2 : 2.2);
   }
-  if (!e.repeat && e.code === 'KeyP') tryLightning();
+  if (!e.repeat && e.code === 'KeyP') trySpecial();
+  if (!e.repeat && e.code === 'KeyO' && state.playing && !state.dead && !state.photo) {
+    if (state.learnedTechniques.length > 1) showMsg(`— ${cycleTechnique().name.toUpperCase()} —`, 1.2);
+    else showMsg('Aprende técnicas en los templos ◆ del mapa (N).\nLos cofres contienen sellos de jade.', 2.6);
+  }
   if (e.code === 'KeyT') state.asciiOn = !state.asciiOn;
   if (e.code === 'KeyM') sfx.setMuted(!sfx.muted);
   if (e.code === 'KeyR') toggleRain();

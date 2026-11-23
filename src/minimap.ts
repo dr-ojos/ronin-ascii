@@ -2,7 +2,7 @@
 // Both are rendered once from the world data into offscreen canvases; each frame only copies a window
 // of them and stamps the samurai and the oni on top. Also announces each place as you walk into it
 // (the first time, it counts as discovered and gives points).
-import { HALF, SIZE, WORLD_R, PLACES, ROADS, RIVER, TORII_PATH, BRIDGES, biomeAt, groundAt, treeBlocked, type Place } from './map';
+import { HALF, SIZE, WORLD_R, PLACES, ROADS, RIVER, TEMPLE_GLYPH, TORII_PATH, BRIDGES, biomeAt, groundAt, treeBlocked, type Place } from './map';
 import { groundY } from './terrain';
 import { enemies, KINDS } from './enemies';
 import { showMsg } from './hud';
@@ -17,7 +17,7 @@ import { player, state } from './state';
 const FONT = '"Courier New", Courier, monospace';
 const COL = {
   grass: '#2c4a3a', contour: '#3d5e4c', water: '#4f86c6', road: '#b59d72', built: '#d8d4c8', sakura: '#f2a5c4',
-  pine: '#4f8a5a', cypress: '#3a6e48', bamboo: '#8fbf5a', rock: '#7a7f8c', snow: '#c9d2e6', place: '#ffd27a', you: '#ffffff', oni: '#ff5a4a'
+  pine: '#4f8a5a', cypress: '#3a6e48', bamboo: '#8fbf5a', rock: '#7a7f8c', snow: '#c9d2e6', place: '#ffd27a', temple: '#87efbd', you: '#ffffff', oni: '#ff5a4a'
 };
 const WILDLIFE_MARK: Record<Wildlife, string> = { lobos: 'w', oso: 'U', jabalies: 'j', aranas: '8' };
 function hash(x: number, z: number) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
@@ -66,11 +66,23 @@ function renderAtlas(cols: number, rows: number, cw: number, ch: number, labels:
   });
   for (const [col, l] of byColor) { x.fillStyle = col; for (const [g, px, py] of l) x.fillText(g, px, py); }
   // places: their glyph, and their name on the big map
-  x.fillStyle = COL.place;
   for (const p of PLACES) {
     const px = (p.x + HALF) / mx * cw, py = (p.z + HALF) / mz * ch;
+    const temple = p.glyph === TEMPLE_GLYPH;
+    x.fillStyle = temple ? COL.temple : COL.place;
     x.font = `bold ${Math.round(ch * 1.4)}px ${FONT}`; x.fillText(p.glyph, px - cw * 0.6, py - ch * 0.7);
-    if (labels) { x.font = `bold ${Math.round(ch * 0.95)}px ${FONT}`; x.fillText(p.name.toLowerCase(), px + cw * 1.2, py - ch * 0.4); }
+    if (labels) {
+      const left = temple && p.x < 100;
+      x.font = `bold ${Math.round(ch * 0.95)}px ${FONT}`;
+      x.textAlign = left ? 'right' : 'left';
+      x.fillText(p.name.toLowerCase(), px + cw * (left ? -1.15 : 1.2), py + ch * (temple && !left ? 0.65 : -0.4));
+      x.textAlign = 'left';
+    }
+  }
+  if (labels) {
+    x.fillStyle = COL.temple;
+    x.font = `bold 14px ${FONT}`;
+    x.fillText(`${TEMPLE_GLYPH} Templos · sellos de jade en cofres`, 16, 14);
   }
   return { c, cols, rows, cw, ch, mx, mz };
 }
@@ -163,7 +175,8 @@ export function updateMinimap(dt: number) {
   miniX.fillStyle = COL.place; miniX.fillText('N', W / 2 + nx * k, H / 2 + ny * k);
   miniX.textAlign = 'left'; miniX.textBaseline = 'top';
   // the big map, when open
-  if (state.bigMap) {
+  const mapOpen = state.bigMap && !state.menu;
+  if (mapOpen) {
     if (!big) big = renderAtlas(150, 91, 7, 11.5, true);
     const s = Math.min((innerWidth - 40) / big.c.width, (innerHeight - 80) / big.c.height, 1.4);
     bigEl.width = Math.round(big.c.width * s); bigEl.height = Math.round(big.c.height * s);
@@ -171,5 +184,5 @@ export function updateMinimap(dt: number) {
     bigX.drawImage(big.c, 0, 0, bigEl.width, bigEl.height);
     stamp(bigX, big, 0, 0, s, true);
   }
-  bigEl.style.display = state.bigMap ? 'block' : 'none';
+  bigEl.style.display = mapOpen ? 'block' : 'none';
 }

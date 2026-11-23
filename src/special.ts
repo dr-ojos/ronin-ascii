@@ -1,6 +1,4 @@
-// Raijin's strike, the special move: a charge that fills up with time (and a little with every kill);
-// when it is full, P calls lightning down on every oni around you. Each bolt hits hard, stuns and
-// throws them back. Also the bolts themselves, the white flash and the thunder.
+// P spends the shared charge on the equipped technique. Raijin's bolts also serve the thunder oni.
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { enemies } from './enemies';
@@ -11,6 +9,9 @@ import { showMsg } from './hud';
 import { CLS, tagMat } from './materials';
 import { dmgMult } from './upgrades';
 import { player, state } from './state';
+import { clearFourFlames, startFourFlames, updateFourFlames } from './four-flames';
+import { clearTechniqueWaves, startTechniqueWave, updateTechniqueWaves } from './technique-waves';
+import { TECHNIQUES } from './techniques';
 import { rnd } from './utils';
 
 const CHARGE_TIME = 30;     // seconds to fill the charge from empty
@@ -22,7 +23,7 @@ const MAX_BOLTS = 8;
 export function charge(amount: number) {
   if (state.special >= 1) return;
   state.special = Math.min(1, state.special + amount);
-  if (state.special >= 1) { sfx.chime(false); showMsg('— EL RAYO ESTÁ LISTO —\npulsa P', 1.6); }
+  if (state.special >= 1) { sfx.chime(false); showMsg(`— ${TECHNIQUES[state.technique].name.toUpperCase()} —\nCarga lista · pulsa P`, 1.6); }
 }
 export const chargeKill = () => charge(KILL_BONUS);
 
@@ -71,11 +72,24 @@ let flashT = 0;
 export const skyFlash = (k = 0.25) => { flashT = Math.max(flashT, k); };
 
 /** P pressed */
-export function tryLightning() {
-  if (!state.playing || state.dead || state.special < 1) return;
+export function trySpecial() {
+  if (!state.playing || state.dead || state.photo || state.menu) return;
+  if (state.special < 1) { showMsg(`Cargando ${TECHNIQUES[state.technique].name} · ${Math.floor(state.special * 100)} %`, 1.2); return; }
   state.special = 0;
-  // the samurai raises the blade and spins
-  Object.assign(player, { combo: 2, attackT: 0, attackDur: 0.55, hitDone: true, invuln: Math.max(player.invuln, 0.8) });
+  const id = state.technique;
+  Object.assign(player, { combo: id === 'viento' ? 0 : id === 'agua' ? 1 : 2, attackT: 0, attackDur: 0.55,
+    hitDone: true, invuln: Math.max(player.invuln, id === 'rayo' ? 0.8 : 0.48) });
+  if (id !== 'rayo') {
+    state.hitStop = 0.07;
+    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
+    if (id === 'cuatroLlamas') startFourFlames();
+    else startTechniqueWave(id);
+    return;
+  }
+  castLightning();
+}
+
+function castLightning() {
   state.hitStop = 0.12; state.shake = 0.9; flashT = 0.5;
   const targets = enemies
     .map(e => ({ e, d: Math.hypot(e.g.position.x - player.pos.x, e.g.position.z - player.pos.z) }))
@@ -101,14 +115,27 @@ export function tryLightning() {
 
 export function updateSpecial(dt: number) {
   if (state.playing && !state.dead) charge(dt / CHARGE_TIME);
+  updateTechniqueWaves(dt);
+  updateFourFlames(dt);
   for (let i = pending.length - 1; i >= 0; i--) { const p = pending[i]; if ((p.t -= dt) <= 0) { pending.splice(i, 1); p.fn(); } }
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.life -= dt;
     const k = Math.max(0, b.life / b.max), on = Math.random() < 0.8 ? 1 : 0.25;   // crackle
     b.core.opacity = k * on; b.glow.opacity = 0.35 * k * on;
-    if (b.life <= 0) { scene.remove(b.g); b.core.dispose(); b.glow.dispose(); bolts.splice(i, 1); }
+    if (b.life <= 0) { removeBolt(b); bolts.splice(i, 1); }
   }
   flashT = Math.max(0, flashT - dt);
   flash.position.set(player.pos.x, player.pos.y + 14, player.pos.z);
   flash.intensity = flashT > 0 ? 120 * flashT * (Math.random() < 0.7 ? 1 : 0.4) : 0;
+}
+
+function removeBolt(b: Bolt) { scene.remove(b.g); b.core.dispose(); b.glow.dispose(); }
+
+export function resetSpecial() {
+  Object.assign(state, { special: 0, jade: 0, technique: 'rayo', learnedTechniques: ['rayo'] });
+  clearTechniqueWaves();
+  clearFourFlames();
+  for (const b of bolts) removeBolt(b);
+  bolts.length = pending.length = 0;
+  flashT = flash.intensity = 0;
 }

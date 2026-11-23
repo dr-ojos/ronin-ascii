@@ -1,6 +1,9 @@
 // Shared, mutable game state. Modules import these objects and read / write their fields
 // (an imported `let` can't be reassigned from another module, so loose variables live in `state`).
 import * as THREE from 'three';
+import type { TechniqueId } from './techniques';
+
+export type MenuId = 'shop' | 'custom' | 'temple';
 
 export const player = {
   pos: new THREE.Vector3(0, 0, 4), face: Math.PI, hp: 100, maxHp: 100, attackT: -1, attackDur: 0.3, combo: 0, lastAttackEnd: -9,
@@ -20,10 +23,9 @@ export const state = {
   mon: 0, weapon: 'katana' as string, owned: ['katana'] as string[], armor: 'kimono' as string, ownedArmor: ['kimono'] as string[],
   // inside Masa's shop (the shrine at the start): its roof hides and the camera comes closer
   indoors: false,
-  // an open menu (shop.ts / custom.ts) pauses the fight
-  menu: null as null | 'shop' | 'custom',
-  // the lightning strike's charge, 0..1 (special.ts)
-  special: 0,
+  // An open menu pauses the fight. All techniques draw on the same charge (0..1).
+  menu: null as MenuId | null,
+  special: 0, jade: 0, technique: 'rayo' as TechniqueId, learnedTechniques: ['rayo'] as TechniqueId[],
   // feel
   shake: 0, hitStop: 0, time: 0,
   // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes

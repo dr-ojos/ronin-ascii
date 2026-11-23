@@ -9,7 +9,7 @@
 import { enemies, spawnEnemy, despawn, ELITES, isBoss, isElite } from './enemies';
 import { clearEnemyHazards } from './enemy-ai';
 import { collide, isFree } from './physics';
-import { WORLD_R, PLACES, ROADS, TORII_PATH, RIVER, place, inLake, lineDist, type P2 } from './map';
+import { WORLD_R, PLACES, ROADS, TEMPLE_PATHS, TORII_PATH, RIVER, place, inLake, lineDist, type P2 } from './map';
 import { CAMP_SPOTS, HIDDEN_CHESTS, POIS, WILDLIFE_SPOTS } from './landmarks';
 import { chests, makeChest, resetChests, updateLoot } from './loot';
 import { resetScore, updateScore } from './score';
@@ -17,6 +17,7 @@ import { resetUpgrades } from './upgrades';
 import { equipmentThreat } from './equipment-threat';
 import { showMsg } from './hud';
 import { sfx } from './sfx';
+import { resetSpecial } from './special';
 import { player, state } from './state';
 import { rnd } from './utils';
 import type { Camp, EnemyKind } from './types';
@@ -135,7 +136,7 @@ function buildCamps() {
   }
   // patrols along the roads (two on the long ones)
   for (const road of ROADS) {
-    if (road === TORII_PATH) continue;
+    if (road === TORII_PATH || TEMPLE_PATHS.includes(road)) continue;
     const len = routeLen(road.pts);
     for (let k = 0; k < (len > 260 ? 2 : 1); k++) {
       const t0 = Math.random() * len * 2, [x, z] = routeAt(road.pts, len, t0);
@@ -201,7 +202,8 @@ export function reset() {
   for (const c of camps) { c.active = false; c.roster = c.kinds.slice(); c.threat = undefined; c.clearedAt = -1; }
   resetChests(); resetUpgrades();
   Object.assign(player, { hp: 100, maxHp: 100, attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1, snareT: 0 });
-  player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0; state.special = 0;
+  player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0;
+  resetSpecial();
   resetScore();
   discovered.clear(); discovered.add('claro');
   ambushT = rnd(35, 60);

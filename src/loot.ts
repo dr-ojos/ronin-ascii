@@ -217,6 +217,9 @@ function openChest(c: Chest) {
   const lines: string[] = [];
   const mon = Math.round((c.kind === 'jefe' ? 500 : c.kind === 'guardian' ? 360 : c.kind === 'oculto' ? 220 : 120) * (1 + c.tier * 1.5) / 10) * 10;
   addPoints(mon, 'mon del cofre'); lines.push(`+${mon} mon`);
+  const jade = c.kind === 'jefe' ? 3 : c.kind === 'guardian' ? 2 : 1;
+  state.jade += jade;
+  lines.push(`+${jade} ${jade === 1 ? 'sello' : 'sellos'} de jade`);
   if (c.kind !== 'oculto') { const h = c.kind === 'jefe' ? 50 : c.kind === 'guardian' ? 40 : 30; player.hp = Math.min(player.maxHp, player.hp + h); lines.push(`+${h} vida`); }
   const chance = c.kind === 'jefe' || c.kind === 'guardian' ? 1 : c.kind === 'oculto' ? 0.75 : 0.4;
   const up = Math.random() < chance ? rollUpgrade() : null;

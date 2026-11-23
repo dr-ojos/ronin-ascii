@@ -2,6 +2,7 @@
 // biomes, and the rasterised masks (no grass on roads / water / plazas, no trees near them).
 // Pure data + a few lookups: terrain.ts, structures.ts, chunks.ts and the minimap all read from here.
 import * as THREE from 'three';
+import type { TempleTechniqueId, WaveTechniqueId } from './techniques';
 
 /** world square is [-HALF, HALF]²; the walkable area is a disc of radius WORLD_R (mountains beyond) */
 export const HALF = 1400, SIZE = HALF * 2;
@@ -11,6 +12,18 @@ export type P2 = [number, number];
 
 /** places with their own name (HUD + minimap). flat: radius of the levelled ground around it */
 export interface Place { id: string; name: string; x: number; z: number; r: number; flat: number; blend: number; level?: number; glyph: string }
+export interface TemplePlace extends Place {
+  technique: WaveTechniqueId; lesson?: TempleTechniqueId; master: string; facing: number; crest: string;
+}
+export const TEMPLE_GLYPH = '◆';
+export const TEMPLES: TemplePlace[] = [
+  { id: 'templo-viento', name: 'TEMPLO DEL VIENTO', x: -181, z: -72, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
+    technique: 'viento', master: 'Haru', facing: Math.PI / 2, crest: '風' },
+  { id: 'templo-brasas', name: 'TEMPLO DE LAS BRASAS', x: 238, z: -21, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
+    technique: 'fuego', lesson: 'cuatroLlamas', master: 'Enji', facing: -Math.PI / 2, crest: '火' },
+  { id: 'templo-marea', name: 'TEMPLO DE LA MAREA', x: 97, z: 272, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
+    technique: 'agua', master: 'Nami', facing: Math.PI / 2, crest: '水' },
+];
 export const PLACES: Place[] = [
   { id: 'claro', name: 'EL CLARO DEL SANTUARIO', x: 0, z: -8, r: 50, flat: 62, blend: 55, level: 0, glyph: 'H' },
   { id: 'aldea', name: 'ALDEA DE KIRI', x: 240, z: -130, r: 60, flat: 62, blend: 60, glyph: 'A' },
@@ -27,7 +40,8 @@ export const PLACES: Place[] = [
   { id: 'pueblo', name: 'PUEBLO DE ASAGIRI', x: 820, z: -260, r: 125, flat: 135, blend: 75, glyph: 'V' },
   { id: 'ruinas', name: 'RUINAS DEL CASTILLO TAKAMORI', x: -560, z: -880, r: 140, flat: 150, blend: 85, glyph: 'R' },
   { id: 'bosquenegro', name: 'BOSQUE NEGRO', x: -900, z: -470, r: 240, flat: 0, blend: 0, glyph: '!' },
-  { id: 'llanura', name: 'LLANURA DE LOS SUSURROS', x: 620, z: 700, r: 260, flat: 0, blend: 0, glyph: '"' }
+  { id: 'llanura', name: 'LLANURA DE LOS SUSURROS', x: 620, z: 700, r: 260, flat: 0, blend: 0, glyph: '"' },
+  ...TEMPLES
 ];
 export const place = (id: string) => PLACES.find(p => p.id === id)!;
 
@@ -71,7 +85,13 @@ const ROAD_CTRL: P2[][] = [
 export const ROADS: Line[] = ROAD_CTRL.map(c => ({ pts: smoothLine(c, 2), width: 2.8 }));
 /** the stone stairway of the thousand torii (also a road) */
 export const TORII_PATH: Line = { pts: smoothLine([[392, 238], [410, 280], [440, 330], [462, 368]], 1.5), width: 2.8 };
-ROADS.push(TORII_PATH);
+const TEMPLE_ROADS: P2[][] = [
+  [[-120, -60], [-138, -65], [-159, -72]],
+  [[150, -60], [180, -44], [201, -26], [216, -21]],
+  [[150, 255], [137, 259], [119, 272]],
+];
+export const TEMPLE_PATHS: Line[] = TEMPLE_ROADS.map(points => ({ pts: smoothLine(points, 2), width: 2.8 }));
+ROADS.push(TORII_PATH, ...TEMPLE_PATHS);
 
 // ------------------------------------------------------------ bridges (where a road crosses the river)
 export interface Bridge { x: number; z: number; dir: number; len: number; width: number }

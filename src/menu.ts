@@ -1,6 +1,6 @@
 // A small keyboard + mouse menu drawn in HTML on top of the game (the smith's shop, the ronin's look).
 // While one is open the fight is paused (game.ts) and input.ts sends the keys here first.
-import { state, keys } from './state';
+import { state, keys, type MenuId } from './state';
 
 export interface MenuRow {
   label: string;
@@ -21,7 +21,7 @@ export interface MenuRow {
   right?(): void;
 }
 export interface MenuDef {
-  id: 'shop' | 'custom';
+  id: MenuId;
   title: string;
   /** line under the title (the purse, for the shop) */
   sub?(): string;

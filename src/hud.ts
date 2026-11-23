@@ -8,6 +8,7 @@ import { armor } from './armor';
 import { threatLabel } from './equipment-threat';
 import { enemies, KINDS } from './enemies';
 import { sfx } from './sfx';
+import { TECHNIQUES } from './techniques';
 
 const hud = document.getElementById('hud')!, msgEl = document.getElementById('msg')!, promptEl = document.getElementById('prompt')!;
 export const overlay = document.getElementById('overlay')!;
@@ -32,9 +33,10 @@ export function updateHud(dt: number) {
   const lairs = camps.filter(c => !c.route && !c.temp && !c.wildlife), cleared = lairs.filter(c => !c.roster.length).length;
   const ups = upgradeList();
   const rf = Math.floor(state.special * 12);
-  const rayo = state.special >= 1
-    ? `RAYO  [<span class="y">${'#'.repeat(12)}</span>] ${state.time % 0.8 < 0.5 ? '<span class="y">¡ listo !  pulsa P</span>' : ''}`
-    : `RAYO  [<span class="b">${'#'.repeat(rf)}</span>${'-'.repeat(12 - rf)}] <span class="d">${Math.floor(state.special * 100)} %</span>`;
+  const equipped = TECHNIQUES[state.technique];
+  const special = `<span style="color:#${equipped.color.toString(16)}">${equipped.short.toUpperCase()}</span>  ` + (state.special >= 1
+    ? `[<span class="y">${'#'.repeat(12)}</span>] <span class="y">P · lista</span>`
+    : `[<span class="b">${'#'.repeat(rf)}</span>${'-'.repeat(12 - rf)}] <span class="d">${Math.floor(state.special * 100)} %</span>`);
   // Major boss health takes priority when a nearby guardian is also fighting.
   let foe: (typeof enemies)[number] | null = null, fd = 40;
   for (const e of enemies) {
@@ -51,9 +53,10 @@ export function updateHud(dt: number) {
   hud.innerHTML =
     `<span class="r">浪人</span> ${esc(look.name.toUpperCase() || 'RONIN')}\n` +
     `VIDA  [<span class="${player.hp < 30 ? 'r' : 'y'}">${bar}</span>] ${Math.ceil(player.hp)}\n` +
-    `${rayo}\n` +
+    `${special}\n` +
     `PUNTOS <span class="y">${state.score}</span>${streak}   <span class="d">récord ${state.best}</span>\n` +
     `MON <span class="y">${state.mon}</span>   <span class="b">${weapon().name}</span>${state.armor !== 'kimono' ? ` · <span class="b">${armor().name}</span>` : ''}\n` +
+    `SELLOS DE JADE <span class="jade">${state.jade}</span>\n` +
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}   <span class="y">${threatLabel()}</span>\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}\n` +
     (ups ? `<span class="y">${ups}</span>\n` : '') +
