@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import './assets';   // first: shows "cargando..." while the character model loads
 import { renderer, scene, camera } from './renderer';
-import { cellMat, renderAscii, resizeAscii } from './ascii';
+import { cellMat, renderAscii, resizeAscii, fitActorGrid } from './ascii';
 import { animSamurai, sam } from './avatar';
 import { updateOutfit } from './outfit';
 import { updateSparks } from './katana-fx';
@@ -16,6 +16,7 @@ import { setDetailedSurfaces } from './surfaces';
 import './input';
 
 const clock = new THREE.Clock();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 function frame() {
   requestAnimationFrame(frame);
   let dt = Math.min(clock.getDelta(), 0.05);
@@ -34,7 +35,13 @@ function frame() {
   updateMinimap(dt);
   cellMat.uniforms.uMode.value = state.colorMode;
   setDetailedSurfaces(!state.asciiOn);
-  if (state.asciiOn) renderAscii(scene, camera);
+  if (state.asciiOn) {
+    // how tall the ronin stands on screen sizes the characters' letters (ascii.ts)
+    const fr = sam.root.position;
+    _a.set(fr.x, fr.y, fr.z).project(camera); _b.set(fr.x, fr.y + 1.8, fr.z).project(camera);
+    fitActorGrid(Math.abs(_b.y - _a.y) * 0.5 * renderer.domElement.height);
+    renderAscii(scene, camera);
+  }
   else { renderer.setRenderTarget(null); renderer.render(scene, camera); }
 }
 

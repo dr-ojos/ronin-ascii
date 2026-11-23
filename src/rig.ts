@@ -156,15 +156,19 @@ function stripeTex(vertical: boolean, cols = 6) {
   return t;
 }
 function hatTex() {
+  // woven straw: radial strands round the cone (x), rings of binding down the slope (y), sun-bleached at the crown
   const c = document.createElement('canvas'); c.width = 256; c.height = 64;
   const x = c.getContext('2d')!;
-  x.fillStyle = '#121114'; x.fillRect(0, 0, 256, 64);
-  for (let i = 0; i < 60; i++) {
-    const px = Math.random() * 256, len = 14 + Math.random() * 40, a = 0.15 + Math.random() * 0.45;
-    x.strokeStyle = `rgba(225,225,230,${a})`; x.lineWidth = 0.8 + Math.random() * 1.6;
-    x.beginPath(); x.moveTo(px, 64); x.lineTo(px + (Math.random() - 0.5) * 3, 64 - len); x.stroke();
+  const g = x.createLinearGradient(0, 0, 0, 64);
+  g.addColorStop(0, '#e2c88e'); g.addColorStop(0.55, '#c49a5a'); g.addColorStop(1, '#8a6434');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 64);
+  for (let i = 0; i < 256; i += 4) {
+    x.fillStyle = i % 8 ? 'rgba(255,240,200,0.22)' : 'rgba(60,36,14,0.32)';
+    x.fillRect(i, 0, 1.6, 64);
   }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; return t;
+  for (let y = 6; y < 64; y += 9) { x.fillStyle = 'rgba(70,42,16,0.55)'; x.fillRect(0, y, 256, 1.6); }
+  x.fillStyle = 'rgba(40,24,10,0.7)'; x.fillRect(0, 60, 256, 4);   // bound edge
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4; return t;
 }
 const lacq = (map: THREE.Texture, rx: number, ry: number) => { const m = map.clone(); m.repeat.set(rx, ry); m.needsUpdate = true; const mat = new THREE.MeshPhysicalMaterial({ map: m, color: RONIN.red, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.25, side: THREE.DoubleSide }); mat.userData.role = 'lacquer'; return mat; };
 
@@ -196,12 +200,13 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   // ---- straw kasa + long hair + half mask
   const hg = new THREE.Group();
   const hatMat = new THREE.MeshStandardMaterial({ map: hatTex(), roughness: 0.9, side: THREE.DoubleSide }); hatMat.userData.role = 'hat';
-  const kasa = mesh(new THREE.ConeGeometry(0.3, 0.16, 40, 1, true), hatMat, hg, 0, 0.15, 0);
+  // a kasa a little wider than the shoulders' half-span, not a parasol
+  const kasa = mesh(new THREE.ConeGeometry(0.235, 0.13, 40, 1, true), hatMat, hg, 0, 0.145, 0);
   kasa.rotation.x = 0.14;
-  const rim = mesh(new THREE.TorusGeometry(0.3, 0.008, 4, 48), black, hg, 0, 0.07, 0.02); rim.rotation.x = Math.PI / 2 + 0.14;
-  const knob = mesh(new THREE.ConeGeometry(0.04, 0.04, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.245, -0.012);
+  const rim = mesh(new THREE.TorusGeometry(0.235, 0.007, 4, 48), black, hg, 0, 0.08, 0.017); rim.rotation.x = Math.PI / 2 + 0.14;
+  const knob = mesh(new THREE.ConeGeometry(0.032, 0.034, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.225, -0.01);
   const cordMat = new THREE.MeshStandardMaterial({ color: 0xb3241c, roughness: 0.55 });
-  const cord = mesh(new THREE.TorusGeometry(0.16, 0.007, 5, 40), cordMat, hg, 0, 0.115, 0.01); cord.rotation.x = Math.PI / 2 + 0.14;
+  const cord = mesh(new THREE.TorusGeometry(0.172, 0.007, 5, 40), cordMat, hg, 0, 0.115, 0.008); cord.rotation.x = Math.PI / 2 + 0.14;
   const chin: THREE.Mesh[] = [];
   for (const s of [-1, 1]) {
     const c = mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.2, 5), cordMat, hg, 0.085 * s, 0.01, 0.03); c.rotation.z = 0.32 * s; chin.push(c);
@@ -504,8 +509,9 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
   paintBody(rig.skinned.material, { kind: 'oni', skin: skinC.getHex(), hakama: legC.getHex(), trim: 0xc09a50, under: 0xd99a2b, wrap: 0x2c2422 });
   const { head: mask, chest, belt } = oniCostume(look);
   const headSize = top.y - head.y;
-  mask.scale.setScalar(headSize / 0.215);
-  mask.position.set(head.x, head.y + headSize * 0.45, head.z + 0.01);
+  // the costume head (mask and helmet) is sized to the skull, not to the whole head bone span
+  mask.scale.setScalar(headSize / 0.215 * 0.86);
+  mask.position.set(head.x, head.y + headSize * 0.4, head.z + 0.01);
   attach('Head', mask);
 
   chest.scale.set(sw / 0.2, 1, Math.max(0.96, sw / 0.2));

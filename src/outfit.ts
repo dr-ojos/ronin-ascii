@@ -188,7 +188,8 @@ function build(a: Armor) {
   }
   // ---- the helmet
   if (l.helmet) {
-    const H = P('Head'), T = P('HeadTop_End'), hh = T.distanceTo(H), r = hh * 0.6;
+    // r is the bowl's radius: a little more than the skull's, so the helmet sits on the head instead of swallowing it
+    const H = P('Head'), T = P('HeadTop_End'), hh = T.distanceTo(H), r = hh * 0.46;
     const g = new THREE.Group();
     if (l.helmet === 'jingasa') {
       // the foot soldier's lacquered iron hat, with the clan's crest
@@ -259,7 +260,7 @@ function build(a: Armor) {
           const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.3, r * 0.03, 6, 32), metal); ring.position.z = r * 0.045; sun.add(ring);
         }
       }
-      g.position.set(H.x, H.y + hh * 0.4, H.z + 0.005);
+      g.position.set(H.x, H.y + hh * 0.52, H.z + 0.005);   // the smaller bowl still covers the crown
     }
     hang(a.id, 'Head', g);
   }

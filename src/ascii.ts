@@ -107,9 +107,15 @@ export const ACTOR_LAYER = 1;
 const cellOpts = { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false };
 const cellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);
 const actorCellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);   // finer grid, actors only
-// Characters get their own grid, about half the environment's pitch, on whole pixels (a fractional
-// pitch beats against the glyphs into horizontal lines) and big enough for each letter to read.
-const ACTOR_SCALE = 0.55, ACTOR_OVERLAP = 1.3;
+// Characters get their own grid, on whole pixels (a fractional pitch beats against the glyphs into
+// horizontal lines). Its size follows how big the ronin is on screen: about ACTOR_ROWS rows of
+// characters from head to feet, so far away the figure keeps its detail in small letters and up
+// close (photo mode, the shop) the letters grow until each one reads, up to ACTOR_SCALE of the
+// environment's cell.
+// Small letters: ~56 rows head to feet (at play distance on a retina screen the cells go down to
+// 1.5 CSS px), so hands, folds and armour plates each get several characters.
+const ACTOR_SCALE = 0.42, ACTOR_OVERLAP = 1.3, ACTOR_ROWS = 56;
+let fitPx = 0, envCh = 0;
 interface Grid { cw: number; ch: number; gw: number; gh: number; cols: number; rows: number; font: THREE.CanvasTexture }
 const grids: { env: Grid | null; actor: Grid | null } = { env: null, actor: null };
 export const cellMat = new THREE.ShaderMaterial({
@@ -165,10 +171,12 @@ export const cellMat = new THREE.ShaderMaterial({
         if (coverage < 1.0) { gl_FragColor = vec4(0.0); return; }
         // ---- actors: silhouette drawn with | \\ - / strokes, creases too, body filled with the actor ramp
         // Sample actor colours only, so a narrow horn or blade keeps its colour at the edge.
-        vec3 ac = grade((texture2D(tScene, uv).rgb * (2.0 * center)
+        // the figures get their own exposure (x1.8): at night they would otherwise sit in the bottom
+        // third of the ramp, all dots; this way the lit side reaches the dense letters
+        vec3 ac = grade(1.8 * (texture2D(tScene, uv).rgb * (2.0 * center)
           + texture2D(tScene, uv + dx).rgb * sides.x + texture2D(tScene, uv - dx).rgb * sides.y
           + texture2D(tScene, uv + dy).rgb * sides.z + texture2D(tScene, uv - dy).rgb * sides.w) / coverage);
-        float al = min(pow(luma(ac), 0.58), 0.999);
+        float al = min(pow(luma(ac), 0.75), 0.999);
         vec2 e = cs;
         float m0 = M(uv, e, -1., 1.), m1 = M(uv, e, 0., 1.), m2 = M(uv, e, 1., 1.), m3 = M(uv, e, -1., 0.);
         float m5 = M(uv, e, 1., 0.), m6 = M(uv, e, -1., -1.), m7 = M(uv, e, 0., -1.), m8 = M(uv, e, 1., -1.);
@@ -183,14 +191,23 @@ export const cellMat = new THREE.ShaderMaterial({
         // light and shadow pick the density; an ordered jitter keeps neighbouring cells from repeating
         // the same letter in rows, so the shading reads as a gradient of characters
         float dith = (hash(cell) - 0.5) * 0.9 + (mod(cell.x + cell.y * 2.0, 3.0) - 1.0) * 0.25;
-        float shade = smoothstep(0.0, 1.0, al) * 0.6 + al * 0.4;
+        // tonal curve: a steep S so the lit side and the shadow side separate into distinct letters
+        float shade = smoothstep(0.03, 0.9, al) * 0.72 + al * 0.28;
+        // local contrast: a cell brighter than its neighbours (a ridge, a fold catching light) rises,
+        // a cell darker than them (a cavity, under the arm, between plates) sinks -> carved volume
+        float nb = (a0 + a1 + a2 + a3 + a5 + a6 + a7 + a8) * 0.125, lc = L(uv, e, 0., 0.);
+        shade = clamp(shade + (lc - nb) * 1.6, 0.0, 1.0);
         if (outline) { row = uEdgeRow; idx = bin(mg); }
         else if (length(gl) > 1.35) { row = uEdgeRow; idx = bin(gl); }     // only deep creases get a stroke
         else { row = ramp; idx = clamp(floor(shade * (uN - 1.0) + 0.5 + dith), 1.0, uN - 1.0); }
         vec3 tint = ac / max(max(max(ac.r, ac.g), ac.b), 0.03);
         // stronger light / shadow: dim strokes in the shade (the solid backing carries the form there),
         // white-hot strokes where the light hits
-        c = mix(tint, vec3(1.0), 0.04 + 0.12 * al * al) * (0.29 + 0.89 * al);
+        c = mix(tint, vec3(1.0), 0.04 + 0.2 * shade * shade * shade) * (0.26 + 0.98 * shade);
+        // colour temperature: shadows go cool indigo, light goes faintly warm (chiaroscuro)
+        c *= mix(vec3(0.72, 0.8, 1.08), vec3(1.07, 1.0, 0.92), smoothstep(0.15, 0.75, shade));
+        if (ramp > ${METAL_ROW.toFixed(1)} - 0.5 && ramp < ${METAL_ROW.toFixed(1)} + 0.5 && shade > 0.82)
+          c = mix(c, vec3(1.0), (shade - 0.82) * 2.5);                     // specular glint on steel and lacquer
         // light-aware contour: the edge of the silhouette that faces the moon (or is lit by a lantern)
         // becomes a band of bright cool characters; the edge turned away sinks into dark characters
         float rim = smoothstep(1.1, 2.6, length(mg));                      // thin: the outermost cell or so
@@ -270,16 +287,16 @@ const postMat = new THREE.ShaderMaterial({
     // solid colour behind the actor characters, one flat tile per actor cell, cel-shaded in bands
     vec3 actorBacking(vec2 fc){
       vec2 p = (floor(fc / uCellA) + 0.5) * uCellA;
-      vec3 bc = grade(texture2D(tScene, (mask(p) > 0.5 ? p : fc) / uRes).rgb);
+      vec3 bc = grade(1.8 * texture2D(tScene, (mask(p) > 0.5 ? p : fc) / uRes).rgb);   // same exposure as the characters
       float l = luma(bc);
-      float band = l < 0.05 ? 0.03 : l < 0.14 ? 0.15 : l < 0.28 ? 0.3 : l < 0.48 ? 0.48 : 0.68;
+      float band = l < 0.06 ? 0.02 : l < 0.14 ? 0.1 : l < 0.26 ? 0.24 : l < 0.42 ? 0.42 : l < 0.62 ? 0.6 : 0.8;
       vec3 tint = bc / max(max(max(bc.r, bc.g), bc.b), 0.03);
       tint = mix(vec3(luma(tint)), tint, 1.15);                   // keep armour colours rich
       vec3 b = tint * band;
       if (uMode > 2.5) b = vec3(0.93) * band;
       else if (uMode > 1.5) b = vec3(1.0, 0.68, 0.22) * band;
       else if (uMode > 0.5) b = vec3(0.25, 1.0, 0.45) * band;
-      return mix(b, vec3(1.0, 0.12, 0.08) * max(band, 0.3), uHit * 0.5) * 0.2;   // faint: the characters must stay the main read
+      return mix(b, vec3(1.0, 0.12, 0.08) * max(band, 0.3), uHit * 0.5) * 0.4;   // under the characters: the figure reads as one coloured mass
     }
     // all glyphs of the 3x3 neighbouring cells that cover this pixel; returns (strongest, sum)
     void layer(sampler2D cells, sampler2D font, vec2 C, vec2 Gs, vec2 grid, vec2 fc, bool scatter, out vec3 top, out vec3 sum){
@@ -317,7 +334,8 @@ const postMat = new THREE.ShaderMaterial({
         layer(tCells, tFont, uCell, uGlyph, uGrid, fc, true, et, es);
         col = max(mix(et, es, 0.25), actor);
         // dark contour just outside the silhouette
-        float r = uRim * 1.5, d = r * 0.7;
+        // a wide dark moat round every figure, so its letters never merge with the ground's
+        float r = uRim * 3.6, d = r * 0.7;
         float near = max(max(max(mask(fc + vec2(r, 0.)), mask(fc - vec2(r, 0.))), max(mask(fc + vec2(0., r)), mask(fc - vec2(0., r)))),
                          max(max(mask(fc + vec2(d, d)), mask(fc - vec2(d, d))), max(mask(fc + vec2(d, -d)), mask(fc + vec2(-d, d)))));
         // which way the silhouette is: g points from here towards the actor
@@ -326,7 +344,7 @@ const postMat = new THREE.ShaderMaterial({
                       mask(fc + vec2(d, d)) - mask(fc - vec2(d, d)) - mask(fc + vec2(d, -d)) + mask(fc + vec2(-d, d))) * 0.7;
         float litSide = length(g) > 0.01 ? smoothstep(-0.15, 0.6, dot(normalize(-g), uLight)) : 0.0;
         // deep dark halo on the shadow side, a lighter one where the moon hits (so the bright rim pops)
-        col *= 1.0 - near * mix(0.92, 0.4, litSide);
+        col *= 1.0 - near * mix(0.95, 0.6, litSide);
       }
       vec2 q = fc / uRes - 0.5;
       float vig = 1.0 - dot(q, q) * 1.1;
@@ -344,17 +362,34 @@ function makeGrid(cw: number, ch: number, ov: number, actor = false): Grid {
 export function applyDensity() {
   const [w, h] = DENSITY[densityIdx];
   const cw = Math.max(3, Math.round(w * DPR)), ch = Math.max(5, Math.round(h * DPR));
-  grids.env?.font.dispose(); grids.actor?.font.dispose();
+  grids.env?.font.dispose();
   const E = grids.env = makeGrid(cw, ch, OVERLAP);
-  const aw = Math.max(3, Math.round(cw * ACTOR_SCALE));
-  const ah = Math.max(5, Math.round(ch * ACTOR_SCALE));
-  const A = grids.actor = makeGrid(aw, ah, ACTOR_OVERLAP, true);
-  cellRT.setSize(E.cols, E.rows); actorCellRT.setSize(A.cols, A.rows);
+  envCh = ch;
+  cellRT.setSize(E.cols, E.rows);
   cellMat.uniforms.uRes.value.copy(bufSize);
   const u = postMat.uniforms;
   u.uRes.value.copy(bufSize);
   u.uCell.value.set(E.cw, E.ch); u.uGlyph.value.set(E.gw, E.gh); u.uGrid.value.set(E.cols, E.rows); u.tFont.value = E.font;
+  buildActorGrid(actorPitch(fitPx > 0 ? fitPx / ACTOR_ROWS : Infinity));
+}
+/** actor cell height for an ideal (fractional) pitch, kept between legible-but-small and the largest */
+function actorPitch(ideal: number) {
+  const most = Math.max(5, Math.round(envCh * ACTOR_SCALE)), least = Math.min(most, DPR >= 1.5 ? Math.max(3, Math.round(1.5 * DPR)) : 4);
+  return Math.min(most, Math.max(least, Math.round(ideal)));
+}
+function buildActorGrid(ah: number) {
+  grids.actor?.font.dispose();
+  const A = grids.actor = makeGrid(Math.max(3, Math.round(ah * 0.58)), ah, ACTOR_OVERLAP, true);
+  actorCellRT.setSize(A.cols, A.rows);
+  const u = postMat.uniforms;
   u.uCellA.value.set(A.cw, A.ch); u.uGlyphA.value.set(A.gw, A.gh); u.uGridA.value.set(A.cols, A.rows); u.tFontA.value = A.font;
+}
+/** every frame: the ronin's height on screen (device px) sizes the characters' grid */
+export function fitActorGrid(px: number) {
+  fitPx = px;
+  const ideal = px / ACTOR_ROWS, cur = grids.actor!.ch, want = actorPitch(ideal);
+  // a little hysteresis, so zooming across a boundary does not flicker between two fonts
+  if (want !== cur && (Math.abs(ideal - cur) > 0.75 || want === actorPitch(Infinity) || want === actorPitch(0))) buildActorGrid(want);
 }
 applyDensity();
 
