@@ -62,6 +62,9 @@ sparkMat.onBeforeCompile = sh => {
 const sparkPts = new THREE.Points(spGeo, sparkMat);
 sparkPts.frustumCulled = false; scene.add(sparkPts);
 let spNext = 0, sparkAcc = 0, bladeHeat = 0, swingS = 0;
+// 0..1: how much the ronin is fighting right now. Running swings the blade too, but only a cut
+// (player.attackT >= 0) may draw the white trail, flare the halo or shower sparks.
+let fight = 0;
 let wasDisplaying = false;
 const bladeBase = new THREE.Vector3(), bladeTip = new THREE.Vector3(), prevTip = new THREE.Vector3(), tipVel = new THREE.Vector3(), spTmp = new THREE.Vector3();
 const prevBase = new THREE.Vector3();
@@ -118,7 +121,7 @@ function updateTrail(dt: number, emit: boolean) {
   const vLife = VAPOUR_LIFE * (0.7 + 0.3 * trailK), sLife = STREAK_LIFE * (0.8 + 0.2 * trailK);
   for (const s of trail) s.age += dt;
   while (trail.length && trail[trail.length - 1].age > vLife) trail.pop();
-  if (emit && swingS > 0.12) {
+  if (emit && fight > 0.5 && swingS > 0.12) {
     // sub-steps between last frame's blade and this one, so fast cuts draw a smooth arc
     const steps = trail.length ? Math.min(10, Math.max(1, Math.ceil(prevTip.distanceTo(bladeTip) / 0.06))) : 1;
     for (let k = 1; k <= steps; k++) {
@@ -184,13 +187,17 @@ export function updateSparks(dt: number, emit: boolean) {
   const swing = Math.min(1, tipVel.length() / 12);
   // follows the blade's real speed: flares instantly with the cut, settles more slowly
   swingS += (swing - swingS) * Math.min(1, dt * (swing > swingS ? 30 : 7));
-  bladeHeat += ((!staged && player.attackT >= 0 ? 1 : swing * 0.6) - bladeHeat) * Math.min(1, dt * 10);
+  // on at once with the cut, off a moment after it (so the last arc of the cut still finishes its trail)
+  const cutting = !staged && player.attackT >= 0;
+  fight = cutting ? 1 : Math.max(0, fight - dt * 6);
+  const swingF = swingS * fight;   // blade speed that counts: the cut's, never the run's
+  bladeHeat += ((cutting ? 1 : swing * 0.6 * fight) - bladeHeat) * Math.min(1, dt * 10);
   if (displaying) trail.length = 0;
   updateTrail(dt, emit);
   prevTip.copy(bladeTip); prevBase.copy(bladeBase);
   // emission: a rare crackle along the edge, a light shower while cutting
   if (emit) {
-    sparkAcc += dt * (3 + player.moving * 3 + bladeHeat * 55 + swing * 25);
+    sparkAcc += dt * (3 + bladeHeat * 55 + swing * fight * 25);
     while (sparkAcc >= 1) {
       sparkAcc -= 1;
       const s = Math.sqrt(Math.random());
@@ -226,11 +233,11 @@ export function updateSparks(dt: number, emit: boolean) {
   // the blade and its light pulse with the heat of the cut
   const fl = 0.85 + Math.random() * 0.3;
   // polished steel at rest; the edge catches light in proportion to how fast it is moving
-  bladeMat.emissiveIntensity = (0.4 + swingS * 1.8 + bladeHeat * 0.5) * (0.92 + Math.random() * 0.16);
+  bladeMat.emissiveIntensity = (0.4 + swingF * 1.8 + bladeHeat * 0.5) * (0.92 + Math.random() * 0.16);
   bladeLight.position.lerpVectors(bladeBase, bladeTip, 0.6);
-  bladeLight.intensity = (0.5 + swingS * 4 + bladeHeat * 1.5) * fl * (0.8 + w.fx.halo * 0.4);
+  bladeLight.intensity = (0.5 + swingF * 4 + bladeHeat * 1.5) * fl * (0.8 + w.fx.halo * 0.4);
   // the halo breathes at rest and flares with the cut
-  const hk = Math.min(1, swingS * 1.2 + bladeHeat * 0.5);
+  const hk = Math.min(1, swingF * 1.2 + bladeHeat * 0.5);
   haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 + hk * 0.2;
   haloCore.opacity = 0.08 + hk * 0.25;
   halo.scale.set(1 + hk * 0.25, 1 + hk * 0.25, 1);

@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { camera } from './renderer';
 import { bufSize, cellMat } from './ascii';
-import { nearBlockers, moonDir } from './world';
+import { nearBlockers, moonDir, keyLight } from './world';
+import { formKey } from './manga-art';
 import { groundY } from './terrain';
 import { shopCameraPos, shopFocus, shopStageActive } from './shop-stage';
 import { player, state } from './state';
@@ -53,4 +54,10 @@ export function updateLightDir() {
   _l1.set(player.pos.x, player.pos.y + 1.2, player.pos.z).addScaledVector(moonDir, 1.5).project(camera);
   const dx = (_l1.x - _l0.x) * bufSize.x, dy = (_l1.y - _l0.y) * bufSize.y, len = Math.hypot(dx, dy);
   if (len > 1e-3) cellMat.uniforms.uLight.value.set(dx / len, dy / len);
+  // the figures' key light: a 3/4 light from the moon's side of the screen, a little above and in
+  // front, so one side of the body is lit and the other turns into shadow (manga-art.ts FORM)
+  const L = cellMat.uniforms.uLight.value;
+  const k = formKey.value.set(L.x * 0.78, Math.max(L.y, -0.2) * 0.62 + 0.38, 0.62).normalize();
+  _l0.copy(k).transformDirection(camera.matrixWorld);
+  keyLight.position.set(player.pos.x, player.pos.y + 1.1, player.pos.z).addScaledVector(_l0, 3);
 }

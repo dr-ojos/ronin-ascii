@@ -14,7 +14,7 @@ import { sfx, panOf } from './sfx';
 import { collide } from './physics';
 import { surfaceY, wadeDepth } from './structures';
 import { ripple, splash, wader, WADE_SINK } from './water';
-import { keyLight, rimLight } from './world';
+import { rimLight } from './world';
 import { player, state, keys } from './state';
 import { angDiff } from './utils';
 
@@ -79,7 +79,6 @@ export function updatePlayer(dt: number) {
   player.walk += dt * 10 * player.moving;
   sam.root.position.copy(player.pos);
   sam.root.rotation.y = player.face;
-  keyLight.position.set(player.pos.x + Math.sin(state.yaw) * 2.5, player.pos.y + 3.2, player.pos.z + Math.cos(state.yaw) * 2.5);
   rimLight.position.set(player.pos.x - Math.sin(state.yaw) * 8, player.pos.y + 5, player.pos.z - Math.cos(state.yaw) * 8); rimLight.target.position.copy(player.pos);
 
   if (player.attackT >= 0) {

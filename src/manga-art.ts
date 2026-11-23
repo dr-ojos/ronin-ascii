@@ -138,6 +138,22 @@ const RIM = /* glsl */`
 }
 `;
 
+// form light: chiaroscuro modelling, so the figure reads as a volume and not a flat cut-out.
+// A 3/4 key from the moon's side of the screen (camera.ts keeps it in view space every frame):
+// the lit side keeps its colour, the turned-away side sinks into a deep shadow with a darker
+// core shadow along the terminator, and the cool rim (above) still catches the far edge.
+export const formKey = { value: new THREE.Vector3(-0.55, 0.55, 0.62).normalize() };
+const FORM = /* glsl */`
+{
+  float ndl = dot(normal, uFormKey);
+  float lit = smoothstep(-0.18, 0.42, ndl);                              // soft terminator
+  float core = 1.0 - 0.32 * exp(-pow((ndl + 0.02) / 0.14, 2.0));         // core shadow right at the turn
+  float form = mix(0.34, 1.22, lit) * core;
+  form += 0.14 * pow(max(ndl, 0.0), 6.0);                                // a broad sheen where it faces the key
+  outgoingLight = (outgoingLight - totalEmissiveRadiance) * form + totalEmissiveRadiance;
+}
+`;
+
 const done = new WeakSet<THREE.Material>();
 const c3 = (c: number) => new THREE.Color(c);
 
@@ -161,9 +177,12 @@ function install(mat: THREE.MeshStandardMaterial) {
       sh.fragmentShader = BODY_COMMON + sh.fragmentShader.replace('#include <color_fragment>',
         '#include <color_fragment>\n' + (paint.kind === 'oni' ? ONI_PAINT : RONIN_PAINT));
     }
-    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + RIM);
+    sh.uniforms.uFormKey = formKey;
+    sh.fragmentShader = 'uniform vec3 uFormKey;\n' + sh.fragmentShader
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + RIM)
+      .replace('#include <opaque_fragment>', FORM + '#include <opaque_fragment>');
   };
-  mat.customProgramCacheKey = () => prevKey() + '|manga' + (paint ? '-' + paint.kind : '');
+  mat.customProgramCacheKey = () => prevKey() + '|manga2' + (paint ? '-' + paint.kind : '');
   mat.needsUpdate = true;
 }
 
