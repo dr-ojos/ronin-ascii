@@ -14,6 +14,7 @@ import { addPoints, POINTS } from './score';
 import { dropLoot, unseal } from './loot';
 import { lifesteal } from './upgrades';
 import { chargeKill, bolt, skyFlash } from './special';
+import { earnTechnique, TECHNIQUES } from './techniques';
 import { CLS, tagMat } from './materials';
 import { player, state } from './state';
 import { angDiff, rnd } from './utils';
@@ -515,5 +516,10 @@ function campCleared(camp: Camp, last: Enemy['kind']) {
   const title = (camp.boss === last || (eliteLast && camp.elite === last)) ? `¡ ${KINDS[last].name.toUpperCase()} ABATIDO !` : camp.temp ? '— EMBOSCADA SUPERADA —' : camp.route ? '— PATRULLA ABATIDA —' : '— GUARIDA LIMPIA —';
   const chest = camp.chest && camp.chest.state === 'sealed' ? '\nel cofre se ha abierto' : '';
   if (camp.chest) unseal(camp.chest);
+  if (camp.technique && earnTechnique(camp.technique)) {
+    sfx.chime(true); skyFlash(0.6);
+    showMsg(`${title}\n— HAS GANADO ${TECHNIQUES[camp.technique].name.toUpperCase()} —\nequipada · P para usarla · O para cambiar`, 3.6);
+    return;
+  }
   showMsg(`${title}\n+${bonus}  ·  +20 vida${chest}`, 2.2);
 }

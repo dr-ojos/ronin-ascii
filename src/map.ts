@@ -2,7 +2,8 @@
 // biomes, and the rasterised masks (no grass on roads / water / plazas, no trees near them).
 // Pure data + a few lookups: terrain.ts, structures.ts, chunks.ts and the minimap all read from here.
 import * as THREE from 'three';
-import type { TempleTechniqueId, WaveTechniqueId } from './techniques';
+import type { JadeTechniqueId, TempleTechniqueId } from './techniques';
+import type { EnemyKind } from './types';
 
 /** world square is [-HALF, HALF]²; the walkable area is a disc of radius WORLD_R (mountains beyond) */
 export const HALF = 1400, SIZE = HALF * 2;
@@ -13,7 +14,9 @@ export type P2 = [number, number];
 /** places with their own name (HUD + minimap). flat: radius of the levelled ground around it */
 export interface Place { id: string; name: string; x: number; z: number; r: number; flat: number; blend: number; level?: number; glyph: string }
 export interface TemplePlace extends Place {
-  technique: WaveTechniqueId; lesson?: TempleTechniqueId; master: string; facing: number; crest: string;
+  technique: TempleTechniqueId; lesson?: JadeTechniqueId; master: string; facing: number; crest: string;
+  /** a temple whose technique is won, not bought: this guardian waits in its courtyard */
+  guardian?: EnemyKind;
 }
 export const TEMPLE_GLYPH = '◆';
 export const TEMPLES: TemplePlace[] = [
@@ -23,6 +26,8 @@ export const TEMPLES: TemplePlace[] = [
     technique: 'fuego', lesson: 'cuatroLlamas', master: 'Enji', facing: -Math.PI / 2, crest: '火' },
   { id: 'templo-marea', name: 'TEMPLO DE LA MAREA', x: 97, z: 272, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
     technique: 'agua', master: 'Nami', facing: Math.PI / 2, crest: '水' },
+  { id: 'templo-rayo', name: 'TEMPLO DEL RAYO', x: 345, z: -305, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
+    technique: 'rayo', master: 'Shiden', facing: 0, crest: '雷', guardian: 'guardianRayo' },
 ];
 export const PLACES: Place[] = [
   { id: 'claro', name: 'EL CLARO DEL SANTUARIO', x: 0, z: -8, r: 50, flat: 62, blend: 55, level: 0, glyph: 'H' },
@@ -89,6 +94,7 @@ const TEMPLE_ROADS: P2[][] = [
   [[-120, -60], [-138, -65], [-159, -72]],
   [[150, -60], [180, -44], [201, -26], [216, -21]],
   [[150, 255], [137, 259], [119, 272]],
+  [[352, -165], [348, -225], [345, -283]],
 ];
 export const TEMPLE_PATHS: Line[] = TEMPLE_ROADS.map(points => ({ pts: smoothLine(points, 2), width: 2.8 }));
 ROADS.push(TORII_PATH, ...TEMPLE_PATHS);

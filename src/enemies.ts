@@ -91,6 +91,10 @@ export const KINDS: Record<EnemyKind, KindDef> = {
   raijinMayor: { name: 'Raijin de la Cumbre', scale: 1.6, hp: 28, speed: [2.7, 2.9], dmg: 25, reach: 3.8, windup: 0.9, heavy: true, points: 1000, glyph: 'J',
                  look: { tint: 0x222f6c, mask: 0x6876d8, eye: 0xd0eaff, weapon: 'bigclub', crest: 'halo' }, robe: 0x222f6c, maskC: 0x8695df,
                  moves: ['thunder', 'slam', 'crush'], boss: { aura: 0x8ca9ff, enraged: ['storm', 'quake', 'thunder'] } },
+  // the guardian of the Templo del Rayo: a swordsman who calls the storm. Beat it to earn Raijin's lightning
+  guardianRayo: { name: 'Ikazuchi, guardián del rayo', scale: 1.42, hp: 22, speed: [3.3, 3.5], dmg: 20, reach: 3.6, windup: 0.72, heavy: true, points: 1000, glyph: 'Z',
+                  look: { tint: 0x1a2250, mask: 0xd7e3ff, eye: 0x9fdcff, weapon: 'sword', crest: 'halo' }, robe: 0x24306e, maskC: 0xc4d6ff,
+                  moves: ['blade', 'thunder', 'bladeRush', 'blade'], boss: { aura: 0x9fbbff, enraged: ['storm', 'whirlwind', 'thunder', 'bladeRush'] } },
   // --- the sub-bosses that guard chests (encounters.ts) ---
   // a spear master: three lunges in a row, barely a breath between them, then a long pause (your turn)
   kensei:   { name: 'kensei de la lanza', scale: 1.14, hp: 9, speed: [4.6, 4.6], dmg: 13, reach: 2.5, windup: 0.42, heavy: false, points: 450, glyph: 'K',

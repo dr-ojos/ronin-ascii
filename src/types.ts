@@ -3,6 +3,7 @@ import type * as THREE from 'three';
 import type { EnemyAttack } from './enemy-moves';
 import type { LightAnchor } from './lights';
 import type { EquipmentThreat } from './equipment-threat';
+import type { TechniqueId } from './techniques';
 
 export type Vec3 = [number, number, number];
 export type WeaponForm = 'katana' | 'spear' | 'broad' | 'dual';
@@ -49,7 +50,7 @@ export type Wildlife = 'lobos' | 'oso' | 'jabalies' | 'aranas';
 export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 'acechador' | 'hechicero'
   | 'guadanero' | 'piromante' | 'duelista' | 'tambor' | 'sombra' | 'coloso'
   | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'espectro'
-  | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'kensei' | 'tengu' | 'raijin';
+  | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianRayo' | 'kensei' | 'tengu' | 'raijin';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
 
 export interface EnemyModel {
@@ -122,6 +123,8 @@ export interface Camp {
   temp?: boolean;
   /** camps with a chest at their centre (opened once cleared) */
   chest?: Chest;
+  /** a temple guardian: beating it teaches this technique, and it does not come back this run */
+  technique?: TechniqueId;
 }
 /** a chest in the world (loot.ts) */
 export interface Chest {

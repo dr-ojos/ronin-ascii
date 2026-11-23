@@ -40,6 +40,7 @@ const moves: Record<WeaponForm, readonly [Move, Move, Move]> = {
 
 // K / click chain the current weapon's moves; L goes directly to its heavy finisher.
 export function tryAttack(heavy = false) {
+  if (player.dancing) return;
   const w = weapon();
   if (player.attackT >= 0 && (player.attackT < player.attackDur * (heavy ? 0.85 : 0.6) || (w.form === 'dual' && !player.hitDone))) return;
   if (heavy) player.combo = 2;
@@ -55,7 +56,7 @@ export function tryAttack(heavy = false) {
   sfx.swing({ power: player.combo === 2 ? 1.35 : 1, pan: player.combo === 1 ? 0.3 : -0.3 });
 }
 export function tryDash() {
-  if (!state.playing || state.dead || player.dashCd > 0) return;
+  if (!state.playing || state.dead || player.dashCd > 0 || player.dancing) return;
   const mv = moveInput();
   if (mv.lengthSq() < 0.01) mv.set(Math.sin(player.face), 0, Math.cos(player.face));
   player.dashDir.copy(mv.normalize()); player.dashT = 0.2; player.dashCd = 0.75 * dashCdMult(); player.invuln = 0.3;
@@ -85,7 +86,9 @@ export function updatePlayer(dt: number) {
   if (player.attackT >= 0) speed = 5.6 * 0.35;
   if (player.snareT > 0) speed *= 0.53;
   speed *= 1 - 0.4 * depth;                     // wading through the river is slow
-  if (player.dashT > 0) {
+  if (player.dancing) {
+    // the sword dance moves you (blade-dance.ts)
+  } else if (player.dashT > 0) {
     player.dashT -= dt;
     player.pos.addScaledVector(player.dashDir, 18 * (1 - 0.3 * depth) * dt);
     // the halo: an after-image every few centimetres, brighter at the start of the dodge
@@ -111,7 +114,7 @@ export function updatePlayer(dt: number) {
     player.attackT += dt;
     const p = Math.min(1, player.attackT / player.attackDur);
     const w = weapon(), move = moves[w.form ?? 'katana'][player.combo];
-    if (p > 0.2 && p < 0.55) {
+    if (p > 0.2 && p < 0.55 && !player.dancing) {
       player.pos.x += Math.sin(player.face) * move.lunge * dt;
       player.pos.z += Math.cos(player.face) * move.lunge * dt;
       collide(player.pos, 0.45);

@@ -45,14 +45,19 @@ C paleta · T vista sin ASCII · F modo foto · R lluvia · M sonido · + / - de
 
 ## Técnicas de los templos
 
-Los templos aparecen con un ◆ verde en el mapa. Cada cofre da al menos un sello de jade. Lleva los sellos al maestro correspondiente y pulsa **E** para aprender su técnica durante la partida. Todas comparten la carga del Rayo de Raijin.
+Empiezas con la **Danza de los Mil Tajos**: al pulsar **P** con la carga llena, el ronin cruza el campo en destellos y atraviesa con la espada hasta a seis onis a 13 m, hiriendo también a quien esté en su camino. Al envainar, todos los cortados reciben un último golpe.
 
-| Templo | Maestro | Técnica | Sellos de jade |
+Los templos aparecen con un ◆ verde en el mapa. Cada cofre da al menos un sello de jade. Lleva los sellos al maestro correspondiente y pulsa **E** para aprender su técnica durante la partida. Todas las técnicas comparten la misma carga.
+
+El **Rayo de Raijin** no se compra: se gana en el **Templo del Rayo**, al noreste de la Aldea de Kiri. Ikazuchi, su guardián, espera en el patio. Al vencerlo, el rayo queda aprendido y equipado, y el guardián no vuelve durante esa partida.
+
+| Templo | Maestro | Técnica | Precio |
 | --- | --- | --- | --- |
 | Viento | Haru | Corte del Vendaval, un tajo que atraviesa onis en línea recta | 2 |
 | Brasas | Enji | Anillo de Brasas, que aturde y empuja a los enemigos cercanos | 3 |
 | Brasas | Enji | Cuatro Llamas, cuatro golpes simultáneos que queman. Si hay tres o más onis al alcance, las llamas se reparten entre los más cercanos | 5 |
 | Marea | Nami | Marea Lunar, una ola en abanico que recupera vida al acertar | 4 |
+| Rayo | Shiden | Rayo de Raijin, hasta ocho rayos sobre los onis cercanos | vencer a Ikazuchi |
 
 ## Créditos
 

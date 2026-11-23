@@ -2,6 +2,7 @@
 //  - camps: the strong ones at the named places, and many small ones in the wilds (landmarks.ts),
 //  - patrols: small groups walking the roads back and forth,
 //  - ambushes: now and then, out in the wilds, a group waiting a little ahead of you.
+//  - temple guardians: a boss in the courtyard of the Templo del Rayo; beat it to earn the lightning.
 //  - guardians: a sub-boss (kensei, tengu, oni del trueno) standing by many of the hidden chests,
 //    and by the fire of some camps of the wilds: their chest stays sealed while the guardian lives.
 // A group's oni only exist while you are near it; walk away and they vanish (keeping who is left),
@@ -9,7 +10,8 @@
 import { enemies, spawnEnemy, despawn, ELITES, isBoss, isElite } from './enemies';
 import { clearEnemyHazards } from './enemy-ai';
 import { collide, isFree } from './physics';
-import { WORLD_R, PLACES, ROADS, TEMPLE_PATHS, TORII_PATH, RIVER, place, inLake, lineDist, type P2 } from './map';
+import { WORLD_R, PLACES, ROADS, TEMPLES, TEMPLE_PATHS, TORII_PATH, RIVER, place, inLake, lineDist, type P2 } from './map';
+import { toWorld } from './structures';
 import { CAMP_SPOTS, HIDDEN_CHESTS, POIS, WILDLIFE_SPOTS } from './landmarks';
 import { chests, makeChest, resetChests, updateLoot } from './loot';
 import { resetScore, updateScore } from './score';
@@ -154,6 +156,11 @@ function buildCamps() {
     c.chest = makeChest(x, z, ry, 'guardian', tier, true);
     camps.push(c);
   }
+  // a temple whose technique is won in battle: its guardian waits in the courtyard, between master and torii
+  for (const t of TEMPLES) if (t.guardian) {
+    const [x, z] = toWorld(t.x, t.z, t.facing, 0, 14);
+    camps.push(makeCamp(x, z, [t.guardian], 9, { name: t.name, technique: t.technique }));
+  }
   for (const { x, z, r, wildlife } of WILDLIFE_SPOTS) {
     let kinds: EnemyKind[];
     if (wildlife === 'lobos') {
@@ -250,7 +257,8 @@ export function updateEncounters(dt: number) {
       if (!c.roster.length) {
         if (c.active) c.active = false;
         if (c.temp) { camps.splice(i, 1); continue; }
-        if (c.clearedAt >= 0 && state.time - c.clearedAt > RESPAWN && d > DESPAWN_R) {
+        const won = c.technique && state.learnedTechniques.includes(c.technique);   // a beaten temple guardian stays beaten
+        if (c.clearedAt >= 0 && state.time - c.clearedAt > RESPAWN && d > DESPAWN_R && !won) {
           c.roster = c.kinds.slice(); c.threat = undefined; c.clearedAt = -1;
         }
       } else if (!c.active && d < SPAWN_R && Math.hypot(c.x, c.z) > SAFE_R) activate(c);

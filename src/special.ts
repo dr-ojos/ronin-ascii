@@ -1,4 +1,5 @@
 // P spends the shared charge on the equipped technique. Raijin's bolts also serve the thunder oni.
+// The sword dance is the technique you start with; the lightning is won at the Templo del Rayo.
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { enemies } from './enemies';
@@ -9,6 +10,7 @@ import { showMsg } from './hud';
 import { CLS, tagMat } from './materials';
 import { dmgMult } from './upgrades';
 import { player, state } from './state';
+import { clearBladeDance, startBladeDance, updateBladeDance } from './blade-dance';
 import { clearFourFlames, startFourFlames, updateFourFlames } from './four-flames';
 import { clearTechniqueWaves, startTechniqueWave, updateTechniqueWaves } from './technique-waves';
 import { TECHNIQUES } from './techniques';
@@ -75,8 +77,14 @@ export const skyFlash = (k = 0.25) => { flashT = Math.max(flashT, k); };
 export function trySpecial() {
   if (!state.playing || state.dead || state.photo || state.menu) return;
   if (state.special < 1) { showMsg(`Cargando ${TECHNIQUES[state.technique].name} · ${Math.floor(state.special * 100)} %`, 1.2); return; }
+  if (player.dancing) return;
   state.special = 0;
   const id = state.technique;
+  if (id === 'tajos') {
+    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
+    startBladeDance();
+    return;
+  }
   Object.assign(player, { combo: id === 'viento' ? 0 : id === 'agua' ? 1 : 2, attackT: 0, attackDur: 0.55,
     hitDone: true, invuln: Math.max(player.invuln, id === 'rayo' ? 0.8 : 0.48) });
   if (id !== 'rayo') {
@@ -115,6 +123,7 @@ function castLightning() {
 
 export function updateSpecial(dt: number) {
   if (state.playing && !state.dead) charge(dt / CHARGE_TIME);
+  updateBladeDance(dt);
   updateTechniqueWaves(dt);
   updateFourFlames(dt);
   for (let i = pending.length - 1; i >= 0; i--) { const p = pending[i]; if ((p.t -= dt) <= 0) { pending.splice(i, 1); p.fn(); } }
@@ -132,7 +141,8 @@ export function updateSpecial(dt: number) {
 function removeBolt(b: Bolt) { scene.remove(b.g); b.core.dispose(); b.glow.dispose(); }
 
 export function resetSpecial() {
-  Object.assign(state, { special: 0, jade: 0, technique: 'rayo', learnedTechniques: ['rayo'] });
+  Object.assign(state, { special: 0, jade: 0, technique: 'tajos', learnedTechniques: ['tajos'] });
+  clearBladeDance();
   clearTechniqueWaves();
   clearFourFlames();
   for (const b of bolts) removeBolt(b);

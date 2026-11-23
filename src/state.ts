@@ -7,7 +7,9 @@ export type MenuId = 'shop' | 'custom' | 'temple';
 
 export const player = {
   pos: new THREE.Vector3(0, 0, 4), face: Math.PI, hp: 100, maxHp: 100, attackT: -1, attackDur: 0.3, combo: 0, lastAttackEnd: -9,
-  hitDone: false, dashT: 0, dashCd: 0, dashDir: new THREE.Vector3(), invuln: 0, snareT: 0, walk: 0, moving: 0
+  hitDone: false, dashT: 0, dashCd: 0, dashDir: new THREE.Vector3(), invuln: 0, snareT: 0, walk: 0, moving: 0,
+  // the Danza de los Mil Tajos carries you from oni to oni (blade-dance.ts): no walking or attacking meanwhile
+  dancing: false
 };
 
 export const state = {
@@ -25,7 +27,7 @@ export const state = {
   indoors: false,
   // An open menu pauses the fight. All techniques draw on the same charge (0..1).
   menu: null as MenuId | null,
-  special: 0, jade: 0, technique: 'rayo' as TechniqueId, learnedTechniques: ['rayo'] as TechniqueId[],
+  special: 0, jade: 0, technique: 'tajos' as TechniqueId, learnedTechniques: ['tajos'] as TechniqueId[],
   // feel
   shake: 0, hitStop: 0, time: 0,
   // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes

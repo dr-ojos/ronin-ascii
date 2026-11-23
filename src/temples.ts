@@ -2,6 +2,8 @@ import { showMsg } from './hud';
 import { closeMenu, menuStatus, openMenu } from './menu';
 import { sfx } from './sfx';
 import { player, state } from './state';
+import { KINDS } from './enemies';
+import type { TemplePlace } from './map';
 import { TECHNIQUES, type TempleTechniqueId } from './techniques';
 import { templeMasters } from './temple-grounds';
 import { angDiff } from './utils';
@@ -19,20 +21,25 @@ export function updateTemples(dt: number) {
   }
 }
 
-function lessonRow(id: TempleTechniqueId) {
+function lessonRow(id: TempleTechniqueId, temple: TemplePlace) {
   const move = TECHNIQUES[id], learned = state.learnedTechniques.includes(id), equipped = state.technique === id;
+  // a technique without a price in jade is won by beating the temple's guardian
+  const cost = 'cost' in move ? move.cost : 0, trial = !cost && temple.guardian;
   return {
     label: move.name,
-    value: equipped ? 'equipada' : learned ? 'equipar' : jadeLabel(move.cost),
-    cls: equipped ? 'y' : learned ? 'b' : state.jade < move.cost ? 'r' : 'y',
+    value: equipped ? 'equipada' : learned ? 'equipar' : trial ? 'vence al guardián' : jadeLabel(cost),
+    cls: equipped ? 'y' : learned ? 'b' : trial || state.jade < cost ? 'r' : 'y',
     note: move.description,
     act() {
       if (equipped) return menuStatus('Pulsa P cuando se llene la carga.');
-      if (!learned && state.jade < move.cost) {
-        sfx.warn(); return menuStatus(`Te faltan ${jadeLabel(move.cost - state.jade)}. Búscalos en cofres.`);
+      if (!learned && trial) {
+        sfx.warn(); return menuStatus(`${KINDS[trial].name} custodia el patio. Derrótalo y el rayo será tuyo.`);
+      }
+      if (!learned && state.jade < cost) {
+        sfx.warn(); return menuStatus(`Te faltan ${jadeLabel(cost - state.jade)}. Búscalos en cofres.`);
       }
       if (!learned) {
-        state.jade -= move.cost;
+        state.jade -= cost;
         state.learnedTechniques.push(id);
       }
       state.technique = id;
@@ -52,9 +59,9 @@ export function tryTalkTemple() {
     id: 'temple', title: temple.name,
     sub: () => `${temple.master} · <span class="y">${jadeLabel(state.jade)}</span>`,
     foot: '↑ ↓ elegir · E / ENTER confirmar · ESC salir',
-    rows: () => [lessonRow(temple.technique), ...(temple.lesson ? [lessonRow(temple.lesson)] : []), {
+    rows: () => [lessonRow(temple.technique, temple), ...(temple.lesson ? [lessonRow(temple.lesson, temple)] : []), {
         label: 'Despedirse',
-        note: 'Los sellos de jade se encuentran en cofres del mundo.',
+        note: temple.guardian ? 'Esta técnica no se enseña: se gana en combate.' : 'Los sellos de jade se encuentran en cofres del mundo.',
         act: closeMenu,
     }],
   });
