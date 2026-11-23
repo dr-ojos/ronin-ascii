@@ -8,6 +8,7 @@ import { addRoundedSurface, detailedSurfaces, surfaceMaterial } from './surfaces
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
 import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, treeBlocked } from './map';
 import type { Collider, XZ } from './types';
+import { rippleUniforms, RIPPLES } from './water';
 
 /** what world.ts hands to the landscape builder */
 export interface NatureCtx {
@@ -38,6 +39,18 @@ export const wind = {
   uPush: { value: Array.from({ length: 8 }, () => new THREE.Vector4(-999, -999, 0.001, 0)) } // x, z, radius
 };
 export const POND = { x: -15, z: 13, r: 4.6 };
+/** the pond's wobbly shore (same formula as POND_SHORE_GLSL, whose angle runs in the mesh's local x, -z) */
+export function pondShore(x: number, z: number) {
+  const a = Math.atan2(-(z - POND.z), x - POND.x);
+  return POND.r * (1 + Math.sin(a * 3) * 0.08 + Math.sin(a * 7 + 1) * 0.05);
+}
+/** the pond is shallow: walkers wade in it up to the ankles (0 on the shore, ~0.5 in the middle) */
+export function pondDepth(x: number, z: number) {
+  const d = Math.hypot(x - POND.x, z - POND.z);
+  if (d > POND.r * 1.2) return 0;
+  const R = pondShore(x, z);
+  return d > R ? 0 : (1 - THREE.MathUtils.smoothstep(d, R * 0.2, R)) * 0.5;
+}
 export const POND_SHORE_GLSL = `
   float pondRadius(vec2 p) {
     float a = atan(p.y, p.x);
@@ -452,7 +465,7 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
   };
 
   // ---------------- pond (placed first so everything else avoids it)
-  addCollider({ x: POND.x, z: POND.z, r: POND.r - 0.4 });
+  // no collider: the pond is shallow and can be waded (pondDepth, structures.ts wadeDepth)
   const waterGeo = new THREE.CircleGeometry(POND.r, 64, 0, TAU);
   { // irregular shoreline
     const p = waterGeo.attributes.position;
@@ -467,10 +480,10 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
   // clip the square ripple grid to the shoreline with a stencil-free trick: discard outside the shore radius
   water.material.onBeforeCompile = sh => {
     sh.uniforms.uDetailedSurfaces = detailedSurfaces;
-    sh.uniforms.uPondTime = wind.uTime;
+    sh.uniforms.uPondTime = wind.uTime; sh.uniforms.uRip = rippleUniforms.uRip;
     sh.vertexShader = 'varying vec2 vLocal;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position.xy;');
     sh.fragmentShader = `varying vec2 vLocal;
-      uniform float uDetailedSurfaces, uPondTime;
+      uniform float uDetailedSurfaces, uPondTime; uniform vec4 uRip[${RIPPLES}];
       ${POND_SHORE_GLSL}` + sh.fragmentShader
       .replace('void main() {', 'void main() { if (length(vLocal) > pondRadius(vLocal)) discard;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -481,6 +494,19 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
           totalEmissiveRadiance += vec3(0.007, 0.017, 0.023) * (0.38 + glint);
           roughnessFactor = 0.29 - glint * 0.06;
           metalnessFactor = 0.52;
+        }
+        { // rings wherever a foot, a blade or a body touches the water (same ring buffer as the river)
+          vec2 p = vec2(${POND.x.toFixed(2)} + vLocal.x, ${POND.z.toFixed(2)} - vLocal.y);
+          float w = 0.0;
+          for (int i = 0; i < ${RIPPLES}; i++) {
+            vec4 R = uRip[i]; float age = uPondTime - R.z;
+            if (age < 0.0 || age > 2.0) continue;
+            float d = distance(p, R.xy), x = d - (0.12 + age * 1.6);
+            float rings = max(0.0, cos(x * 11.0)) * smoothstep(-1.1, -0.04, x) * (1.0 - smoothstep(-0.04, 0.16, x));
+            float k = 1.0 - age / 2.0;
+            w += rings * R.w * k * k / (1.0 + d * 0.6);
+          }
+          totalEmissiveRadiance += vec3(0.2, 0.32, 0.46) * min(w, 1.4);
         }`);
   };
   water.material.customProgramCacheKey = () => 'pond';
@@ -506,7 +532,7 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
 
   const kit = createKit({ lite: false, addCollider, onPath });
   // ---------------- mossy rocks (incl. the pond rim)
-  for (let i = 0; i < 22; i++) { const a = (i / 22) * TAU + rnd(-0.1, 0.1), r = POND.r * (1 + Math.sin(a * 3) * 0.08 + Math.sin(a * 7 + 1) * 0.05) + rnd(0.05, 0.35); kit.rock(POND.x + Math.cos(a) * r, POND.z + Math.sin(a) * r, rnd(0.25, 0.55), false); }
+  for (let i = 0; i < 22; i++) { const a = (i / 22) * TAU + rnd(-0.1, 0.1), r = POND.r * (1 + Math.sin(a * 3) * 0.08 + Math.sin(a * 7 + 1) * 0.05) + rnd(0.05, 0.35); kit.rock(POND.x + Math.cos(a) * r, POND.z - Math.sin(a) * r, rnd(0.25, 0.55), false); }
   for (let i = 0; i < 26; i++) { const s = free(8, 44, 2); if (s) kit.rock(s[0], s[1], rnd(0.35, 1.2)); }
   // ---------------- trees
   for (let i = 0; i < 18; i++) { const s = free(8, 40, 3.5); if (s) kit.sakura(s[0], s[1]); }

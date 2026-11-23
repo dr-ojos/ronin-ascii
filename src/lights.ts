@@ -28,8 +28,12 @@ export function updateLights(px: number, pz: number, t: number) {
     const l = pool[i], r = ranked[i];
     if (!r) { l.intensity = 0; continue; }
     const a = r.a, fade = Math.min(1, Math.max(0, (edge - r.d) / 6)) * Math.min(1, Math.max(0, (70 - r.d) / 15));
-    const fl = a.flicker ? 1 + Math.sin(t * 13 + a.x) * 0.12 * a.flicker + Math.sin(t * 29 + a.z) * 0.08 * a.flicker : 1;
-    l.position.set(a.x, a.y, a.z); l.color.setHex(a.color);
+    // fires: several unrelated beats plus a slow surge, and the light itself dances with the flames
+    const f = a.flicker || 0, ph = a.x * 0.37 + a.z * 0.61;
+    const fl = f ? 1 + f * (Math.sin(t * 13 + ph) * 0.11 + Math.sin(t * 29.3 + ph * 1.7) * 0.07 + Math.sin(t * 47.1 + ph * 2.3) * 0.05
+      + Math.sin(t * 2.1 + ph) * Math.sin(t * 3.7 + ph * 0.5) * 0.12) : 1;
+    l.position.set(a.x + f * Math.sin(t * 7.3 + ph) * 0.12, a.y + f * Math.sin(t * 9.1 + ph * 1.3) * 0.15, a.z + f * Math.cos(t * 6.1 + ph) * 0.12);
+    l.color.setHex(a.color);
     l.intensity = a.intensity * fade * fl; l.distance = a.distance; l.decay = a.decay;
   }
 }

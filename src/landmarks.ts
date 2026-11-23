@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { M, CLS, tagMat } from './materials';
 import { addCollider, isFree } from './physics';
 import { addLight } from './lights';
+import { campfire } from './campfire';
 import { groundY } from './terrain';
 import { WORLD_R, PLACES, ROADS, RIVER, FOOTPRINTS, inLake, lineDist, seeded, type P2 } from './map';
 import { MT, G, TENT, add, box, post, pyr, stoneLantern, site, solidBox, disc } from './structures';
@@ -64,11 +65,7 @@ const MAT = {
 function campDecor(s: CampSpot) {
   const { x, z } = s, g = new THREE.Group(); g.position.set(x, groundY(x, z), z);
   // bonfire: crossed logs in a ring of stones, a flickering light you can see from far away
-  for (let i = 0; i < 4; i++) { const l = box(g, 0.18, 0.18, 1.3, MT.wood, 0, 0.05, 0, (i / 4) * Math.PI); l.rotation.x = 0.25; }
-  const fire = add(g, new THREE.ConeGeometry(0.5, 1.1, 7), MT.fire, 0, 0.55, 0, 1, 1, 1); fire.castShadow = false;
-  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; add(g, G.sphere, MT.stone, Math.cos(a), 0.1, Math.sin(a), 0.38, 0.28, 0.38); }
-  addCollider({ x, z, r: 1.2 });
-  addLight({ x, y: g.position.y + 1.2, z, color: 0xff6a20, intensity: 9, distance: 18, decay: 1.4, flicker: 1 });
+  campfire(g, x, g.position.y, z, 0.95);
   disc(x, z, 3);
   // hide tents around the fire, the camp's chest in front of the biggest one
   const tents = Math.min(3, 1 + Math.floor(s.size / 2)), a0 = rnd(0, Math.PI * 2);

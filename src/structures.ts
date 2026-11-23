@@ -4,10 +4,11 @@
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { M, CLS, tagMat, shadowTree } from './materials';
-import { POND, POND_SHORE_GLSL, wind } from './nature';
+import { POND, POND_SHORE_GLSL, pondDepth, wind } from './nature';
 import { surfaceMaterial } from './surfaces';
 import { addCollider } from './physics';
 import { addLight } from './lights';
+import { campfire } from './campfire';
 import { groundY, lakeLevel } from './terrain';
 import { rippleUniforms, riverDepth, RIPPLES } from './water';
 import { ROADS, RIVER, LAKES, BRIDGES, TORII_PATH, FOOTPRINTS, lakeRadius, lineDist, place, seeded, type P2, type Line } from './map';
@@ -357,10 +358,11 @@ export function surfaceY(x: number, z: number) {
   }
   return gy;
 }
-/** how deep in the river a walker stands (0..1), 0 on a bridge or dry land */
+/** how deep in the water (the river, or the shallow pond of the shrine) a walker stands (0..1), 0 on a bridge or dry land */
 export function wadeDepth(x: number, z: number) {
   const d = riverDepth(x, z);
-  return d > 0 && surfaceY(x, z) > groundY(x, z) + 0.2 ? 0 : d;
+  if (d <= 0) return pondDepth(x, z);
+  return surfaceY(x, z) > groundY(x, z) + 0.2 ? 0 : d;
 }
 
 // ------------------------------------------------------------ the village of Kiri
@@ -548,11 +550,7 @@ function buildToriiPath() {
 function buildCamp() {
   const pl = place('campamento'), y = pl.level!, g = new THREE.Group(); g.position.set(pl.x, y, pl.z);
   // campfire
-  for (let i = 0; i < 5; i++) { const l = box(g, 0.2, 0.2, 1.4, MT.wood, 0, 0.05, 0, (i / 5) * Math.PI); l.rotation.x = 0.2; }
-  const fire = add(g, new THREE.ConeGeometry(0.55, 1.2, 7), MT.fire, 0, 0.6, 0, 1, 1, 1); fire.castShadow = false;
-  for (let i = 0; i < 9; i++) { const a = (i / 9) * TAU; add(g, G.sphere, MT.stone, Math.cos(a) * 1.1, 0.12, Math.sin(a) * 1.1, 0.4, 0.3, 0.4); }
-  addCollider({ x: pl.x, z: pl.z, r: 1.3 });
-  addLight({ x: pl.x, y: y + 1.2, z: pl.z, color: 0xff7a2a, intensity: 10, distance: 20, decay: 1.4, flicker: 1 });
+  campfire(g, pl.x, y, pl.z, 1.05, 0xff7a2a);
   // tents around the fire
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * TAU + 0.4, r = 11, x = Math.cos(a) * r, z = Math.sin(a) * r, ry = Math.atan2(-x, -z);
