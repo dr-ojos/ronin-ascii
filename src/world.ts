@@ -1,13 +1,15 @@
 // The world: lights, moon and stars, terrain, the clearing (stone path, torii, shrine, fence, nature),
 // every landmark of the open world (structures.ts), the streamed forest (chunks.ts), petals and rain.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { renderer, scene } from './renderer';
 import { M, CLS, tagMat, tagTree, shadowTree, box } from './materials';
 import { buildNature } from './nature';
 import { addCollider, isFree } from './physics';
 import { addLight, updateLights } from './lights';
 import { buildTerrainMesh, buildSkyline } from './terrain';
-import { buildStructures, updateStructures, blockers, floors } from './structures';
+import { buildStructures, updateStructures, blockers, floors, MT } from './structures';
+import { addRoundedSurface, surfaceMaterial } from './surfaces';
 import { updateChunks, chunkBlockers } from './chunks';
 import { buildMasks } from './map';
 import { buildLandmarks } from './landmarks';
@@ -99,20 +101,43 @@ buildSettlements();   // the town of Asagiri and the ruins of Takamori
 buildLandmarks();   // oni camps and corners of the wilds
 buildMasks();
 
+function wornFlagstone(width: number, depth: number, index: number) {
+  const outline = [[-0.50, -0.23], [-0.39, -0.47], [-0.11, -0.48], [0.22, -0.46], [0.44, -0.39],
+    [0.49, 0.01], [0.37, 0.42], [0.10, 0.47], [-0.23, 0.45], [-0.46, 0.31]];
+  const points = outline.map(([x, y], i) => new THREE.Vector2(
+    width * (x + 0.055 * Math.sin(index * 2.3 + i * 3.1)),
+    depth * (y + 0.10 * Math.sin(index * 1.7 + i * 1.8))
+  ));
+  const shape = new THREE.Shape();
+  points.forEach((p, i) => {
+    const start = p.clone().lerp(points[(i + points.length - 1) % points.length], 0.27);
+    const end = p.clone().lerp(points[(i + 1) % points.length], 0.27);
+    if (i === 0) shape.moveTo(start.x, start.y); else shape.lineTo(start.x, start.y);
+    shape.quadraticCurveTo(p.x, p.y, end.x, end.y);
+  });
+  shape.closePath();
+  const stone = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.04, bevelThickness: 0.02, bevelSize: 0.043, bevelSegments: 2, curveSegments: 3
+  });
+  return stone.rotateX(-Math.PI / 2).translate(0, -0.02, 0);
+}
+
 // stone path + gravel courtyard
 {
-  const slab = tagMat(M(0x5c5e66, { roughness: 0.32, metalness: 0.15 }), CLS.ground);
-  for (let z = 6.2; z > -15.5; z -= rnd(0.85, 1.0)) {
-    const b = box(rnd(1.9, 2.4), 0.08, rnd(0.65, 0.8), slab);
+  const slab = tagMat(surfaceMaterial(M(0x5c5e66, { roughness: 0.32, metalness: 0.15 }), 'stone'), CLS.ground);
+  for (let z = 6.2, i = 0; z > -15.5; z -= rnd(0.85, 1.0), i++) {
+    const w = rnd(1.9, 2.4), d = rnd(0.65, 0.8);
+    const b = box(w, 0.08, d, slab);
+    addRoundedSurface(b, wornFlagstone(w, d, i));
     b.position.set(rnd(-0.12, 0.12), 0.04, z); b.rotation.y = rnd(-0.08, 0.08); b.receiveShadow = true; scene.add(b);
   }
-  const gravel = new THREE.Mesh(new THREE.PlaneGeometry(24, 16), tagMat(M(0x33374a, { roughness: 0.4, metalness: 0.1 }), CLS.ground));
+  const gravel = new THREE.Mesh(new THREE.PlaneGeometry(24, 16), MT.gravel);
   gravel.rotation.x = -Math.PI / 2; gravel.position.set(0, 0.02, -23); gravel.receiveShadow = true; scene.add(gravel);
 }
 
 // torii + stone lanterns
 {
-  const red = tagMat(M(0xb3261e, { roughness: 0.6 }), CLS.wood), blk = tagMat(M(0x16141a), CLS.wood);
+  const { red, black: blk, stone } = MT;
   const g = new THREE.Group(); g.position.set(0, 0, -11);
   for (const sx of [-2.3, 2.3]) {
     const p = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 4.4, 10), red); p.position.set(sx, 2.2, 0); g.add(p);
@@ -123,7 +148,6 @@ buildMasks();
   const nuki = box(5.4, 0.22, 0.3, red); nuki.position.y = 3.55; g.add(nuki);
   const gaku = box(0.25, 0.55, 0.2, blk); gaku.position.y = 3.9; g.add(gaku);
   scene.add(shadowTree(g)); camBlockers.push(g);
-  const stone = tagMat(M(0x6e6f75, { roughness: 1 }), CLS.ground);
   const fire = tagMat(M(0xffb050, { emissive: 0xff9530, emissiveIntensity: 2.4 }), CLS.light);
   for (const sx of [-3.8, 3.8]) {
     const l = new THREE.Group(); l.position.set(sx, 0, -8.5);
@@ -152,16 +176,17 @@ export const shrineRoof = new THREE.Group();
     x.fillRect(0, 0, 128, 8); x.fillRect(0, 152, 128, 8);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   })();
-  const wood = tagMat(M(0x3e2b22, { roughness: 0.9 }), CLS.wood), woodL = tagMat(M(0x6a4630, { roughness: 0.8 }), CLS.wood);
-  const roofM = tagMat(M(0x2b3246, { roughness: 0.6, metalness: 0.25 }), CLS.wood), roofL = tagMat(M(0x5a6478, { roughness: 0.6, metalness: 0.3 }), CLS.wood);
-  const stoneB = tagMat(M(0x5d6068, { roughness: 1 }), CLS.ground);
+  const { wood, woodL, roof: roofM, roofL } = MT;
+  const boards = tagMat(surfaceMaterial(M(0x3e2b22, { roughness: 0.9 }), 'boards'), CLS.wood);
+  const stoneB = tagMat(surfaceMaterial(M(0x5d6068, { roughness: 1 }), 'stone'), CLS.ground);
   const shoji = tagMat(new THREE.MeshStandardMaterial({ map: shojiTex, emissiveMap: shojiTex, emissive: 0xffffff, emissiveIntensity: 1.5, color: 0x333333, side: THREE.DoubleSide }), CLS.light);
   const chochin = tagMat(M(0xff6a2a, { emissive: 0xff5a1a, emissiveIntensity: 2.2 }), CLS.light);
   const g = new THREE.Group(); g.position.set(0, 0, -24);
   g.add(shrineRoof);
   const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, p: THREE.Object3D = g) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); p.add(o); return o; };
-  add(new THREE.BoxGeometry(10, 0.7, 7), stoneB, 0, 0.35, 0);
-  add(new THREE.BoxGeometry(9.4, 0.15, 6.4), wood, 0, 0.78, 0);
+  const foundation = add(new THREE.BoxGeometry(10, 0.7, 7), stoneB, 0, 0.35, 0);
+  addRoundedSurface(foundation, new RoundedBoxGeometry(10, 0.7, 7, 1, 0.07));
+  add(new THREE.BoxGeometry(9.4, 0.15, 6.4), boards, 0, 0.78, 0);
   // walls (back, sides), a ceiling that goes with the roof; the two middle shoji slid aside make the door
   add(new THREE.BoxGeometry(7.9, 2.6, 0.15), wood, 0, 2.15, -2.53);
   for (const x of [-3.88, 3.88]) add(new THREE.BoxGeometry(0.15, 2.6, 5), wood, x, 2.15, -0.1);
@@ -172,8 +197,12 @@ export const shrineRoof = new THREE.Group();
   for (const z of [-2.6, 2.55]) for (const x of [-4, 4]) add(new THREE.CylinderGeometry(0.14, 0.15, 2.9, 8), woodL, x, 2.2, z);
   add(new THREE.BoxGeometry(8.3, 0.35, 0.2), woodL, 0, 3.35, 2.55);
   add(new THREE.BoxGeometry(8.3, 0.12, 0.18), woodL, 0, 0.95, 2.55);
-  add(new THREE.BoxGeometry(9.6, 0.12, 1.3), wood, 0, 0.86, 3.3);
-  for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(2.6, 0.24, 0.45), stoneB, 0, 0.12 + i * 0.24, 4.55 - i * 0.4);
+  add(new THREE.BoxGeometry(9.6, 0.12, 1.3), boards, 0, 0.86, 3.3);
+  const wornStep = new RoundedBoxGeometry(2.6, 0.24, 0.45, 1, 0.043);
+  for (let i = 0; i < 3; i++) {
+    const step = add(new THREE.BoxGeometry(2.6, 0.24, 0.45), stoneB, 0, 0.12 + i * 0.24, 4.55 - i * 0.4);
+    addRoundedSurface(step, wornStep);
+  }
   for (const sgn of [1, -1]) {
     const panel = add(new THREE.BoxGeometry(11, 0.22, 4.7), roofM, 0, 4.15, 2.06 * sgn, shrineRoof); panel.rotation.x = 0.5 * sgn;
     for (let k = -5; k <= 5; k++) { const rib = add(new THREE.BoxGeometry(0.08, 0.06, 4.7), roofL, k, 4.29, 2.06 * sgn, shrineRoof); rib.rotation.x = 0.5 * sgn; rib.position.y += 0.02; }
@@ -205,7 +234,7 @@ export const shrineRoof = new THREE.Group();
 
 // wooden fence around the shrine compound, golden caps on every few posts
 {
-  const fenceM = tagMat(M(0x4a4774, { roughness: 0.8 }), CLS.wood);
+  const fenceM = tagMat(surfaceMaterial(M(0x4a4774, { roughness: 0.8 }), 'wood'), CLS.wood);
   const capM = tagMat(M(0xffd060, { emissive: 0xffb030, emissiveIntensity: 1.6 }), CLS.light);
   const g = new THREE.Group();
   const run = (x0: number, z0: number, x1: number, z1: number) => {

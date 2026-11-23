@@ -9,6 +9,7 @@ import { M, CLS, tagMat, tagTree, shadowTree } from './materials';
 import { addCollider } from './physics';
 import { addLight } from './lights';
 import { shrineRoof } from './world';
+import { MT } from './structures';
 import { sparkBurst } from './katana-fx';
 import { sfx, panOf } from './sfx';
 import { showMsg } from './hud';
@@ -31,7 +32,7 @@ const inRoom = (x: number, z: number) => x > ROOM.x0 && x < ROOM.x1 && z > ROOM.
 
 // ------------------------------------------------------------ the room
 const W = {
-  wood: tagMat(M(0x6a4630, { roughness: 0.8 }), CLS.wood), dark: tagMat(M(0x3e2b22, { roughness: 0.9 }), CLS.wood),
+  wood: MT.woodL, dark: MT.wood,
   steel: tagMat(M(0xdfe6ee, { metalness: 0.9, roughness: 0.2, emissive: 0x3a4a5a, emissiveIntensity: 0.6 }), CLS.light),
   black: tagMat(M(0x16141a, { roughness: 0.4 }), CLS.wood), gold: tagMat(M(0xffd060, { emissive: 0xb07a10, emissiveIntensity: 1.2, metalness: 0.7 }), CLS.light),
   cord: tagMat(M(0xb3261e, { roughness: 0.7 }), CLS.wood), paper: tagMat(M(0xf2eee0, { roughness: 1, side: THREE.DoubleSide, emissive: 0x2a1a10 }), CLS.wood),

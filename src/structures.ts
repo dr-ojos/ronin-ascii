@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { M, CLS, tagMat, shadowTree } from './materials';
-import { wind } from './nature';
+import { POND, POND_SHORE_GLSL, wind } from './nature';
+import { surfaceMaterial } from './surfaces';
 import { addCollider } from './physics';
 import { addLight } from './lights';
 import { groundY, lakeLevel } from './terrain';
@@ -17,30 +18,50 @@ const rnd = (a: number, b: number) => a + R() * (b - a);
 
 // ------------------------------------------------------------ materials
 export const MT = {
-  wood: tagMat(M(0x3e2b22, { roughness: 0.9 }), CLS.wood),
-  woodL: tagMat(M(0x6a4630, { roughness: 0.8 }), CLS.wood),
-  red: tagMat(M(0xb3261e, { roughness: 0.6 }), CLS.wood),
-  vermilion: tagMat(M(0xd8381c, { roughness: 0.55, emissive: 0x5a1004, emissiveIntensity: 1 }), CLS.wood),
-  black: tagMat(M(0x16141a), CLS.wood),
-  roof: tagMat(M(0x2b3246, { roughness: 0.6, metalness: 0.25 }), CLS.wood),
-  roofL: tagMat(M(0x5a6478, { roughness: 0.6, metalness: 0.3 }), CLS.wood),
-  thatch: tagMat(M(0x5e5038, { roughness: 1 }), CLS.wood),
-  plaster: tagMat(M(0xc9c6bc, { roughness: 0.9 }), CLS.wood),
-  stone: tagMat(M(0x6e6f75, { roughness: 1 }), CLS.ground),
-  stoneD: tagMat(M(0x4d4f57, { roughness: 1, flatShading: true }), CLS.ground),
-  gravel: tagMat(M(0x33374a, { roughness: 0.4, metalness: 0.1 }), CLS.ground),
+  wood: tagMat(surfaceMaterial(M(0x3e2b22, { roughness: 0.9 }), 'wood'), CLS.wood),
+  woodL: tagMat(surfaceMaterial(M(0x6a4630, { roughness: 0.8 }), 'wood'), CLS.wood),
+  red: tagMat(surfaceMaterial(M(0xb3261e, { roughness: 0.6 }), 'wood'), CLS.wood),
+  vermilion: tagMat(surfaceMaterial(M(0xd8381c, { roughness: 0.55, emissive: 0x5a1004, emissiveIntensity: 1 }), 'wood'), CLS.wood),
+  black: tagMat(surfaceMaterial(M(0x16141a), 'wood'), CLS.wood),
+  roof: tagMat(surfaceMaterial(M(0x2b3246, { roughness: 0.6, metalness: 0.25 }), 'clay'), CLS.wood),
+  roofL: tagMat(surfaceMaterial(M(0x5a6478, { roughness: 0.6, metalness: 0.3 }), 'clay'), CLS.wood),
+  thatch: tagMat(surfaceMaterial(M(0x5e5038, { roughness: 1 }), 'wood'), CLS.wood),
+  plaster: tagMat(surfaceMaterial(M(0xc9c6bc, { roughness: 0.9 }), 'clay'), CLS.wood),
+  stone: tagMat(surfaceMaterial(M(0x6e6f75, { roughness: 1 }), 'stone'), CLS.ground),
+  stoneD: tagMat(surfaceMaterial(M(0x4d4f57, { roughness: 1, flatShading: true }), 'stone'), CLS.ground),
+  gravel: tagMat(surfaceMaterial(M(0x33374a, { roughness: 0.4, metalness: 0.1 }), 'gravel'), CLS.ground),
   fire: tagMat(M(0xffb050, { emissive: 0xff9530, emissiveIntensity: 2.4 }), CLS.light),
   chochin: tagMat(M(0xff6a2a, { emissive: 0xff5a1a, emissiveIntensity: 2.2 }), CLS.light),
   gold: tagMat(M(0xffd060, { emissive: 0xffb030, emissiveIntensity: 1.6, metalness: 0.6 }), CLS.light),
   cloth: tagMat(M(0xd8d0b8, { roughness: 1, side: THREE.DoubleSide }), CLS.wood),
   banner: [0xb3261e, 0xe8e0cc, 0x1c2a4a].map(c => tagMat(M(c, { roughness: 1, side: THREE.DoubleSide }), CLS.wood)),
   water: waterMaterial(),
-  road: tagMat(new THREE.MeshStandardMaterial({ vertexColors: true, map: gravelTexture(), roughness: 0.9, metalness: 0 }), CLS.ground),
+  road: roadMaterial(),
   lily: tagMat(M(0x2f5a2a, { roughness: 0.7, side: THREE.DoubleSide }), CLS.foliage),
   reed: tagMat(M(0x4f6a3a, { roughness: 0.8 }), CLS.grass),
   shoji: tagMat(new THREE.MeshStandardMaterial({ map: shojiTexture(), emissiveMap: shojiTexture(), emissive: 0xffffff, emissiveIntensity: 1.4, color: 0x333333 }), CLS.light),
   shojiDark: tagMat(new THREE.MeshStandardMaterial({ map: shojiTexture(true), color: 0x8a8478, roughness: 0.9 }), CLS.wood)
 };
+
+function roadMaterial() {
+  const mat = surfaceMaterial(new THREE.MeshStandardMaterial({
+    vertexColors: true, map: gravelTexture(), roughness: 0.9, metalness: 0
+  }), 'gravel');
+  const compile = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, renderer) => {
+    compile.call(mat, sh, renderer);
+    sh.fragmentShader = POND_SHORE_GLSL + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      if (uDetailedSurfaces > 0.5) {
+        vec2 fromPond = vSurfacePosition.xz - vec2(${POND.x.toFixed(2)}, ${POND.z.toFixed(2)});
+        if (length(fromPond) < pondRadius(fromPond * vec2(1.0, -1.0))) discard;
+        float edge = min(vMapUv.x, 1.0 - vMapUv.x);
+        float wear = texture2D(uSurfaceTile, vSurfacePosition.xz * 0.32).r;
+        if (edge < 0.12 * wear) discard;
+        diffuseColor.rgb = mix(diffuseColor.rgb * 0.62, diffuseColor.rgb, smoothstep(0.0, 0.18, edge));
+      }`);
+  };
+  return tagMat(mat, CLS.ground);
+}
 /** dark water with slow interfering ripples and moonlit glints (drawn as ~ - = in ASCII) */
 function waterMaterial() {
   const m = new THREE.MeshStandardMaterial({ color: 0x07121f, metalness: 0.5, roughness: 0.22, envMapIntensity: 1.1 });

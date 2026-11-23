@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tagMat, CLS } from './materials';
+import { addRoundedSurface, detailedSurfaces, surfaceMaterial } from './surfaces';
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
 import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, treeBlocked } from './map';
 import type { Collider, XZ } from './types';
@@ -37,6 +38,12 @@ export const wind = {
   uPush: { value: Array.from({ length: 8 }, () => new THREE.Vector4(-999, -999, 0.001, 0)) } // x, z, radius
 };
 export const POND = { x: -15, z: 13, r: 4.6 };
+export const POND_SHORE_GLSL = `
+  float pondRadius(vec2 p) {
+    float a = atan(p.y, p.x);
+    return ${POND.r.toFixed(2)} * (1.0 + sin(a * 3.0) * 0.08 + sin(a * 7.0 + 1.0) * 0.05);
+  }
+`;
 
 const WIND_GLSL = /* glsl */`
 uniform float uTime;
@@ -127,6 +134,24 @@ function jitter<T extends THREE.BufferGeometry>(geo: T, amt: number): T {
   }
   geo.computeVertexNormals(); return geo;
 }
+
+// The icosahedra duplicate vertices on their faces and along their UV seam.
+function roundedNormals<T extends THREE.BufferGeometry>(geo: T): T {
+  const { position, normal } = geo.attributes;
+  const byPoint = new Map<string, THREE.Vector3>(), byVertex: THREE.Vector3[] = [], face = new V();
+  for (let i = 0; i < position.count; i++) {
+    const key = `${position.getX(i).toFixed(5)},${position.getY(i).toFixed(5)},${position.getZ(i).toFixed(5)}`;
+    let sum = byPoint.get(key);
+    if (!sum) { sum = new V(); byPoint.set(key, sum); }
+    sum.add(face.fromBufferAttribute(normal, i));
+    byVertex.push(sum);
+  }
+  for (const sum of byPoint.values()) sum.normalize();
+  const normals = new Float32Array(position.count * 3);
+  byVertex.forEach((n, i) => n.toArray(normals, i * 3));
+  geo.setAttribute('aRoundedNormal', new THREE.BufferAttribute(normals, 3));
+  return geo;
+}
 // collects instances of one blob geometry and emits a single InstancedMesh
 class Batch {
   geo: THREE.BufferGeometry; mat: THREE.Material; m: THREE.Matrix4[] = []; c: THREE.Color[] = [];
@@ -168,6 +193,11 @@ const MAT = (() => {
     flower: addWind(flower, { height: 1.6, amp: 0.08, flutter: 0.015 }),
     wild: addWind(wild, { height: 0.8, amp: 0.32, flutter: 0.01 })
   };
+  surfaceMaterial(bark, 'wood');
+  surfaceMaterial(rock, 'boulder', 'rounded');
+  surfaceMaterial(blossom, 'foliage', 'rounded');
+  surfaceMaterial(needle, 'foliage', 'rounded');
+  surfaceMaterial(bush, 'foliage', 'rounded');
   tagMat(bark, CLS.wood); tagMat(culm, CLS.foliage); tagMat(blossom, CLS.foliage); tagMat(needle, CLS.foliage);
   tagMat(leaf, CLS.foliage); tagMat(petal, CLS.foliage); tagMat(bush, CLS.foliage); tagMat(flower, CLS.light);
   tagMat(wild, CLS.light); tagMat(rock, CLS.ground);
@@ -177,11 +207,11 @@ const MAT = (() => {
 const GEO = (() => {
   const leaf = new THREE.PlaneGeometry(0.06, 0.34); leaf.translate(0, -0.17, 0);
   return {
-    blob: jitter(new THREE.IcosahedronGeometry(0.2, 1), 0.03),
-    blobLite: jitter(new THREE.IcosahedronGeometry(0.22, 0), 0.03),
+    blob: roundedNormals(jitter(new THREE.IcosahedronGeometry(0.2, 1), 0.03)),
+    blobLite: roundedNormals(jitter(new THREE.IcosahedronGeometry(0.22, 0), 0.03)),
     petal: new THREE.PlaneGeometry(0.07, 0.05),
     leaf,
-    bush: jitter(new THREE.IcosahedronGeometry(0.32, 1), 0.06),
+    bush: roundedNormals(jitter(new THREE.IcosahedronGeometry(0.32, 1), 0.06)),
     bloom: new THREE.IcosahedronGeometry(0.05, 0),
     wild: new THREE.IcosahedronGeometry(0.04, 0)
   };
@@ -349,7 +379,9 @@ export function createKit(o: KitOpts) {
       cols.push(c.r, c.g, c.b);
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-    g.rotateY(rnd(0, TAU)); g.translate(x, groundY(x, z) + k * 0.2, z);
+    g.rotateY(rnd(0, TAU));
+    roundedNormals(g);
+    g.translate(x, groundY(x, z) + k * 0.2, z);
     rockGeos.push(g);
     if (solid) o.addCollider({ x, z, r: k * 0.85 });
   }
@@ -434,23 +466,40 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
   water.rotation.x = -Math.PI / 2; water.position.set(POND.x, 0.06, POND.z);
   // clip the square ripple grid to the shoreline with a stencil-free trick: discard outside the shore radius
   water.material.onBeforeCompile = sh => {
+    sh.uniforms.uDetailedSurfaces = detailedSurfaces;
+    sh.uniforms.uPondTime = wind.uTime;
     sh.vertexShader = 'varying vec2 vLocal;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position.xy;');
-    sh.fragmentShader = 'varying vec2 vLocal;\n' + sh.fragmentShader.replace('void main() {', `void main() {
-      float a = atan(vLocal.y, vLocal.x), r = length(vLocal);
-      if (r > ${POND.r.toFixed(2)} * (1.0 + sin(a * 3.0) * 0.08 + sin(a * 7.0 + 1.0) * 0.05)) discard;`);
+    sh.fragmentShader = `varying vec2 vLocal;
+      uniform float uDetailedSurfaces, uPondTime;
+      ${POND_SHORE_GLSL}` + sh.fragmentShader
+      .replace('void main() {', 'void main() { if (length(vLocal) > pondRadius(vLocal)) discard;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        if (uDetailedSurfaces > 0.5) {
+          float swell = sin(vLocal.x * 2.1 + vLocal.y * 9.0 + uPondTime * 1.1 + sin(vLocal.x * 1.9 + vLocal.y) * 1.3);
+          float crossing = sin(vLocal.y * 2.2 - vLocal.x * 1.4 - uPondTime * 0.8);
+          float glint = smoothstep(0.57, 1.0, swell) * smoothstep(-0.77, 0.9, crossing);
+          totalEmissiveRadiance += vec3(0.007, 0.017, 0.023) * (0.38 + glint);
+          roughnessFactor = 0.29 - glint * 0.06;
+          metalnessFactor = 0.52;
+        }`);
   };
   water.material.customProgramCacheKey = () => 'pond';
   tagMat(water.material, CLS.ground); water.receiveShadow = true; scene.add(water);
   const pondBase = Float32Array.from(pondGrid.attributes.position.array);
   const bed = new THREE.Mesh(waterGeo, tagMat(new THREE.MeshStandardMaterial({ color: 0x0b1410, roughness: 1 }), CLS.ground));
   bed.rotation.x = -Math.PI / 2; bed.position.set(POND.x, 0.03, POND.z); scene.add(bed);
-  const lily = new Batch(new THREE.CircleGeometry(0.28, 12, 0.3, TAU - 0.5), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, side: THREE.DoubleSide }));
+  const lilyMat = surfaceMaterial(new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.7, side: THREE.DoubleSide
+  }), 'foliage');
+  const lily = new Batch(new THREE.CircleGeometry(0.28, 12, 0.3, TAU - 0.5), lilyMat);
   for (let i = 0; i < 14; i++) {
     const a = rnd(0, TAU), r = rnd(0.8, POND.r - 0.8);
     lily.add(new V(POND.x + Math.cos(a) * r, 0.09, POND.z + Math.sin(a) * r), rnd(0.7, 1.3), 0, pick([0x2f5a2a, 0x3c6b31, 0x284d27]),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, rnd(0, TAU))));
   }
-  addMesh(lily.build(false), CLS.foliage).castShadow = false;
+  const lilyPads = addMesh(lily.build(false), CLS.foliage);
+  lilyPads.castShadow = false;
+  addRoundedSurface(lilyPads, new THREE.CircleGeometry(0.28, 32, 0.3, TAU - 0.5));
   const lotus = new Batch(new THREE.IcosahedronGeometry(0.09, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x401020, roughness: 0.5 }));
   for (let i = 0; i < 5; i++) { const a = rnd(0, TAU), r = rnd(1, POND.r - 1); lotus.add(new V(POND.x + Math.cos(a) * r, 0.14, POND.z + Math.sin(a) * r), 1, 0, 0xf6c2d6); }
   addMesh(lotus.build(false), CLS.foliage);
@@ -550,6 +599,7 @@ function buildGrass(scene: THREE.Scene) {
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = wind.uTime; sh.uniforms.uCenter = wind.uCenter; sh.uniforms.uPush = wind.uPush;
     sh.uniforms.uHeight = terrainUniforms.uHeight; sh.uniforms.uMask = { value: maskTex };
+    sh.uniforms.uDetailedSurfaces = detailedSurfaces;
     sh.vertexShader = WIND_GLSL + `
       uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask;
       varying float vH; varying float vVar; varying float vSheen;
@@ -586,11 +636,14 @@ function buildGrass(scene: THREE.Scene) {
         vec4 mvPosition = viewMatrix * wPos;
         gl_Position = projectionMatrix * mvPosition;`)
       .replace('#include <worldpos_vertex>', 'vec4 worldPosition = wPos;');
-    sh.fragmentShader = 'varying float vH; varying float vVar; varying float vSheen;\n' + sh.fragmentShader
+    sh.fragmentShader = 'uniform float uDetailedSurfaces; varying float vH; varying float vVar; varying float vSheen;\n' + sh.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
         diffuseColor.rgb *= mix(0.07, 1.0, vH) * (0.55 + 0.8 * vVar);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.6, 0.36) * vH, step(0.94, vVar) * 0.55);   // dry tips
-        diffuseColor.rgb += vec3(0.05, 0.09, 0.07) * vSheen * vH;                                         // wind sheen`)
+        diffuseColor.rgb += vec3(0.05, 0.09, 0.07) * vSheen * vH;                                         // wind sheen
+        if (uDetailedSurfaces > 0.5) {
+          diffuseColor.rgb *= mix(vec3(0.68, 0.80, 0.46), vec3(0.90, 0.86, 0.54), smoothstep(0.42, 0.95, vVar));
+        }`)
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n  normal = normalize(vNormal);');
   };
   mat.customProgramCacheKey = () => 'grass-infinite';

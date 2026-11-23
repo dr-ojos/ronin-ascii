@@ -12,6 +12,7 @@ import { updateCamera, updateLightDir } from './camera';
 import { updateHud } from './hud';
 import { update } from './game';
 import { state, player } from './state';
+import { setDetailedSurfaces } from './surfaces';
 import './input';
 
 const clock = new THREE.Clock();
@@ -31,6 +32,7 @@ function frame() {
   updateHud(dt);
   updateMinimap(dt);
   cellMat.uniforms.uMode.value = state.colorMode;
+  setDetailedSurfaces(!state.asciiOn);
   if (state.asciiOn) renderAscii(scene, camera);
   else { renderer.setRenderTarget(null); renderer.render(scene, camera); }
 }

@@ -3,6 +3,7 @@
 // (grass, wind and the ground mesh) with the same bilinear filter, so everything sits on the same ground.
 import * as THREE from 'three';
 import { HALF, SIZE, WORLD_R, PLACES, LAKES, lakeRadius, fbm, place } from './map';
+import { surfaceMaterial } from './surfaces';
 
 export const HN = 449;                       // vertices per side
 export const HCELL = SIZE / (HN - 1);        // 6.25 m
@@ -69,7 +70,7 @@ float terrainH(vec2 p) {
 }
 `;
 
-/** the ground mesh: invisible black soil in the lowlands (only the grass is drawn there), rock on the mountains */
+/** The ground mesh. In ASCII mode the lowland soil is black so only the grass draws characters. */
 export function buildTerrainMesh() {
   const geo = new THREE.BufferGeometry();
   const pos = new Float32Array(HN * HN * 3), rock = new Float32Array(HN * HN), col = new Float32Array(HN * HN * 3);
@@ -100,11 +101,11 @@ export function buildTerrainMesh() {
     // ASCII pass samples the class between pixels, and soil of another class showing between the blades
     // would blend into a third class (the lantern glyphs). Mountains: stone.
     sh.fragmentShader = 'varying float vRock;\n' + sh.fragmentShader.replace(/}\s*$/, `
-  if (vRock < 0.5) gl_FragColor = vec4(0.0, 0.0, 0.0, 0.1); else gl_FragColor.a = 0.2;
+  if (uDetailedSurfaces < 0.5 && vRock < 0.5) gl_FragColor = vec4(0.0, 0.0, 0.0, 0.1); else gl_FragColor.a = 0.2;
 }`);
   };
   mat.customProgramCacheKey = () => 'terrain';
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(geo, surfaceMaterial(mat, 'terrain', 'mesh'));
   mesh.receiveShadow = true;
   return mesh;
 }
