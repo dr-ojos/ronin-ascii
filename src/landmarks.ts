@@ -202,7 +202,7 @@ function placePoi(kind: PoiKind, x: number, z: number, ry: number) {
 export function buildLandmarks() {
   R = seeded(4242);
   // camps: many small groups in the wilds, bigger the further from the shrine
-  for (let tries = 0; CAMP_SPOTS.length < 120 && tries < 9000; tries++) {
+  for (let tries = 0, start = CAMP_SPOTS.length; CAMP_SPOTS.length - start < 250 && tries < 20000; tries++) {
     const a = R() * Math.PI * 2, d = Math.sqrt(R()) * WORLD_R, x = Math.cos(a) * d, z = Math.sin(a) * d;
     const tier = d / WORLD_R, size = 1 + Math.floor(R() * (1.6 + tier * 2.6)), r = 9 + size * 1.6;
     if (!spotOk(x, z, r, 42)) continue;
@@ -211,7 +211,7 @@ export function buildLandmarks() {
     campDecor(s); CAMP_SPOTS.push(s);
   }
   // roadside shrines: next to a road, facing it
-  for (let tries = 0, n = 0; n < 14 && tries < 3000; tries++) {
+  for (let tries = 0, n = 0; n < 26 && tries < 6000; tries++) {
     const road = pick(ROADS), i = Math.floor(R() * (road.pts.length - 2)), [ax, az] = road.pts[i], [bx, bz] = road.pts[i + 1];
     const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz) || 1, side = R() < 0.5 ? 1 : -1;
     const x = ax - dz / l * side * (road.width / 2 + 3.2), z = az + dx / l * side * (road.width / 2 + 3.2);
@@ -220,13 +220,13 @@ export function buildLandmarks() {
   }
   // the other corners, anywhere in the wilds
   const kinds: PoiKind[] = ['jizo', 'torii', 'arbol', 'circulo', 'ruina', 'batalla'];
-  for (let tries = 0, n = 0; n < 42 && tries < 9000; tries++) {
+  for (let tries = 0, n = 0; n < 84 && tries < 20000; tries++) {
     const kind = kinds[n % kinds.length], a = R() * Math.PI * 2, d = Math.sqrt(R()) * WORLD_R, x = Math.cos(a) * d, z = Math.sin(a) * d;
     if (!spotOk(x, z, BUILD[kind][0], 30)) continue;
     placePoi(kind, x, z, 0); n++;
   }
   // and a few chests lying alone in the deep woods
-  for (let tries = 0, n = 0; n < 14 && tries < 3000; tries++) {
+  for (let tries = 0, n = 0; n < 28 && tries < 6000; tries++) {
     const a = R() * Math.PI * 2, d = Math.sqrt(R()) * WORLD_R, x = Math.cos(a) * d, z = Math.sin(a) * d;
     if (!spotOk(x, z, 1.5, 25)) continue;
     claim(x, z, 1.5); HIDDEN_CHESTS.push([x, z, rnd(0, Math.PI * 2)]); n++;

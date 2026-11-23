@@ -4,8 +4,8 @@
 import * as THREE from 'three';
 
 /** world square is [-HALF, HALF]²; the walkable area is a disc of radius WORLD_R (mountains beyond) */
-export const HALF = 800, SIZE = HALF * 2;
-export const WORLD_R = 690;
+export const HALF = 1400, SIZE = HALF * 2;
+export const WORLD_R = 1250;
 
 export type P2 = [number, number];
 
@@ -23,7 +23,11 @@ export const PLACES: Place[] = [
   { id: 'cementerio', name: 'CEMENTERIO DE LAS LINTERNAS', x: 110, z: 490, r: 38, flat: 40, blend: 55, glyph: '+' },
   { id: 'cerezos', name: 'VALLE DE LOS CEREZOS', x: 150, z: 250, r: 120, flat: 0, blend: 0, glyph: '*' },
   { id: 'bambu', name: 'BOSQUE DE BAMBU', x: 390, z: 110, r: 120, flat: 0, blend: 0, glyph: '|' },
-  { id: 'pinos', name: 'ALTOS DE LOS PINOS', x: -380, z: -330, r: 180, flat: 0, blend: 0, glyph: 'T' }
+  { id: 'pinos', name: 'ALTOS DE LOS PINOS', x: -380, z: -330, r: 180, flat: 0, blend: 0, glyph: 'T' },
+  { id: 'pueblo', name: 'PUEBLO DE ASAGIRI', x: 820, z: -260, r: 125, flat: 135, blend: 75, glyph: 'V' },
+  { id: 'ruinas', name: 'RUINAS DEL CASTILLO TAKAMORI', x: -560, z: -880, r: 140, flat: 150, blend: 85, glyph: 'R' },
+  { id: 'bosquenegro', name: 'BOSQUE NEGRO', x: -900, z: -470, r: 240, flat: 0, blend: 0, glyph: '!' },
+  { id: 'llanura', name: 'LLANURA DE LOS SUSURROS', x: 620, z: 700, r: 260, flat: 0, blend: 0, glyph: '"' }
 ];
 export const place = (id: string) => PLACES.find(p => p.id === id)!;
 
@@ -43,8 +47,8 @@ export interface Line { pts: P2[]; width: number }
 
 export const RIVER: Line = {
   width: 9,
-  pts: smoothLine([[-700, -420], [-600, -300], [-500, -170], [-440, -40], [-400, 70], [-365, 140], [-340, 165]], 4)
-    .concat(smoothLine([[-292, 236], [-275, 300], [-240, 380], [-180, 470], [-120, 570], [-70, 720]], 4))
+  pts: smoothLine([[-1420, -900], [-1150, -820], [-960, -700], [-820, -560], [-700, -420], [-600, -300], [-500, -170], [-440, -40], [-400, 70], [-365, 140], [-340, 165]], 4)
+    .concat(smoothLine([[-292, 236], [-275, 300], [-240, 380], [-180, 470], [-120, 570], [-70, 720], [-20, 900], [60, 1100], [120, 1450]], 4))
 };
 
 const ROAD_CTRL: P2[][] = [
@@ -58,7 +62,11 @@ const ROAD_CTRL: P2[][] = [
   [[150, 255], [260, 260], [330, 210], [360, 150]],                                                 // cerezos - bambú
   [[-300, 108], [-370, 85], [-440, 75], [-492, 64]],                                                // lago - campamento
   [[-240, -238], [-330, -170], [-420, -110], [-480, -20], [-515, 30]],                              // pagoda - campamento
-  [[-262, 232], [-160, 330], [0, 420], [85, 478]]                                                   // lago - cementerio
+  [[-262, 232], [-160, 330], [0, 420], [85, 478]],                                                  // lago - cementerio
+  [[290, -140], [420, -190], [560, -235], [680, -255], [712, -260]],                                // aldea - pueblo (puerta oeste)
+  [[400, 240], [520, 120], [650, -30], [790, -120], [820, -152]],                                   // torii - pueblo (puerta sur)
+  [[928, -260], [1010, -80], [990, 250], [820, 560], [520, 730], [270, 610], [128, 500]],           // pueblo - llanura - cementerio
+  [[-200, -420], [-300, -580], [-430, -700], [-525, -738], [-560, -748]]                            // hacia las ruinas de Takamori
 ];
 export const ROADS: Line[] = ROAD_CTRL.map(c => ({ pts: smoothLine(c, 2), width: 2.8 }));
 /** the stone stairway of the thousand torii (also a road) */
@@ -141,25 +149,26 @@ export function biomeAt(x: number, z: number): Biome {
   const r = Math.hypot(x, z);
   const sak = near(x, z, 'cerezos', 1.2), bam = near(x, z, 'bambu', 1.2), pin = near(x, z, 'pinos', 1.1);
   const cem = near(x, z, 'cementerio', 2.5), cas = near(x, z, 'castillo', 2.2);
+  const neg = near(x, z, 'bosquenegro', 1.1), lla = near(x, z, 'llanura', 1.1), rui = near(x, z, 'ruinas', 1.8);
   // forests vs open meadows: low-frequency noise, denser towards the mountains
   const n = fbm(x * 0.0065 + 3, z * 0.0065 - 7, 3);
-  let density = THREE.MathUtils.smoothstep(n, 0.42, 0.72) * 0.8 + 0.06 + THREE.MathUtils.smoothstep(r, 480, 680) * 0.5;
-  density = Math.max(density, sak * 0.75, bam * 1.1, pin * 0.9);
+  let density = THREE.MathUtils.smoothstep(n, 0.42, 0.72) * 0.8 + 0.06 + THREE.MathUtils.smoothstep(r, WORLD_R - 320, WORLD_R - 20) * 0.5;
+  density = Math.max(density * (1 - lla * 0.85), sak * 0.75, bam * 1.1, pin * 0.9, neg * 1.15);
   return {
     density: Math.min(1, density),
     sakura: 0.25 + sak * 6 + cas * 0.6,
-    pine: 0.35 + pin * 5 + THREE.MathUtils.smoothstep(r, 400, 650) * 1.2,
-    cypress: 0.3 + cem * 3 + cas * 1.5 + pin * 1,
+    pine: 0.35 + pin * 5 + neg * 1.5 + THREE.MathUtils.smoothstep(r, WORLD_R - 420, WORLD_R - 60) * 1.2,
+    cypress: 0.3 + cem * 3 + cas * 1.5 + pin * 1 + neg * 7 + rui * 2,
     bamboo: 0.12 + bam * 9,
-    bush: 0.5 + sak * 0.8,
-    rock: 0.25 + pin * 0.8 + THREE.MathUtils.smoothstep(r, 450, 650) * 1.5
+    bush: 0.5 + sak * 0.8 + lla * 1.2,
+    rock: 0.25 + pin * 0.8 + rui * 2 + THREE.MathUtils.smoothstep(r, WORLD_R - 340, WORLD_R - 60) * 1.5
   };
 }
 
 // ------------------------------------------------------------ masks
-// ground mask (2048², ~0.8 m / px): R = road, G = water, B = built (plazas, floors). No grass on any of them.
-// tree mask (1024², ~1.6 m / px): anything > 0 keeps trees and rocks away (roads, water, places).
-export const MASK_RES = 2048, TREE_RES = 1024;
+// ground mask (3072², ~0.9 m / px): R = road, G = water, B = built (plazas, floors). No grass on any of them.
+// tree mask (1536², ~1.8 m / px): anything > 0 keeps trees and rocks away (roads, water, places).
+export const MASK_RES = 3072, TREE_RES = 1536;
 /** footprints added by structures.ts / landmarks.ts before the masks are drawn: [x, z, w, d, rotY] rectangles and [x, z, r] discs
  *  (both bare ground), and clearings [x, z, r] that only keep trees and rocks away */
 export const FOOTPRINTS: { rects: [number, number, number, number, number][]; discs: P2[]; discR: number[]; clearings: [number, number, number][] } = { rects: [], discs: [], discR: [], clearings: [] };

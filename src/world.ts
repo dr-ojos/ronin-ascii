@@ -11,6 +11,7 @@ import { buildStructures, updateStructures, blockers, floors } from './structure
 import { updateChunks, chunkBlockers } from './chunks';
 import { buildMasks } from './map';
 import { buildLandmarks } from './landmarks';
+import { buildSettlements } from './settlements';
 import { player, state } from './state';
 import { rnd } from './utils';
 import { sfx } from './sfx';
@@ -94,6 +95,7 @@ scene.add(buildTerrainMesh());
 
 // the rest of the world: landmarks, roads, water. They register the footprints the masks are drawn from.
 buildStructures();
+buildSettlements();   // the town of Asagiri and the ruins of Takamori
 buildLandmarks();   // oni camps and corners of the wilds
 buildMasks();
 

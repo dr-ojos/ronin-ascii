@@ -78,7 +78,7 @@ function renderAtlas(cols: number, rows: number, cw: number, ch: number, labels:
 const mini = document.getElementById('minimap') as HTMLCanvasElement;
 const miniX = mini.getContext('2d')!;
 const zone = document.getElementById('zone')!;
-const MINI = renderAtlas(320, 192, 6, 10, false);   // 5 m per column, 8.3 m per row
+const MINI = renderAtlas(Math.round(SIZE / 5), Math.round(SIZE / 8.333), 6, 10, false);   // 5 m per column, 8.3 m per row
 let big: Atlas | null = null;
 const bigEl = document.getElementById('bigmap') as HTMLCanvasElement;
 const bigX = bigEl.getContext('2d')!;
@@ -88,6 +88,7 @@ function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, 
   const toPx = (x: number, z: number): [number, number] => [ox + (x + HALF) / a.mx * a.cw * s, oy + (z + HALF) / a.mz * a.ch * s];
   ctx.font = `bold ${Math.round(a.ch * 1.2 * Math.max(1, s))}px ${FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
   const near = (x: number, z: number, r: number) => isBig || Math.hypot(x - player.pos.x, z - player.pos.z) < r;
+  const seenChests = new Set<unknown>(); if (isBig) for (const c of seen) if (c.chest) seenChests.add(c.chest);
   // corners you have found, camps you have seen (red while guarded), chests nearby (gold, dim while sealed)
   ctx.fillStyle = COL.place;
   POIS.forEach((p, i) => { if (discovered.has('poi' + i) && near(p.x, p.z, 400)) { const [px, py] = toPx(p.x, p.z); ctx.fillText(p.glyph, px, py); } });
@@ -99,6 +100,8 @@ function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, 
   for (const c of chests) {
     if (c.state === 'open' || !near(c.x, c.z, c.kind === 'oculto' ? 45 : 140)) continue;
     if (isBig && c.kind === 'oculto' && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) > 45) continue;
+    // in a world this big, the full map only shows the chests of lairs you have found (and those around you)
+    if (isBig && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) > 300 && !seenChests.has(c)) continue;
     const [px, py] = toPx(c.x, c.z);
     ctx.fillStyle = c.kind === 'guardian' ? (c.state === 'sealed' ? '#7a5a9a' : '#d0a0ff') : c.state === 'sealed' ? '#8a7440' : '#ffd060'; ctx.fillText('$', px, py);
   }
@@ -155,7 +158,7 @@ export function updateMinimap(dt: number) {
   miniX.textAlign = 'left'; miniX.textBaseline = 'top';
   // the big map, when open
   if (state.bigMap) {
-    if (!big) big = renderAtlas(112, 68, 7, 11.5, true);
+    if (!big) big = renderAtlas(150, 91, 7, 11.5, true);
     const s = Math.min((innerWidth - 40) / big.c.width, (innerHeight - 80) / big.c.height, 1.4);
     bigEl.width = Math.round(big.c.width * s); bigEl.height = Math.round(big.c.height * s);
     bigX.imageSmoothingEnabled = true;

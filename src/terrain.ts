@@ -2,9 +2,9 @@
 // that closes the world. One height grid feeds the CPU (groundY: feet, trees, buildings) and the GPU
 // (grass, wind and the ground mesh) with the same bilinear filter, so everything sits on the same ground.
 import * as THREE from 'three';
-import { HALF, SIZE, PLACES, LAKES, lakeRadius, fbm, place } from './map';
+import { HALF, SIZE, WORLD_R, PLACES, LAKES, lakeRadius, fbm, place } from './map';
 
-export const HN = 257;                       // vertices per side
+export const HN = 449;                       // vertices per side
 export const HCELL = SIZE / (HN - 1);        // 6.25 m
 const sm = THREE.MathUtils.smoothstep;
 
@@ -15,7 +15,9 @@ function rawHeight(x: number, z: number) {
   h += 22 * Math.exp(-((di / 80) ** 2));                                     // the hill of the mountain shrine
   const cp = place('castillo'), dc = Math.hypot(x - cp.x, z - cp.z);
   h += 5 * Math.exp(-((dc / 110) ** 2));                                     // castle mound
-  const r = Math.hypot(x, z), m = sm(r, 610, 790);
+  const rp = place('ruinas'), dr = Math.hypot(x - rp.x, z - rp.z);
+  h += 12 * Math.exp(-((dr / 210) ** 2));                                    // the hill of the ruined castle
+  const r = Math.hypot(x, z), m = sm(r, WORLD_R - 80, WORLD_R + 100);
   h += m * m * (75 + 45 * fbm(x * 0.012, z * 0.012, 3));                   // mountains around the world
   return h;
 }
@@ -77,7 +79,7 @@ export function buildTerrainMesh() {
     const hx = heights[j * HN + Math.min(HN - 1, i + 1)] - heights[j * HN + Math.max(0, i - 1)];
     const hz = heights[Math.min(HN - 1, j + 1) * HN + i] - heights[Math.max(0, j - 1) * HN + i];
     const slope = Math.hypot(hx, hz) / (HCELL * 2), r = Math.hypot(x, z);
-    rock[k] = Math.max(sm(r, 640, 700), sm(slope, 0.85, 1.1));
+    rock[k] = Math.max(sm(r, WORLD_R - 50, WORLD_R + 10), sm(slope, 0.85, 1.1));
     const v = 0.75 + fbm(x * 0.05, z * 0.05, 2) * 0.5, snow = sm(h, 70, 100);
     col.set([0.36 * v + snow * 0.5, 0.38 * v + snow * 0.5, 0.45 * v + snow * 0.5], k * 3);
   }

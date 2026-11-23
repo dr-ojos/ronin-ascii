@@ -119,7 +119,7 @@ export const post = (p: Obj, r: number, h: number, mat: THREE.Material, x: numbe
 export const pyr = (p: Obj, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, ry = 0) => add(p, G.pyr, mat, x, y, z, w, h, d, ry);
 
 /** world-space helpers for a group placed at (x, y, z) rotated by ry */
-function toWorld(gx: number, gz: number, ry: number, lx: number, lz: number): P2 {
+export function toWorld(gx: number, gz: number, ry: number, lx: number, lz: number): P2 {
   const c = Math.cos(ry), s = Math.sin(ry);
   return [gx + lx * c + lz * s, gz - lx * s + lz * c];
 }
@@ -185,7 +185,7 @@ export function miniShrine(p: Obj, x: number, y: number, z: number, ry: number, 
 }
 
 // ------------------------------------------------------------ roads (draped ribbons) + lanterns along them
-function ribbon(line: Line, width: number, mat: THREE.Material, lift: number, colorAt?: (x: number, z: number, side: number) => THREE.Color) {
+export function ribbon(line: Line, width: number, mat: THREE.Material, lift: number, colorAt?: (x: number, z: number, side: number) => THREE.Color) {
   const pts = line.pts, n = pts.length, pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2), idx: number[] = [];
   let along = 0;
   for (let i = 0; i < n; i++) {
