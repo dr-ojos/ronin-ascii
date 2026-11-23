@@ -291,11 +291,12 @@ if (rigged) for (const a of ARMORS) if (a.look) build(a);
 for (const a of ARMORS) if (a.look?.aura) auras.set(a.id, buildAura(a.look.aura));
 
 /** show the armour you wear (and its helmet instead of the kasa), with your chosen colours */
-export function dressUp() {
+let activeAura: THREE.Group | undefined;
+export function dressUp(cur = armor()) {
   applyLook(root);
-  const cur = armor();
   for (const [id, list] of sets) for (const o of list) o.visible = id === cur.id;
   for (const [id, g] of auras) g.visible = id === cur.id;
+  activeAura = auras.get(cur.id);
   const helmet = rigged && !!cur.look?.helmet;
   root.traverse(o => { if (o.userData.part === 'hat') o.visible = !helmet && !opt('hat').hidden; });
 }
@@ -303,7 +304,7 @@ dressUp();
 
 /** every frame: the auras move */
 export function updateOutfit() {
-  const g = auras.get(state.armor);
+  const g = activeAura;
   if (!g) return;
   const t = state.time;
   if (g.name === 'foxfire') g.children.forEach((w, i) => {

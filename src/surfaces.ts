@@ -4,19 +4,40 @@ import { seeded } from './map';
 import { DIRT, FINISH_HELPERS, MASONRY, PAVERS, PLASTER, SIDING, THATCH, TILES } from './architecture-finishes';
 
 export const detailedSurfaces = { value: 0 };
-const geometryVariants: { mesh: THREE.Mesh; original: THREE.BufferGeometry; rounded: THREE.BufferGeometry }[] = [];
+interface SurfaceVariant {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Mesh['material'];
+  depth: THREE.Material | undefined;
+}
+const surfaceVariants = new Map<THREE.Mesh, [SurfaceVariant, SurfaceVariant]>();
 const modeDetails: { object: THREE.Object3D; detailed: boolean }[] = [];
 
 export function setDetailedSurfaces(enabled: boolean) {
   const value = Number(enabled);
   if (detailedSurfaces.value === value) return;
   detailedSurfaces.value = value;
-  for (const { mesh, original, rounded } of geometryVariants) mesh.geometry = enabled ? rounded : original;
+  for (const [mesh, variants] of surfaceVariants) applySurfaceVariant(mesh, variants[enabled ? 1 : 0]);
   for (const { object, detailed } of modeDetails) object.visible = enabled === detailed;
 }
 
 export function addRoundedSurface(mesh: THREE.Mesh, rounded: THREE.BufferGeometry) {
-  geometryVariants.push({ mesh, original: mesh.geometry, rounded });
+  addSurfaceVariant(mesh, rounded, mesh.material, mesh.customDepthMaterial);
+}
+
+function applySurfaceVariant(mesh: THREE.Mesh, variant: SurfaceVariant) {
+  mesh.geometry = variant.geometry;
+  mesh.material = variant.material;
+  mesh.customDepthMaterial = variant.depth;
+}
+
+export function addSurfaceVariant(mesh: THREE.Mesh, geometry: THREE.BufferGeometry, material: THREE.Mesh['material'], depth: THREE.Material | undefined) {
+  const detailed = { geometry, material, depth };
+  surfaceVariants.set(mesh, [{ geometry: mesh.geometry, material: mesh.material, depth: mesh.customDepthMaterial }, detailed]);
+  if (detailedSurfaces.value) applySurfaceVariant(mesh, detailed);
+}
+
+export function removeSurfaceVariant(mesh: THREE.Mesh) {
+  surfaceVariants.delete(mesh);
 }
 
 export function showSurfaceDetail(object: THREE.Object3D, detailed = true) {
@@ -88,6 +109,38 @@ const cloth = /* glsl */`
   diffuseColor.rgb = mix(dyed, mix(dyed, vec3(0.30, 0.218, 0.135), 0.25), bleached);
   relief = weave.g * 0.46 + weave.b * 0.26;
 `;
+const bark = /* glsl */`
+  vec3 axis = vSurfacePosition * vec3(1.11, 0.32, 1.11);
+  vec3 cork = surfaceSample(axis, worldNormal);
+  float seam = 1.0 - smoothstep(0.012, 0.094, abs(cork.b - 0.42 + 0.17 * (cork.r - 0.5)));
+  seam *= smoothstep(0.24, 0.64, tex.r + cork.g * 0.17);
+  float scale = smoothstep(0.27, 0.76, cork.g * 0.64 + cork.r * 0.36);
+  vec3 tint = mix(vec3(0.65, 0.41, 0.27), vec3(1.85, 1.45, 1.03), scale);
+  vec3 cambium = diffuseColor.rgb * tint * (1.0 - seam * 0.55);
+  float rootMoss = (1.0 - smoothstep(0.06, 1.02, vBarkHeight)) * smoothstep(0.39, 0.64, tex.r * 0.7 + cork.g * 0.3);
+  float lichen = smoothstep(0.61, 0.83, cork.r * 0.65 + grit * 0.35) * (1.0 - seam);
+  cambium = mix(cambium, vec3(0.071, 0.080, 0.045), lichen * 0.56);
+  diffuseColor.rgb = mix(cambium, vec3(0.044, 0.071, 0.022) * (0.73 + grit * 0.57), rootMoss * 0.79);
+  relief = 0.44 * scale + 0.25 * grit - 0.43 * seam;
+`;
+const bamboo = /* glsl */`
+  vec3 fibre = surfaceSample(vSurfacePosition * vec3(1.5, 0.28, 1.5), worldNormal);
+  float sap = smoothstep(0.24, 0.82, fibre.b * 0.64 + fibre.r * 0.36);
+  float age = smoothstep(0.59, 0.83, stain * 0.61 + grit * 0.39);
+  vec3 rind = mix(vec3(0.043, 0.091, 0.021), vec3(0.177, 0.244, 0.068), sap);
+  diffuseColor.rgb = mix(rind, vec3(0.194, 0.148, 0.054), age * 0.62);
+  relief = 0.25 * fibre.b + 0.23 * grit;
+`;
+const leafBlade = /* glsl */`
+  vec2 blade = vBambooUv;
+  float line = abs(blade.x - 0.5);
+  float midrib = 1.0 - smoothstep(0.014, 0.043 + fwidth(line), line);
+  float vein = pow(0.5 + 0.5 * sin((blade.y * 12.0 - line * 1.85) * 6.2832), 10.0);
+  vein *= 1.0 - smoothstep(0.026, 0.073, fwidth(blade.y));
+  vec3 leaf = diffuseColor.rgb * (0.66 + 0.40 * blade.y + 0.17 * grit);
+  diffuseColor.rgb = leaf + vec3(0.043, 0.062, 0.018) * (midrib + vein * 0.19);
+  relief = midrib * 0.32 + vein * 0.15 + grit * 0.13;
+`;
 const finishes = {
   stone: { scale: 0.46, stretch: 1, bump: 0.020, height: 'mineral', color: 'stoneTint', roughness: 0.94 },
   boulder: { scale: 0.46, stretch: 1, bump: 0.017, height: 'mineral', color: 'stoneTint', roughness: 0.96 },
@@ -109,12 +162,17 @@ const finishes = {
   masonry: { scale: 0.46, stretch: 1, bump: 0.036, height: 'mineral', color: '', roughness: 0.97, shader: MASONRY },
   paper: { scale: 0.67, stretch: 1, bump: 0.003, height: 'grit', color: '', roughness: 0.94, shader: paper },
   cloth: { scale: 0.42, stretch: 1, bump: 0.005, height: 'grit', color: '', roughness: 0.97, shader: cloth },
+  bark: { scale: 0.64, stretch: 0.74, bump: 0.018, height: 'grain', color: '', roughness: 0.98, shader: bark },
+  bamboo: { scale: 0.52, stretch: 0.61, bump: 0.006, height: 'grain', color: '', roughness: 0.88, shader: bamboo },
+  leafBlade: { scale: 0.82, stretch: 1, bump: 0.002, height: 'grit', color: '', roughness: 0.88, shader: leafBlade },
 };
 
 export function surfaceMaterial(mat: THREE.MeshStandardMaterial, style: keyof typeof finishes, smooth?: 'mesh' | 'rounded') {
   const finish = finishes[style], compile = mat.onBeforeCompile, cacheKey = mat.customProgramCacheKey();
   const pattern = 'shader' in finish ? finish.shader : '';
-  const roofVarying = style === 'sweptTiles' ? 'varying vec2 vRoofPanelPosition;\n' : '';
+  const finishVarying = style === 'sweptTiles' ? 'varying vec2 vRoofPanelPosition;\n'
+    : style === 'bark' ? 'varying float vBarkHeight;\n'
+    : style === 'leafBlade' ? 'varying vec2 vBambooUv;\n' : '';
   mat.onBeforeCompile = (sh, renderer) => {
     compile.call(mat, sh, renderer);
     sh.uniforms.uDetailedSurfaces = detailedSurfaces;
@@ -122,13 +180,16 @@ export function surfaceMaterial(mat: THREE.MeshStandardMaterial, style: keyof ty
     const smoothVarying = smooth ? 'varying vec3 vSurfaceNormal;\n' : '';
     sh.vertexShader = `varying vec3 vSurfacePosition;
 uniform float uDetailedSurfaces;
-${smoothVarying}${roofVarying}${smooth === 'rounded' ? 'attribute vec3 aRoundedNormal;\n' : ''}` + sh.vertexShader
+${smoothVarying}${finishVarying}${smooth === 'rounded' ? 'attribute vec3 aRoundedNormal;\n' : ''}
+${style === 'bark' ? 'attribute float aBarkHeight;\n' : ''}` + sh.vertexShader
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
         ${smooth === 'rounded' ? 'if (uDetailedSurfaces > 0.5) objectNormal = aRoundedNormal;' : ''}`)
       .replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
         ${smooth ? 'vSurfaceNormal = normalize(transformedNormal);' : ''}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         ${style === 'sweptTiles' ? 'vRoofPanelPosition = position.xz;' : ''}
+        ${style === 'bark' ? 'vBarkHeight = aBarkHeight;' : ''}
+        ${style === 'leafBlade' ? 'vBambooUv = uv;' : ''}
         vSurfacePosition = vec3(0.0);
         if (uDetailedSurfaces > 0.5) {
           vec4 surfacePosition = vec4(position, 1.0);
@@ -138,7 +199,7 @@ ${smoothVarying}${roofVarying}${smooth === 'rounded' ? 'attribute vec3 aRoundedN
           vSurfacePosition = (modelMatrix * surfacePosition).xyz;
         }`);
     sh.fragmentShader = `varying vec3 vSurfacePosition;
-${smoothVarying}${roofVarying}
+${smoothVarying}${finishVarying}
 uniform float uDetailedSurfaces;
 uniform sampler2D uSurfaceTile;
 

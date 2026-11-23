@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import './assets';   // first: shows "cargando..." while the character model loads
 import { renderer, scene, camera } from './renderer';
 import { cellMat, renderAscii, resizeAscii } from './ascii';
-import { animSamurai } from './avatar';
+import { animSamurai, sam } from './avatar';
 import { updateOutfit } from './outfit';
 import { updateSparks } from './katana-fx';
 import { updateRain, updateWorld, updateSky } from './world';
@@ -20,7 +20,8 @@ function frame() {
   requestAnimationFrame(frame);
   let dt = Math.min(clock.getDelta(), 0.05);
   if (state.hitStop > 0) { state.hitStop -= dt; dt *= 0.1; }
-  if (state.photo) { state.time += dt; state.yaw += dt * 0.35; } else update(dt);
+  // photo mode freezes the game: never leave the ronin hidden mid-blink
+  if (state.photo) { state.time += dt; state.yaw += dt * 0.35; sam.root.visible = true; } else update(dt);
   animSamurai(dt);
   updateOutfit();
   updateSparks(dt, !state.dead);

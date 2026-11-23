@@ -28,13 +28,21 @@ const CLASS_CHARS = [
   " .:-=+szSZN#%@",         // 6 actor
   " .-~~=*"                 // 7 water: still dots, rolling tildes, moonlit crests
 ];
-const ACTOR_CHARS = " .':;=+xzo#@"; // punctuation and short strokes stay distinct on the smallest grid
-const EDGE_CHARS = '|\\-/';  // row 7: outline strokes, picked by edge direction
-for (const s of [...CLASS_CHARS, ACTOR_CHARS, EDGE_CHARS]) for (const ch of s) {
+// The characters are drawn with three ramps chosen by what the pixel is made of (manga-art.ts
+// tags it): woven cloth, hard metal / lacquer, and round letters for skin and faces. Light and
+// shadow walk each ramp from a sparse dot to a full block, so the volume is in the characters.
+const ACTOR_RAMPS = [
+  " .,:;~+*xX%#",      // cloth: soft punctuation in the folds, crosses and blocks where lit
+  " .-:=+*#%@$H",      // metal / lacquer: hard strokes, sparkling * on the highlights
+  " .,:coaeO0@Q"       // skin: round letters model the flesh
+];
+const EDGE_CHARS = '|\\-/';  // row 8: outline strokes, picked by edge direction
+for (const s of [...CLASS_CHARS, ...ACTOR_RAMPS, EDGE_CHARS]) for (const ch of s) {
   const k = ch.charCodeAt(0);
   if (k < 0x20 || k > 0x7e) throw new Error(`glyph no ASCII: ${JSON.stringify(ch)}`);
 }
-const N = 12, ROWS = CLASS_CHARS.length + 1, EDGE_ROW = CLASS_CHARS.length;
+const N = 12, EDGE_ROW = CLASS_CHARS.length, ROWS = EDGE_ROW + 1 + 2;   // + metal and skin ramps for actors
+const METAL_ROW = EDGE_ROW + 1, SKIN_ROW = EDGE_ROW + 2;
 const FONT_FAMILY = '"Courier New", Courier, monospace';
 const OVERLAP = 1.8;   // glyph size / cell size (must stay < 3: each pixel looks at the 3x3 neighbouring cells)
 
@@ -50,7 +58,7 @@ const RAMPS = (() => {
     for (let i = 0; i < d.length; i += 4) s += d[i];
     return s;
   };
-  return CLASS_CHARS.map(set => {
+  return [...CLASS_CHARS, ...ACTOR_RAMPS].map(set => {
     const sorted = [...set].map(ch => ({ ch, s: coverage(ch) })).sort((p, q) => p.s - q.s).map(o => o.ch);
     return Array.from({ length: N }, (_, i) => sorted[Math.round(i * (sorted.length - 1) / (N - 1))]);
   });
@@ -65,8 +73,9 @@ function buildAtlas(gw: number, gh: number, actor: boolean) {
   const size = Math.max(actor ? 5 : 6, Math.floor(Math.min(gh * 0.95, gw / 0.6)));   // Courier advance = 0.6em
   x.fillStyle = '#fff'; x.font = `bold ${size}px ${FONT_FAMILY}`; x.textAlign = 'center'; x.textBaseline = 'middle';
   const put = (c: string, col: number, row: number) => x.fillText(c, col * gw + gw / 2, row * gh + gh / 2 + (actor ? 0 : 1));
-  RAMPS.forEach((ramp, r) => [...(actor && r === 6 ? ACTOR_CHARS : ramp)].forEach((c, i) => put(c, i, r)));
+  RAMPS.slice(0, CLASS_CHARS.length).forEach((ramp, r) => [...(actor && r === 6 ? RAMPS[CLASS_CHARS.length] : ramp)].forEach((c, i) => put(c, i, r)));
   [...EDGE_CHARS].forEach((c, i) => put(c, i, EDGE_ROW));
+  if (actor) { RAMPS[CLASS_CHARS.length + 1].forEach((c, i) => put(c, i, METAL_ROW)); RAMPS[CLASS_CHARS.length + 2].forEach((c, i) => put(c, i, SKIN_ROW)); }
   const t = new THREE.CanvasTexture(a);
   t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.flipY = false;
   return t;
@@ -98,8 +107,9 @@ export const ACTOR_LAYER = 1;
 const cellOpts = { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false };
 const cellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);
 const actorCellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);   // finer grid, actors only
-// Characters use a finer grid with enough overlap for narrow ASCII strokes to stay legible.
-const ACTOR_SCALE = 0.29, ACTOR_OVERLAP = 1.65;
+// Characters get their own grid, about half the environment's pitch, on whole pixels (a fractional
+// pitch beats against the glyphs into horizontal lines) and big enough for each letter to read.
+const ACTOR_SCALE = 0.55, ACTOR_OVERLAP = 1.3;
 interface Grid { cw: number; ch: number; gw: number; gh: number; cols: number; rows: number; font: THREE.CanvasTexture }
 const grids: { env: Grid | null; actor: Grid | null } = { env: null, actor: null };
 export const cellMat = new THREE.ShaderMaterial({
@@ -123,6 +133,7 @@ export const cellMat = new THREE.ShaderMaterial({
       return (texture2D(tScene, uv).rgb * 2.0 + texture2D(tScene, uv + o).rgb + texture2D(tScene, uv - o).rgb
         + texture2D(tScene, uv + vec2(o.x, -o.y)).rgb + texture2D(tScene, uv + vec2(-o.x, o.y)).rgb) / 6.0;
     }
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     float L(vec2 uv, vec2 cs, float x, float y){ return luma(grade(texture2D(tScene, uv + vec2(x, y) * cs).rgb)); }
     float M(vec2 uv, vec2 cs, float x, float y){ return Mk(uv + vec2(x, y) * cs); }
     // gradient direction -> stroke along the edge:  0 '|'  1 '\\'  2 '-'  3 '/'
@@ -166,9 +177,16 @@ export const cellMat = new THREE.ShaderMaterial({
         float a5 = L(uv, e, 1., 0.), a6 = L(uv, e, -1., -1.), a7 = L(uv, e, 0., -1.), a8 = L(uv, e, 1., -1.);
         vec2 gl = vec2((a2 + 2.*a5 + a8) - (a0 + 2.*a3 + a6), (a0 + 2.*a1 + a2) - (a6 + 2.*a7 + a8));
         bool outline = length(mg) > 1.8;
+        // what the pixel is made of (alpha: 0.60 cloth, 0.62 metal / lacquer, 0.64 skin)
+        float sub = texture2D(tScene, uv).a;
+        float ramp = sub > 0.63 ? ${SKIN_ROW.toFixed(1)} : sub > 0.61 ? ${METAL_ROW.toFixed(1)} : 6.0;
+        // light and shadow pick the density; an ordered jitter keeps neighbouring cells from repeating
+        // the same letter in rows, so the shading reads as a gradient of characters
+        float dith = (hash(cell) - 0.5) * 0.9 + (mod(cell.x + cell.y * 2.0, 3.0) - 1.0) * 0.25;
+        float shade = smoothstep(0.0, 1.0, al) * 0.6 + al * 0.4;
         if (outline) { row = uEdgeRow; idx = bin(mg); }
-        else if (length(gl) > 0.7) { row = uEdgeRow; idx = bin(gl); }
-        else { row = 6.0; idx = max(floor(al * uN), 3.0); }   // shadows keep their punctuation texture
+        else if (length(gl) > 1.35) { row = uEdgeRow; idx = bin(gl); }     // only deep creases get a stroke
+        else { row = ramp; idx = clamp(floor(shade * (uN - 1.0) + 0.5 + dith), 1.0, uN - 1.0); }
         vec3 tint = ac / max(max(max(ac.r, ac.g), ac.b), 0.03);
         // stronger light / shadow: dim strokes in the shade (the solid backing carries the form there),
         // white-hot strokes where the light hits
@@ -274,7 +292,7 @@ const postMat = new THREE.ShaderMaterial({
         vec4 cd = texelFetch(cells, ivec2(nc), 0);
         float code = floor(cd.a + 0.5);
         float row = floor(code / uN), idx = code - row * uN;
-        if (idx < 0.5 && row < ${(EDGE_ROW - 0.5).toFixed(1)}) continue;   // blank cell (the edge row has no blank)
+        if (idx < 0.5 && abs(row - ${EDGE_ROW.toFixed(1)}) > 0.5) continue;   // blank cell (the edge row has no blank)
         // grass / foliage glyphs get a small fixed scatter so the weave doesn't look like a grid
         vec2 jit = scatter && ((row > 0.5 && row < 1.5) || (row > 3.5 && row < 4.5))
           ? (vec2(hash(nc), hash(nc + 17.3)) - 0.5) * C * 0.5 : vec2(0.0);
@@ -328,9 +346,8 @@ export function applyDensity() {
   const cw = Math.max(3, Math.round(w * DPR)), ch = Math.max(5, Math.round(h * DPR));
   grids.env?.font.dispose(); grids.actor?.font.dispose();
   const E = grids.env = makeGrid(cw, ch, OVERLAP);
-  // Half-pixel pitch packs in more detail at 1x without shaving pixels off the font atlas.
-  const aw = Math.max(1.5, Math.round(cw * ACTOR_SCALE * 2) / 2);
-  const ah = Math.max(2.5, Math.round(ch * ACTOR_SCALE * 2) / 2);
+  const aw = Math.max(3, Math.round(cw * ACTOR_SCALE));
+  const ah = Math.max(5, Math.round(ch * ACTOR_SCALE));
   const A = grids.actor = makeGrid(aw, ah, ACTOR_OVERLAP, true);
   cellRT.setSize(E.cols, E.rows); actorCellRT.setSize(A.cols, A.rows);
   cellMat.uniforms.uRes.value.copy(bufSize);

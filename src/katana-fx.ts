@@ -7,6 +7,7 @@ import { tipZ, weapon } from './weapons';
 import { tagMat } from './materials';
 import { player, state } from './state';
 import { rnd } from './utils';
+import { shopStageActive } from './shop-stage';
 
 // soft personal glow + a cold light that rides on the blade
 const samGlow = new THREE.PointLight(0xffe6c0, 0.8, 3.6, 2);
@@ -61,6 +62,7 @@ sparkMat.onBeforeCompile = sh => {
 const sparkPts = new THREE.Points(spGeo, sparkMat);
 sparkPts.frustumCulled = false; scene.add(sparkPts);
 let spNext = 0, sparkAcc = 0, bladeHeat = 0, swingS = 0;
+let wasDisplaying = false;
 const bladeBase = new THREE.Vector3(), bladeTip = new THREE.Vector3(), prevTip = new THREE.Vector3(), tipVel = new THREE.Vector3(), spTmp = new THREE.Vector3();
 const prevBase = new THREE.Vector3();
 
@@ -166,6 +168,10 @@ export function sparkBurst(p: THREE.Vector3, n: number, speed = 6) {
 }
 export function updateSparks(dt: number, emit: boolean) {
   if (dt <= 0) return;
+  const displaying = shopStageActive();
+  const staged = displaying || wasDisplaying;
+  wasDisplaying = displaying;
+  emit &&= !staged;
   if (weapon().id !== fxId) setWeaponFx();
   const w = weapon(), grav = w.fx.gravity;
   trailK = w.fx.trail;
@@ -173,11 +179,13 @@ export function updateSparks(dt: number, emit: boolean) {
   bladeBase.set(0, 0, 0.24); sam.katana.localToWorld(bladeBase);
   bladeTip.set(0, 0, tipZ()); sam.katana.localToWorld(bladeTip);
   tipVel.subVectors(bladeTip, prevTip).divideScalar(dt);
+  if (staged) tipVel.setScalar(0);
   if (tipVel.lengthSq() > 900) tipVel.setLength(30); // teleports (reset, first frame)
   const swing = Math.min(1, tipVel.length() / 12);
   // follows the blade's real speed: flares instantly with the cut, settles more slowly
   swingS += (swing - swingS) * Math.min(1, dt * (swing > swingS ? 30 : 7));
-  bladeHeat += ((player.attackT >= 0 ? 1 : swing * 0.6) - bladeHeat) * Math.min(1, dt * 10);
+  bladeHeat += ((!staged && player.attackT >= 0 ? 1 : swing * 0.6) - bladeHeat) * Math.min(1, dt * 10);
+  if (displaying) trail.length = 0;
   updateTrail(dt, emit);
   prevTip.copy(bladeTip); prevBase.copy(bladeBase);
   // emission: a rare crackle along the edge, a light shower while cutting
@@ -226,11 +234,13 @@ export function updateSparks(dt: number, emit: boolean) {
   haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 + hk * 0.2;
   haloCore.opacity = 0.08 + hk * 0.25;
   halo.scale.set(1 + hk * 0.25, 1 + hk * 0.25, 1);
-  halo.visible = sam.root.visible;
+  halo.visible = sam.root.visible && !displaying;
   // each blade's own flourish
   if (emit && w.fx.extra) flourish(w.fx.extra, dt, hk);
   // sits between the samurai and the camera, chest high: lights his front, barely touches the grass
-  samGlow.position.set(player.pos.x + Math.sin(state.yaw) * 0.9, player.pos.y + 1.55, player.pos.z + Math.cos(state.yaw) * 0.9);
+  const p = sam.root.position;
+  const yaw = displaying ? sam.root.rotation.y : state.yaw;
+  samGlow.position.set(p.x + Math.sin(yaw) * 0.9, p.y + 1.55, p.z + Math.cos(yaw) * 0.9);
 }
 
 // ---------------------------------------------------------------- flourishes

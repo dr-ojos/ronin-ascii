@@ -9,6 +9,7 @@ import { addRoundedSurface, surfaceMaterial } from './surfaces';
 import { addCollider } from './physics';
 import { addLight } from './lights';
 import { campfire } from './campfire';
+import { banner, bannerMat } from './banner';
 import { groundY, lakeLevel } from './terrain';
 import { riverDepth, lakeWater, ribbonWater, RIVER_FLOW, WATER_GLSL, rippleUniforms, weatherUniforms } from './water';
 import { ROADS, RIVER, LAKES, BRIDGES, TORII_PATH, FOOTPRINTS, lakeRadius, lineDist, place, seeded, type P2, type Line } from './map';
@@ -578,6 +579,7 @@ function buildToriiPath() {
 }
 
 // ------------------------------------------------------------ ronin camp
+const CAMP_BANNERS = [0xb3261e, 0xe8e0cc, 0x1c2a4a].map(bannerMat);
 function buildCamp() {
   const pl = place('campamento'), y = pl.level!, g = new THREE.Group(); g.position.set(pl.x, y, pl.z);
   // campfire
@@ -594,7 +596,7 @@ function buildCamp() {
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * TAU, x = Math.cos(a) * 17, z = Math.sin(a) * 17;
     post(g, 0.07, 5.5, MT.black, x, groundY(pl.x + x, pl.z + z) - y, z);
-    add(g, G.plane, MT.banner[i % 3], x, groundY(pl.x + x, pl.z + z) - y + 3.6, z, 0.9, 3.2, 1, a);
+    banner(g, CAMP_BANNERS[i % 3], x, groundY(pl.x + x, pl.z + z) - y + 3.6, z, 0.9, 3.2, -a - Math.PI / 2);   // facing the fire
     addCollider({ x: pl.x + x, z: pl.z + z, r: 0.2 });
   }
   for (let i = 0; i < 70; i++) {

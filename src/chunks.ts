@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { createKit, rng, type KitMesh } from './nature';
+import { removeSurfaceVariant } from './surfaces';
 import { addCollider, removeColliders, isFree } from './physics';
 import { biomeAt, treeBlocked, groundAt, seeded, WORLD_R, HALF } from './map';
 
@@ -63,6 +64,7 @@ function buildChunk(i: number, j: number): Chunk {
 function dropChunk(c: Chunk) {
   scene.remove(c.group);
   for (const { mesh } of c.meshes) {
+    removeSurfaceVariant(mesh);
     if ((mesh as THREE.InstancedMesh).isInstancedMesh) (mesh as THREE.InstancedMesh).dispose();   // shared geometry stays
     else mesh.geometry.dispose();
   }

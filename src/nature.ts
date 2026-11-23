@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tagMat, CLS } from './materials';
-import { addRoundedSurface, detailedSurfaces, surfaceMaterial } from './surfaces';
+import { addRoundedSurface, addSurfaceVariant, detailedSurfaces, surfaceMaterial } from './surfaces';
+import { bambooBlade, canopySprays, canopyTexture, GRASS_COLOUR, GRASS_SHAPE } from './vegetation-art';
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
 import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, treeBlocked } from './map';
 import type { Collider, XZ } from './types';
@@ -126,14 +127,17 @@ function tube(start: THREE.Vector3, end: THREE.Vector3, r0: number, r1: number, 
   if (color !== undefined) {
     // darker + mossy near the ground, lighter on thin twigs, a little random variation per piece
     const base = new THREE.Color(color), moss = new THREE.Color(0x2c3a24), c = new THREE.Color();
-    const pos = g.attributes.position, col = new Float32Array(pos.count * 3), v = rnd(0.88, 1.12);
+    const pos = g.attributes.position, col = new Float32Array(pos.count * 3), height = new Float32Array(pos.count);
+    const v = rnd(0.88, 1.12);
     const thin = THREE.MathUtils.clamp(1.25 - r0 * 2.5, 0.75, 1.25);
     for (let i = 0; i < pos.count; i++) {
       const y = pos.getY(i) - gy;
+      height[i] = y;
       c.copy(base).lerp(moss, THREE.MathUtils.clamp(0.55 - y * 0.6, 0, 0.55)).multiplyScalar(THREE.MathUtils.clamp(0.5 + y * 0.18, 0.5, 1.1) * thin * v);
       col.set([c.r, c.g, c.b], i * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aBarkHeight', new THREE.BufferAttribute(height, 1));
   }
   return g;
 }
@@ -184,6 +188,23 @@ class Batch {
 }
 
 // ------------------------------------------------------------ shared materials (one shader each, whole world)
+function sprayMaterial(kind: Parameters<typeof canopyTexture>[0], height: number, amp: number, flutter: number, gain: number) {
+  const map = canopyTexture(kind), alphaTest = kind === 'needles' ? 0.28 : 0.40;
+  const material = new THREE.MeshStandardMaterial({ map, alphaTest, roughness: 0.97, side: THREE.DoubleSide });
+  const depth = addWind(material, { height, amp, flutter });
+  const compile = material.onBeforeCompile;
+  const key = material.customProgramCacheKey();
+  material.onBeforeCompile = (sh, renderer) => {
+    compile.call(material, sh, renderer);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);')
+      .replace('#include <color_fragment>', `#include <color_fragment>\ndiffuseColor.rgb *= ${gain.toFixed(2)};`)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 0.10;');
+  };
+  material.customProgramCacheKey = () => `${key}|sprays:${kind}`;
+  return { material: tagMat(material, CLS.foliage), depth };
+}
+
 const MAT = (() => {
   const bark = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, vertexColors: true });
   const blossom = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, emissive: 0x2a0a18 });
@@ -206,27 +227,35 @@ const MAT = (() => {
     flower: addWind(flower, { height: 1.6, amp: 0.08, flutter: 0.015 }),
     wild: addWind(wild, { height: 0.8, amp: 0.32, flutter: 0.01 })
   };
-  surfaceMaterial(bark, 'wood');
+  surfaceMaterial(bark, 'bark');
+  surfaceMaterial(culm, 'bamboo');
+  surfaceMaterial(leaf, 'leafBlade');
   surfaceMaterial(rock, 'boulder', 'rounded');
-  surfaceMaterial(blossom, 'foliage', 'rounded');
-  surfaceMaterial(needle, 'foliage', 'rounded');
-  surfaceMaterial(bush, 'foliage', 'rounded');
   tagMat(bark, CLS.wood); tagMat(culm, CLS.foliage); tagMat(blossom, CLS.foliage); tagMat(needle, CLS.foliage);
   tagMat(leaf, CLS.foliage); tagMat(petal, CLS.foliage); tagMat(bush, CLS.foliage); tagMat(flower, CLS.light);
   tagMat(wild, CLS.light); tagMat(rock, CLS.ground);
   return { bark, blossom, needle, petal, culm, leaf, bush, flower, wild, rock, depth };
 })();
+const SPRAYS = {
+  blossoms: sprayMaterial('blossom', 7, 0.3, 0.03, 1.12),
+  needles: sprayMaterial('needles', 12, 0.28, 0.012, 3.15),
+  bushes: sprayMaterial('leaves', 1.6, 0.08, 0.012, 2.9),
+};
 // built once, shared by every tree in the world
 const GEO = (() => {
   const leaf = new THREE.PlaneGeometry(0.06, 0.34); leaf.translate(0, -0.17, 0);
   return {
-    blob: roundedNormals(jitter(new THREE.IcosahedronGeometry(0.2, 1), 0.03)),
-    blobLite: roundedNormals(jitter(new THREE.IcosahedronGeometry(0.22, 0), 0.03)),
+    blob: jitter(new THREE.IcosahedronGeometry(0.2, 1), 0.03),
+    blobLite: jitter(new THREE.IcosahedronGeometry(0.22, 0), 0.03),
     petal: new THREE.PlaneGeometry(0.07, 0.05),
     leaf,
-    bush: roundedNormals(jitter(new THREE.IcosahedronGeometry(0.32, 1), 0.06)),
+    bush: jitter(new THREE.IcosahedronGeometry(0.32, 1), 0.06),
     bloom: new THREE.IcosahedronGeometry(0.05, 0),
-    wild: new THREE.IcosahedronGeometry(0.04, 0)
+    wild: new THREE.IcosahedronGeometry(0.04, 0),
+    flowerSpray: canopySprays(0.26),
+    needleSpray: canopySprays(0.34),
+    shrubSpray: canopySprays(0.39),
+    bambooBlade: bambooBlade(),
   };
 })();
 const PINK = [0xf4b3c8, 0xe993b1, 0xfcd6e2, 0xd97a9e, 0xf7c4d4];
@@ -426,15 +455,25 @@ export function createKit(o: KitOpts) {
       const g = mergeGeometries(geos); geos.forEach(x => x.dispose());
       put(new THREE.Mesh(g, mat), depth, blocker);
     };
-    const inst = (b: Batch, depth: THREE.Material | null, blocker: boolean, shadow = true) => { if (b.m.length) put(b.build(o.lite), depth, blocker, shadow); };
+    const inst = (b: Batch, depth: THREE.Material | null, blocker: boolean, shadow = true) => {
+      if (!b.m.length) return;
+      const mesh = b.build(o.lite);
+      put(mesh, depth, blocker, shadow);
+      return mesh;
+    };
+    const spray = (b: Batch, depth: THREE.Material, geometry: THREE.BufferGeometry, detailed: typeof SPRAYS.blossoms, blocker: boolean) => {
+      const mesh = inst(b, depth, blocker);
+      if (mesh) addSurfaceVariant(mesh, geometry, detailed.material, detailed.depth);
+    };
     merged(rockGeos, MAT.rock, null, false);
     merged(bark, MAT.bark, MAT.depth.bark, true);
     merged(culms, MAT.culm, MAT.depth.culm, true);
-    inst(blossoms, MAT.depth.blossom, true);
-    inst(needles, MAT.depth.needle, true);
-    inst(leaves, MAT.depth.leaf, false);
+    spray(blossoms, MAT.depth.blossom, GEO.flowerSpray, SPRAYS.blossoms, true);
+    spray(needles, MAT.depth.needle, GEO.needleSpray, SPRAYS.needles, true);
+    const bamboo = inst(leaves, MAT.depth.leaf, false);
+    if (bamboo) addRoundedSurface(bamboo, GEO.bambooBlade);
     inst(petals, null, false, false);
-    inst(bushes, MAT.depth.bush, false);
+    spray(bushes, MAT.depth.bush, GEO.shrubSpray, SPRAYS.bushes, false);
     inst(blooms, MAT.depth.flower, false, false);
     inst(wild, MAT.depth.wild, false, false);
     return out;
@@ -588,8 +627,8 @@ function buildGrass(scene: THREE.Scene) {
     sh.uniforms.uHeight = terrainUniforms.uHeight; sh.uniforms.uMask = { value: maskTex };
     sh.uniforms.uDetailedSurfaces = detailedSurfaces;
     sh.vertexShader = WIND_GLSL + `
-      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask;
-      varying float vH; varying float vVar; varying float vSheen;
+      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask; uniform float uDetailedSurfaces;
+      varying float vH; varying float vVar; varying float vSheen; varying vec3 vPlant;
       float grassKeep(vec2 p) {
         if (abs(p.x) < 1.55 && p.y > -16.0 && p.y < 7.0) return 0.0;                 // stone path
         if (abs(p.x) < 12.3 && p.y < -14.7 && p.y > -31.3) return 0.0;               // shrine courtyard
@@ -609,9 +648,12 @@ function buildGrass(scene: THREE.Scene) {
         vec3 lp = transformed;
         lp.y *= clump;
         lp.z += (vVar - 0.35) * 0.32 * vH * vH;                                    // natural curl
+        ${GRASS_SHAPE}
         vec3 local = mat3(instanceMatrix) * lp * grassKeep(base);
         vec4 wPos = vec4(base.x + local.x, terrainH(base) + local.y, base.y + local.z, 1.0);
-        vec3 w = windAt(wPos.xyz, vH, 0.42 * (0.7 + vVar * 0.6), 0.006);
+        float sway = 0.42 * (0.7 + vVar * 0.6);
+        if (uDetailedSurfaces > 0.5) sway *= 0.65 + 0.28 * vPlant.y + 0.16 * vPlant.z;
+        vec3 w = windAt(wPos.xyz, vH, sway, 0.006);
         wPos.xyz += w;
         vSheen = clamp(length(w.xz) * 2.2, 0.0, 1.0);
         for (int i = 0; i < 8; i++) {
@@ -623,15 +665,23 @@ function buildGrass(scene: THREE.Scene) {
         vec4 mvPosition = viewMatrix * wPos;
         gl_Position = projectionMatrix * mvPosition;`)
       .replace('#include <worldpos_vertex>', 'vec4 worldPosition = wPos;');
-    sh.fragmentShader = 'uniform float uDetailedSurfaces; varying float vH; varying float vVar; varying float vSheen;\n' + sh.fragmentShader
+    sh.fragmentShader = 'uniform float uDetailedSurfaces; varying float vH; varying float vVar; varying float vSheen; varying vec3 vPlant;\n' + sh.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
         diffuseColor.rgb *= mix(0.07, 1.0, vH) * (0.55 + 0.8 * vVar);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.6, 0.36) * vH, step(0.94, vVar) * 0.55);   // dry tips
         diffuseColor.rgb += vec3(0.05, 0.09, 0.07) * vSheen * vH;                                         // wind sheen
         if (uDetailedSurfaces > 0.5) {
-          diffuseColor.rgb *= mix(vec3(0.68, 0.80, 0.46), vec3(0.90, 0.86, 0.54), smoothstep(0.42, 0.95, vVar));
+          ${GRASS_COLOUR}
         }`)
-      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n  normal = normalize(vNormal);');
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+        normal = normalize(vNormal);
+        if (uDetailedSurfaces > 0.5) {
+          vec3 blade = cross(dFdx(vViewPosition), dFdy(vViewPosition));
+          if (dot(blade, blade) > 1e-14) {
+            blade = normalize(blade) * (dot(blade, normal) < 0.0 ? -1.0 : 1.0);
+            normal = normalize(mix(normal, blade, 0.31));
+          }
+        }`);
   };
   mat.customProgramCacheKey = () => 'grass-infinite';
   tagMat(mat, CLS.grass);

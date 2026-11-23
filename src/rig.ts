@@ -4,11 +4,12 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {
   softBlobTex, MAT, laceMat, curvedPanel, openCyl, bladeGeometry, hornGeometry, mesh, grp,
-  DASH, ATTACKS, sampleKeys, sampleScalar, smooth, clamp, key
+  DASH, ATTACKS, SHOW_WEAPON, sampleKeys, sampleScalar, smooth, clamp, key
 } from './samurai';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { Avatar, AvatarInput, OniWarrior } from './types';
-import { oniCostume, oniEye, oniMask, type OniLook } from './oni-costume';
+import { oniCostume, oniEye, oniMask, oniYumi, type OniLook } from './oni-costume';
+import { paintBody, mangaFinish, monTex, tabardTex, pleatTex, waveTex } from './manga-art';
 
 export type { OniLook } from './oni-costume';
 
@@ -175,8 +176,10 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const sw = Math.abs(lArm.x - rArm.x) / 2, torsoH = neck.y - hips.y, hh = top.y - head.y;
   const H = stripeTex(false, 5), Vt = stripeTex(true, 6);
   const black = new THREE.MeshPhysicalMaterial({ color: 0x0f0e12, roughness: 0.4, clearcoat: 0.7, side: THREE.DoubleSide });
-  const cloth = new THREE.MeshStandardMaterial({ color: 0x111317, roughness: 0.95, side: THREE.DoubleSide });
-  const teal = new THREE.MeshStandardMaterial({ color: RONIN.teal, roughness: 0.85, side: THREE.DoubleSide });
+  const pleats = pleatTex.clone(); pleats.repeat.set(3, 1); pleats.needsUpdate = true;
+  const waves = waveTex.clone(); waves.repeat.set(4, 1); waves.needsUpdate = true;
+  const cloth = new THREE.MeshStandardMaterial({ color: 0x2b2a36, map: pleats, roughness: 0.95, side: THREE.DoubleSide });
+  const teal = new THREE.MeshStandardMaterial({ color: RONIN.teal, map: waves, roughness: 0.85, side: THREE.DoubleSide });
   const tan = new THREE.MeshStandardMaterial({ color: RONIN.tan, roughness: 0.9 });
   const red = new THREE.MeshStandardMaterial({ color: 0xe4573d, roughness: 0.55 });
   const hair = new THREE.MeshStandardMaterial({ color: 0x0b0a0c, roughness: 0.6, side: THREE.DoubleSide });
@@ -184,7 +187,11 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const scarfMat = new THREE.MeshStandardMaterial({ color: 0x0b0a0c, roughness: 0.6, side: THREE.DoubleSide });
   // roles: which materials / parts the player can restyle (look.ts)
   teal.userData.role = 'cloth'; skin.userData.role = 'mask'; scarfMat.userData.role = 'scarf';
+  skin.userData.asciiSkin = true;
   root.traverse(o => { const sk = o as THREE.SkinnedMesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>; if (sk.isSkinnedMesh) sk.material.userData.role = 'cloth'; });
+  // the soldier underneath becomes a kimono with an embroidered collar and cuffs over pleated hakama
+  paintBody(rig.skinned.material, { kind: 'ronin', skin: 0xc8955a, hakama: 0x17161d, trim: 0xd9a640, under: 0xe8dfcc, wrap: 0x3a2a1e });
+  const gold = new THREE.MeshPhysicalMaterial({ color: 0xd9a640, metalness: 0.85, roughness: 0.32, clearcoat: 0.4 });
 
   // ---- straw kasa + long hair + half mask
   const hg = new THREE.Group();
@@ -193,7 +200,13 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   kasa.rotation.x = 0.14;
   const rim = mesh(new THREE.TorusGeometry(0.3, 0.008, 4, 48), black, hg, 0, 0.07, 0.02); rim.rotation.x = Math.PI / 2 + 0.14;
   const knob = mesh(new THREE.ConeGeometry(0.04, 0.04, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.245, -0.012);
-  for (const o of [kasa, rim, knob]) o.userData.part = 'hat';
+  const cordMat = new THREE.MeshStandardMaterial({ color: 0xb3241c, roughness: 0.55 });
+  const cord = mesh(new THREE.TorusGeometry(0.16, 0.007, 5, 40), cordMat, hg, 0, 0.115, 0.01); cord.rotation.x = Math.PI / 2 + 0.14;
+  const chin: THREE.Mesh[] = [];
+  for (const s of [-1, 1]) {
+    const c = mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.2, 5), cordMat, hg, 0.085 * s, 0.01, 0.03); c.rotation.z = 0.32 * s; chin.push(c);
+  }
+  for (const o of [kasa, rim, knob, cord, ...chin]) o.userData.part = 'hat';
   const mask = mesh(new THREE.SphereGeometry(0.1, 18, 10, Math.PI / 2 - 0.9, 1.8, 1.45, 0.9), skin, hg, 0, -0.03, 0.012); mask.scale.set(0.95, 1.1, 1.05);
   mesh(new THREE.BoxGeometry(0.05, 0.006, 0.01), hair, hg, 0, -0.06, 0.112);
   const strands: { g: THREE.Group; ph: number; base: number; st: THREE.Mesh }[] = [];
@@ -212,6 +225,13 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const doPts = [[0.2, -0.27], [0.215, -0.18], [0.235, -0.05], [0.245, 0.06], [0.235, 0.15], [0.205, 0.22], [0.15, 0.25]].map(([r, y]) => new THREE.Vector2(r, y));
   const chest = new THREE.Group();
   mesh(new THREE.LatheGeometry(doPts, 40), lacq(H, 3, 1.1), chest).scale.z = 0.74;
+  // gold-lacquered rims at the top and bottom edge of the cuirass, and the house crest on the breast
+  for (const [r, y] of [[0.203, -0.268], [0.238, 0.14], [0.153, 0.248]]) {
+    const ring = mesh(new THREE.TorusGeometry(r, 0.008, 6, 48), gold, chest, 0, y, 0);
+    ring.rotation.x = Math.PI / 2; ring.scale.y = 0.74;
+  }
+  const mon = mesh(new THREE.CircleGeometry(0.052, 32), new THREE.MeshStandardMaterial({ map: monTex, roughness: 0.4, metalness: 0.3 }), chest, 0, 0.035, 0.183);
+  mon.rotation.x = -0.12;
   for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.07, 0.03, 0.3), black, chest, 0.13 * s, 0.255, -0.01);
   const cs = (sw / 0.2) * 1.02;
   chest.scale.set(cs, (torsoH * 0.82) / 0.52, cs * 1.05);
@@ -241,12 +261,27 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     const p = curvedPanel(0.15, 0.42, 0.9, lacq(Vt, 0.5, 1)); p.position.y = -0.21; g.add(p);
     mesh(new THREE.BoxGeometry(0.155, 0.025, 0.012), black, g, 0, 0, -0.005);
     for (const sx of [-0.06, 0.06]) { const t = mesh(new THREE.ConeGeometry(0.014, 0.07, 6), red, g, sx, -0.44, 0.005); t.rotation.z = Math.PI; }
+    mesh(new THREE.BoxGeometry(0.152, 0.012, 0.014), gold, g, 0, -0.417, 0.012);
+    mesh(new THREE.BoxGeometry(0.152, 0.008, 0.014), gold, g, 0, -0.012, 0.004);
     kusa.push(g);
+  }
+  // embroidered front tabard hanging from the obi, swinging with the stride
+  const tabard = grp(waist, 0, 0.03, 0.252);
+  {
+    const geo = new THREE.PlaneGeometry(0.22, 0.5, 1, 6); geo.translate(0, -0.25, 0);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setZ(i, -0.04 * Math.pow(Math.abs(pos.getX(i)) / 0.11, 2));
+    geo.computeVertexNormals();
+    mesh(geo, new THREE.MeshStandardMaterial({ map: tabardTex, alphaTest: 0.5, roughness: 0.75, side: THREE.DoubleSide }), tabard);
+    mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.23, 8), gold, tabard, 0, 0, 0.004).rotation.z = Math.PI / 2;
   }
   {
     const s = grp(waist, 0.2, 0.02, 0.04); s.rotation.set(-0.35, 0.18, 0.1);
     mesh(new THREE.CylinderGeometry(0.018, 0.015, 0.78, 10), black, s, 0, 0, -0.3).rotation.x = Math.PI / 2;
     mesh(new THREE.CylinderGeometry(0.017, 0.018, 0.24, 8), tan, s, 0, 0, 0.2).rotation.x = Math.PI / 2;
+    mesh(new THREE.CylinderGeometry(0.021, 0.019, 0.04, 10), gold, s, 0, 0, -0.69).rotation.x = Math.PI / 2;
+    mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.006, 16), gold, s, 0, 0, 0.075).rotation.x = Math.PI / 2;
+    const sageo = mesh(new THREE.TorusGeometry(0.05, 0.005, 5, 16, Math.PI * 1.3), red, s, 0.02, -0.04, 0.0); sageo.rotation.y = Math.PI / 2;
   }
   waist.scale.set(cs, 1, cs);
   waist.position.set(hips.x, hips.y + 0.04, hips.z);
@@ -379,6 +414,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     rotateBoneWorld(B.Neck, leftAxis, -loco.lean * 0.5);
 
     if (atk) sampleKeys(ATTACKS[atk.combo].keys, p, tPos, tQ);
+    else if (s.showWeapon) { tPos.copy(SHOW_WEAPON.pos); tQ.copy(SHOW_WEAPON.q); }
     else if (s.dash) { tPos.copy(DASH.pos); tQ.copy(DASH.q); }
     else {
       tPos.lerpVectors(LOW.pos, LOW_RUN.pos, m); tQ.slerpQuaternions(LOW.q, LOW_RUN.q, m);
@@ -397,7 +433,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
 
     body.getWorldQuaternion(bq);
     ik2(B.RightArm, B.RightForeArm, B.RightHand, katana.localToWorld(hand.set(0, 0, atk ? 0.065 : 0.0)), pole.copy(POLE_R).applyQuaternion(bq));
-    leftW += ((atk ? 1 : 0) - leftW) * (1 - Math.exp(-dt * 18));
+    leftW += ((atk || s.showWeapon ? 1 : 0) - leftW) * (1 - Math.exp(-dt * 18));
     if (leftW > 0.01) ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, katana.localToWorld(hand.set(0, 0, -0.075)), pole.copy(POLE_L).applyQuaternion(bq), leftW);
 
     // scarf ribbons: travelling wave, streaming further back when running
@@ -415,6 +451,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     // hair sways in the wind
     for (const h of strands) { h.st.rotation.x = h.base + 0.08 * Math.sin(t * 3 + h.ph) + m * 0.35; h.st.rotation.z = 0.06 * Math.sin(t * 2.1 + h.ph); }
     for (const g of kusa) g.rotation.x = -0.2 - Math.abs(Math.sin(t * 9)) * 0.08 * m;
+    tabard.rotation.x = -0.3 - (0.12 + 0.18 * L.runW) * L.move * Math.abs(Math.sin(TAU * loco.phase)) + 0.02 * Math.sin(t * 1.7);
   }
   return { root, update, katana, realistic: true };
 }
@@ -455,19 +492,23 @@ export function oniDrum(lacquer: THREE.Material) {
 
 export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
   const big = look.big, mMask = oniMask(look.mask), mEye = oniEye(look.eye ?? 0xffd040);
+  mMask.userData.asciiSkin = true;   // the carved demon face draws with round letters
   const rig = prepareRig(gltf, look.tint);
   const { root, B, P, side, attach, act, mixer } = rig;
   const head = P('Head'), top = P('HeadTop_End'), hips = P('Hips'), neck = P('Neck');
   const rHand = P('RightHand'), rArm = P('RightArm'), lArm = P('LeftArm');
   const sw = Math.abs(lArm.x - rArm.x) / 2;
 
+  // demon skin on the arms and chest, a tiger-skin loincloth, hakama in the oni's own colour
+  const skinC = new THREE.Color(look.mask).multiplyScalar(0.92), legC = new THREE.Color(look.tint).multiplyScalar(1.8);
+  paintBody(rig.skinned.material, { kind: 'oni', skin: skinC.getHex(), hakama: legC.getHex(), trim: 0xc09a50, under: 0xd99a2b, wrap: 0x2c2422 });
   const { head: mask, chest, belt } = oniCostume(look);
   const headSize = top.y - head.y;
   mask.scale.setScalar(headSize / 0.215);
   mask.position.set(head.x, head.y + headSize * 0.45, head.z + 0.01);
   attach('Head', mask);
 
-  chest.scale.set(sw / 0.2, 1, sw / 0.2);
+  chest.scale.set(sw / 0.2, 1, Math.max(0.96, sw / 0.2));
   chest.position.set(neck.x, neck.y - 0.04, neck.z);
   attach('Spine2', chest);
   belt.scale.set(sw / 0.2, 1, sw / 0.2);
@@ -527,11 +568,9 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
     attach('RightHand', stick);
   } else {
     // yumi: a tall asymmetric bow in the left hand, and a quiver on the back
-    const lHand = P('LeftHand'), yumi = new THREE.Group();
-    const arc = mesh(new THREE.TorusGeometry(0.75, 0.014, 5, 24, Math.PI * 0.75), bowMats.wood, yumi); arc.rotation.z = Math.PI * 0.625; arc.position.x = -0.55;
-    mesh(new THREE.CylinderGeometry(0.003, 0.003, 1.38, 3), bowMats.string, yumi, -0.27, 0.05, 0);
-    yumi.rotation.y = Math.PI / 2;
-    yumi.position.set(lHand.x, lHand.y + 0.1, lHand.z + 0.05);
+    const lHand = P('LeftHand'), yumi = oniYumi();
+    yumi.rotation.y = 0.32 * side;
+    yumi.position.set(lHand.x - side * 0.014, lHand.y + 0.023, lHand.z + 0.039);
     attach('LeftHand', yumi);
     const quiver = new THREE.Group();
     mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.55, 8), oniMats.rope, quiver);
@@ -566,9 +605,11 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
     }
     part.material = material;
   });
+  mangaFinish(root);
   const pole = new V(), bq = new Q(), tgt = new V();
   let lift = 0;
   act.Run && (act.Run.time = Math.random() * 2);
+  mixer.update(0);  // show the idle pose from the first visible frame
   function update(dt: number, s: Parameters<OniWarrior['update']>[1]) {
     const run = clamp(s.moving, 0, 1);
     act.Idle?.setEffectiveWeight(1 - run);

@@ -17,6 +17,7 @@ export interface AvatarInput {
   moving: number;          // 0 idle .. 1 walking
   walk: number;            // walk cycle phase
   dash: boolean;
+  showWeapon?: boolean;
   look?: number;           // head turn towards the nearest oni (radians)
   attack: { combo: number; p: number } | null;
 }

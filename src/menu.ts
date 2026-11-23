@@ -15,6 +15,7 @@ export interface MenuRow {
   /** a text field instead of a value (the ronin's name) */
   input?: { value: string; max: number; set(v: string): void };
   act?(): void;
+  preview?(): void;
   left?(): void;
   right?(): void;
 }
@@ -35,6 +36,8 @@ const esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;
 
 export function openMenu(def: MenuDef, at = 0) {
   cur = def; sel = at; status = ''; state.menu = def.id;
+  el.dataset.menu = def.id;
+  document.body.dataset.menu = def.id;
   for (const k in keys) keys[k] = false;   // nobody keeps walking while the menu is open
   el.style.display = 'block';
   render();
@@ -42,6 +45,7 @@ export function openMenu(def: MenuDef, at = 0) {
 export function closeMenu() {
   if (!cur) return;
   const d = cur; cur = null; state.menu = null; el.style.display = 'none';
+  delete document.body.dataset.menu;
   (document.activeElement as HTMLElement | null)?.blur?.();
   d.onClose?.();
 }
@@ -53,6 +57,7 @@ export function render() {
   if (!cur) return;
   const rows = cur.rows();
   sel = Math.max(0, Math.min(rows.length - 1, sel));
+  rows[sel]?.preview?.();
   el.innerHTML =
     `<div class="mt">${esc(cur.title)}</div>` +
     (cur.sub ? `<div class="ms">${cur.sub()}</div>` : '') +

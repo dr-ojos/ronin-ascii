@@ -17,17 +17,19 @@ import { openMenu, closeMenu, menuStatus, type MenuRow } from './menu';
 import { openCustom } from './custom';
 import { dressUp } from './outfit';
 import { createSmith } from './smith';
-import { WEAPONS, weapon, owns, buy, equip, weaponStats } from './weapons';
+import { SHOP_FLOOR as FY, shopRoninPos, shopStageActive, smithPos } from './shop-stage';
+import { WEAPONS, weapon, owns, buy, equip, applyWeapon, weaponStats } from './weapons';
 import { ARMORS, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
 import { threatLabel } from './equipment-threat';
 import { angDiff } from './utils';
 
+export { smithPos } from './shop-stage';
+
 export const SMITH_NAME = 'Masa';
 /** the shrine's room (world coordinates) and the height of its boards */
-const ROOM = { x0: -3.95, x1: 3.95, z0: -26.6, z1: -21.6 }, FY = 0.86;
+const ROOM = { x0: -3.95, x1: 3.95, z0: -26.6, z1: -21.6 };
 const TALK_R = 2.6;
-export const smithPos = new THREE.Vector3(0, FY, -25.85);
 const inRoom = (x: number, z: number) => x > ROOM.x0 && x < ROOM.x1 && z > ROOM.z0 && z < ROOM.z1;
 
 // ------------------------------------------------------------ the room
@@ -51,11 +53,15 @@ B(room, 3.8, 0.95, 0.6, W.wood, 0, FY, -25.0); B(room, 4.0, 0.07, 0.75, W.dark, 
 B(room, 1.6, 0.01, 0.4, W.cord, -0.6, FY + 1.02, -25.0); B(room, 1.2, 0.03, 0.05, W.steel, -0.55, FY + 1.03, -25.0); B(room, 0.28, 0.05, 0.06, W.black, -1.3, FY + 1.03, -25.0);
 addCollider({ seg: [-1.9, -25.0, 1.9, -25.0], r: 0.35 });
 // the rack on the back wall: blades of every length, and two spears
+const rackX = 1.29;
+const rackSteel = tagMat(M(0x9299a1, { metalness: 0.69, roughness: 0.44, emissive: 0x343137, emissiveIntensity: 0.22 }), CLS.wood);
 for (let i = 0; i < 4; i++) {
   const hy = FY + 0.9 + i * 0.42, len = 0.9 + i * 0.3;
-  B(room, len, 0.04, 0.03, W.steel, 0.2, hy, -26.38); B(room, 0.32, 0.06, 0.05, W.black, 0.2 - len / 2 - 0.16, hy - 0.01, -26.38); B(room, 0.03, 0.12, 0.09, W.gold, 0.2 - len / 2, hy - 0.04, -26.38);
+  B(room, len, 0.04, 0.03, rackSteel, rackX, hy, -26.38);
+  B(room, 0.32, 0.06, 0.05, W.black, rackX - len / 2 - 0.16, hy - 0.01, -26.38);
+  B(room, 0.03, 0.12, 0.09, W.cord, rackX - len / 2, hy - 0.04, -26.38);
 }
-for (const x of [-1.6, 2.0]) B(room, 0.08, 0.08, 0.2, W.dark, x, FY + 0.85, -26.35);
+for (const x of [rackX - 0.36, rackX + 0.36]) B(room, 0.07, 1.4, 0.1, W.dark, x, FY + 0.85, -26.48);
 for (const x of [-3.0, 3.1]) { C(room, 0.025, 2.4, W.dark, x, FY, -26.3); const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.3, 4), W.steel); tip.position.set(x, FY + 2.55, -26.3); room.add(tip); }
 // the smith's anvil, to his right
 C(room, 0.28, 0.55, W.dark, 1.25, FY, -25.85); B(room, 0.6, 0.18, 0.28, W.black, 1.25, FY + 0.55, -25.85); B(room, 0.3, 0.1, 0.2, W.black, 1.25, FY + 0.48, -25.85);
@@ -107,7 +113,7 @@ shadowTree(room); hot.castShadow = false;
 scene.add(room);
 
 // ------------------------------------------------------------ Masa
-const { root: smith, body, head, armR, armL } = createSmith();
+const { root: smith, body, head, armR, armL, elbowR, elbowL } = createSmith();
 smith.position.copy(smithPos);
 shadowTree(smith);
 smith.traverse(o => { if ((o as THREE.Mesh).isMesh) o.layers.enable(ACTOR_LAYER); });
@@ -124,29 +130,35 @@ export function updateShop(dt: number) {
   const dx = player.pos.x - smithPos.x, dz = player.pos.z - smithPos.z, d = Math.hypot(dx, dz);
   const vis = d < 160; smith.visible = room.visible = vis;
   if (!vis) return;
-  const near = d < 3.8;
-  face += angDiff(near ? Math.atan2(dx, dz) : ANVIL_FACE, face) * Math.min(1, dt * 4);
+  const trading = shopStageActive(), near = trading || d < 3.8;
+  const target = trading ? shopRoninPos : player.pos;
+  const facing = near ? Math.atan2(target.x - smithPos.x, target.z - smithPos.z) : ANVIL_FACE;
+  face += angDiff(facing, face) * (1 - Math.exp(-5 * dt));
   smith.rotation.y = face;
   const t = state.time;
+  head.rotation.y = THREE.MathUtils.damp(head.rotation.y, THREE.MathUtils.clamp(angDiff(facing, face), -0.55, 0.55), 13, dt);
   // he works in bouts (seven strokes, then a breath), so the clearing isn't one long clang
   const working = !near && t % 9 < 5.6;
   if (!working) {
-    armR.rotation.x += ((near ? -0.5 : -0.25) - armR.rotation.x) * Math.min(1, dt * 6);
-    head.rotation.x = near ? Math.max(0, Math.sin(t * 1.3)) * 0.12 : 0.2;
+    armR.rotation.x = THREE.MathUtils.damp(armR.rotation.x, near ? -0.12 : -0.24, 8, dt);
+    elbowR.rotation.x = THREE.MathUtils.damp(elbowR.rotation.x, near ? -0.29 : -0.12, 9, dt);
+    head.rotation.x = THREE.MathUtils.damp(head.rotation.x, near ? -0.016 + 0.032 * Math.sin(t * 1.3) : 0.12, 7, dt);
     beat = 0;
   } else {
     // a slow lift, a quick fall onto the anvil; sparks and a clang at every strike
     const ph = (t * 1.25) % 1, k = ph < 0.7 ? Math.sin(ph / 0.7 * Math.PI / 2) : 1 - Math.pow((ph - 0.7) / 0.3, 2);
-    armR.rotation.x = -0.95 - 1.5 * k;
-    head.rotation.x = 0.35;
+    armR.rotation.x = -0.46 - 1.22 * k;
+    elbowR.rotation.x = -0.12 - 0.61 * k;
+    head.rotation.x = THREE.MathUtils.damp(head.rotation.x, 0.28 - 0.14 * k, 9, dt);
     if (ph < beat) {
       if (d < 60) sparkBurst(anvil, 10, 3.5);
       sfx.anvil(panOf(anvil.x, anvil.z), 0.7 * Math.max(0, 1 - d / 28));
     }
     beat = ph;
   }
-  armL.rotation.x = -0.4 + Math.sin(t * 0.8) * 0.05;
-  body.position.y = Math.sin(t * 2) * 0.01;
+  armL.rotation.x = -0.20 + Math.sin(t * 0.8) * 0.032;
+  elbowL.rotation.x = -0.27 + Math.sin(t * 1.2) * 0.042;
+  body.position.y = Math.sin(t * 2) * 0.007;
   hotMat.emissiveIntensity = 1.8 + Math.sin(t * 5) * 0.4;
   if (d < TALK_R && !state.dead && !state.prompt) state.prompt = `[ E ] hablar con ${SMITH_NAME}: armas y armaduras`;
   if (state.indoors && !greeted) { greeted = true; showMsg(`${SMITH_NAME}, el armero:\n«¿Buscas acero, ronin?»`, 2.4); }
@@ -155,6 +167,7 @@ export function updateShop(dt: number) {
 
 // ------------------------------------------------------------ the shop
 const price = (n: number, mine: boolean, on: boolean, word: string) => on ? word : mine ? (word === 'equipada' ? 'equipar' : 'ponerse') : `${n} mon`;
+function restoreGear() { applyWeapon(); dressUp(); }
 function shopRows(): MenuRow[] {
   const rows: MenuRow[] = [{ label: 'ARMAS', head: true }];
   for (const w of WEAPONS) {
@@ -163,6 +176,7 @@ function shopRows(): MenuRow[] {
       label: w.name, value: price(w.price, mine, on, 'equipada'),
       cls: on ? 'y' : mine ? 'b' : state.mon >= w.price ? '' : 'r',
       note: `${w.desc} · ${weaponStats(w)}`,
+      preview() { applyWeapon(w); dressUp(); },
       act() {
         if (on) return menuStatus('ya la llevas en la mano');
         if (mine) { equip(w.id); sfx.swing({ power: 0.8, pan: 0 }); return menuStatus(`desenvainas ${w.name}`); }
@@ -178,6 +192,7 @@ function shopRows(): MenuRow[] {
       label: a.name, value: price(a.price, mine, on, 'puesta'),
       cls: on ? 'y' : mine ? 'b' : state.mon >= a.price ? '' : 'r',
       note: `${a.desc} · ${armorStats(a)}`,
+      preview() { dressUp(a); applyWeapon(); },
       act() {
         if (on) return menuStatus('ya la llevas puesta');
         if (mine) { wearArmor(a.id); dressUp(); sfx.dash(); return menuStatus(`te pones ${a.name}`); }
@@ -188,8 +203,11 @@ function shopRows(): MenuRow[] {
     });
   }
   rows.push({ label: 'OTROS', head: true });
-  rows.push({ label: 'Cambiar de aspecto', note: 'nombre, lacado, kimono, bufanda, sombrero y máscara', act: () => openCustom(() => openShop(rows.length - 2)) });
-  rows.push({ label: 'Despedirse', act: closeMenu });
+  rows.push({
+    label: 'Cambiar de aspecto', note: 'nombre, lacado, kimono, bufanda, sombrero y máscara', preview: restoreGear,
+    act() { restoreGear(); openCustom(() => openShop(rows.length - 2)); }
+  });
+  rows.push({ label: 'Despedirse', preview: restoreGear, act: closeMenu });
   return rows;
 }
 export function openShop(at = 1) {
@@ -198,7 +216,8 @@ export function openShop(at = 1) {
     id: 'shop', title: `— TIENDA DE ${SMITH_NAME.toUpperCase()} —`,
     sub: () => `bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weapon().name}</span> · <span class="b">${armor().name}</span> · <span class="y">${threatLabel()}</span>`,
     rows: shopRows,
-    foot: '↑ ↓ elegir · E / ENTER comprar o equipar · ESC salir'
+    foot: '↑ ↓ previsualizar · E / ENTER comprar o equipar · ESC salir',
+    onClose: restoreGear
   }, at);
 }
 /** E pressed: talk to Masa if you are at his counter (true when you were) */

@@ -5,21 +5,24 @@ import { camera } from './renderer';
 import { bufSize, cellMat } from './ascii';
 import { nearBlockers, moonDir } from './world';
 import { groundY } from './terrain';
-import { smithPos } from './shop';
+import { shopCameraPos, shopFocus, shopStageActive } from './shop-stage';
 import { player, state } from './state';
 import { rnd } from './utils';
 
 const tmp = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
+const shopRight = new THREE.Vector3();
 const camRay = new THREE.Raycaster();
 export function updateCamera(dt: number) {
   // the look menu (custom.ts) frames the samurai close up, like the photo mode
   const dress = state.menu === 'custom';
   camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo || dress ? 1.3 : 1.5), player.pos.z), Math.min(1, dt * 10));
-  if (state.menu === 'shop' && !state.photo) {
-    // Stay inside the doorway and leave the right side of the view for the shop menu.
-    camera.position.set(smithPos.x + 0.42, smithPos.y + 1.52, smithPos.z + 1.7);
-    camera.lookAt(smithPos.x + 0.33, smithPos.y + 1.39, smithPos.z);
+  if (shopStageActive() && !state.photo) {
+    camera.position.copy(shopCameraPos);
+    shopRight.set(shopCameraPos.z - shopFocus.z, 0, shopFocus.x - shopCameraPos.x).normalize();
+    const occupied = Math.min(440, innerWidth * 0.41) + 24;
+    const halfWidth = camera.position.distanceTo(shopFocus) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+    camera.lookAt(tmp.copy(shopFocus).addScaledVector(shopRight, halfWidth * occupied / innerWidth));
     return;
   }
   const pt = state.photo ? 0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025) : dress ? 0.32 : state.pitch, cp = Math.cos(pt);

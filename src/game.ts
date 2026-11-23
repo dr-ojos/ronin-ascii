@@ -9,6 +9,7 @@ import { updateFx } from './fx';
 import { updateSpecial } from './special';
 import { updateMsg } from './hud';
 import { updateShop } from './shop';
+import { shopStageActive } from './shop-stage';
 import { updateArmor } from './armor';
 import { updateMenu } from './menu';
 import { state } from './state';
@@ -21,7 +22,12 @@ export function update(dt: number) {
   updatePetals(dt);
   updateMenu(dt);
   // a menu (the smith's shop, your look) pauses everything; the look menu circles the camera round you
-  if (state.menu) { if (state.menu === 'custom') state.yaw += dt * 0.5; return; }
+  if (state.menu) {
+    sam.root.visible = true;   // a menu can open mid-blink (invulnerable): never leave the ronin hidden
+    if (shopStageActive()) updateShop(dt);
+    else state.yaw += dt * 0.5;
+    return;
+  }
 
   if (!state.playing) { state.yaw += dt * 0.15; return; }
   if (state.dead) { sam.root.rotation.z = Math.min(sam.root.rotation.z + dt * 2, Math.PI / 2); return; }

@@ -63,8 +63,7 @@ let blade: THREE.Mesh | null = null;
 sam.katana.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry.type === 'ExtrudeGeometry') blade = m; });
 /** katana-space z of the blade's tip (the trail and sparks follow it) */
 export const tipZ = () => BLADE_BASE + (BLADE_TIP - BLADE_BASE) * weapon().len;
-export function applyWeapon() {
-  const w = weapon();
+export function applyWeapon(w = weapon()) {
   if (blade) { blade.scale.z = w.len; blade.position.z = BLADE_BASE * (1 - w.len); }
   bladeMat.color.set(w.steel); bladeMat.emissive.set(w.glow);
 }

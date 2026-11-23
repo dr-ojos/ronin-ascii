@@ -191,6 +191,7 @@ const mx = (a: Vec3): Vec3 => [-a[0], a[1], a[2]];
 const IDLE = key([-0.02, 1.07, 0.34], [0, 0.55, 0.84], [0, -1, 0]);
 const RUN = key([-0.06, 0.98, 0.3], [-0.05, 0.3, 0.95], [0, -1, 0]);
 const DASH = key([-0.22, 0.98, 0.04], [-0.25, -0.3, -0.92], [0, -1, 0]);
+export const SHOW_WEAPON = key([-0.22, 1.07, 0.27], [0.77, 0.62, 0.16], [0, -0.12, 1]);
 function kesa(m: boolean): Attack {
   const f = m ? mx : (a: Vec3) => a;
   const W = key(f([-0.2, 1.6, 0.1]), f([-0.15, 0.8, -0.58]), f([0.3, 0.5, 0.66]));
@@ -454,6 +455,7 @@ export function createSamurai(): Avatar {
 
     // katana pose
     if (atk) sampleKeys(ATTACKS[atk.combo].keys, p, tPos, tQ);
+    else if (s.showWeapon) { tPos.copy(SHOW_WEAPON.pos); tQ.copy(SHOW_WEAPON.q); }
     else if (s.dash) { tPos.copy(DASH.pos); tQ.copy(DASH.q); }
     else { tPos.lerpVectors(IDLE.pos, RUN.pos, m); tQ.slerpQuaternions(IDLE.q, RUN.q, m); tPos.y += Math.sin(t * 1.9) * 0.006 + Math.abs(Math.cos(ph)) * 0.02 * m; }
     // the katana is posed in body space but should follow the hips' height and the spine twist

@@ -8,6 +8,7 @@ import { M, CLS, tagMat } from './materials';
 import { addCollider, isFree } from './physics';
 import { addLight } from './lights';
 import { campfire } from './campfire';
+import { banner, bannerMat } from './banner';
 import { groundY } from './terrain';
 import { WORLD_R, PLACES, ROADS, RIVER, FOOTPRINTS, inLake, lineDist, seeded, type P2 } from './map';
 import { MT, G, TENT, add, box, post, pyr, stoneLantern, site, solidBox, disc } from './structures';
@@ -48,7 +49,7 @@ const local = (gx: number, gz: number, x: number, z: number) => groundY(gx + x, 
 
 // ------------------------------------------------------------ materials of their own
 const MAT = {
-  crest: tagMat(M(0x8e1d14, { roughness: 1, side: THREE.DoubleSide }), CLS.wood),
+  crest: bannerMat(0x8e1d14),
   hide: tagMat(M(0x5a4636, { roughness: 1, side: THREE.DoubleSide }), CLS.wood),
   bone: tagMat(M(0xd8ccb0, { roughness: 0.8 }), CLS.wood),
   moss: tagMat(M(0x5a6a4a, { roughness: 1, flatShading: true }), CLS.ground),
@@ -83,7 +84,7 @@ function campDecor(s: CampSpot) {
   for (let i = 0; i < banners; i++) {
     const a = a0 + 0.6 + (i / banners) * Math.PI * 2, bx = Math.cos(a) * (s.r - 1), bz = Math.sin(a) * (s.r - 1), y = local(x, z, bx, bz);
     post(g, 0.07, 5, MT.black, bx, y, bz);
-    add(g, G.plane, MAT.crest, bx + Math.cos(a + 1.57) * 0.45, y + 3.4, bz + Math.sin(a + 1.57) * 0.45, 0.85, 2.8, 1, -a);
+    banner(g, MAT.crest, bx, y + 3.4, bz, 0.85, 2.8, -a - Math.PI / 2);   // facing the fire
     addCollider({ x: x + bx, z: z + bz, r: 0.2 });
   }
   for (let i = 0; i < 3 + s.size; i++) {
