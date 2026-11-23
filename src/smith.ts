@@ -2,14 +2,13 @@ import * as THREE from 'three';
 import { M } from './materials';
 import { grp, mesh } from './samurai';
 import { mangaFinish } from './manga-art';
+import { realHead, SCAN } from './real-head';
+import { headAsset } from './assets';
 
 const skin = M(0xa97d60, { roughness: 0.79 });
 const skinShade = M(0x724b3f);
 skin.userData.asciiSkin = skinShade.userData.asciiSkin = true;
-const hair = M(0x494646, { roughness: 0.91 });
 const grey = M(0x746d65, { roughness: 0.92 });
-const eye = M(0x262421);
-const sclera = M(0x9b8c78);
 // indigo work shirt quilted with white sashiko stitching
 const sashiko = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -142,69 +141,28 @@ function apron(parent: THREE.Group) {
   tapered(parent, iron, [-0.144, 1.235, 0.216], [-0.153, 1.283, 0.222], 0.011, 0.004);
 }
 
-const softPeak = (x: number) => Math.exp(-(x * x));
 
 function sculptHead(head: THREE.Group) {
-  const contour = [[0, -0.119], [0.049, -0.115], [0.076, -0.093], [0.085, -0.059], [0.089, -0.024],
-    [0.094, 0.017], [0.092, 0.055], [0.082, 0.093], [0.053, 0.113], [0, 0.121]];
-  const spline = new THREE.SplineCurve(contour.map(([r, y]) => new THREE.Vector2(r, y)));
-  const sculpture = new THREE.LatheGeometry(spline.getPoints(64), 72, -Math.PI, Math.PI * 2);
-  const v = sculpture.attributes.position;
-  const skinColor = skin.color, salt = new THREE.Color(0x686561), shadow = new THREE.Color(0x684b42), color = new THREE.Color();
-  const colors: number[] = [];
-  for (let i = 0; i < v.count; i++) {
-    const x = v.getX(i), y = v.getY(i), z = v.getZ(i);
-    const front = THREE.MathUtils.smoothstep(z, 0.023, 0.076), cheek = Math.abs(x);
-    const socket = softPeak((cheek - 0.042) / 0.027) * softPeak((y - 0.013) / 0.016);
-    const bridge = softPeak(x / 0.019) * softPeak((y + 0.003) / 0.041);
-    const tip = softPeak(x / 0.02) * softPeak((y + 0.032) / 0.014);
-    const zygoma = softPeak((cheek - 0.060) / 0.022) * softPeak((y + 0.016) / 0.022);
-    const lip = softPeak(x / 0.029) * softPeak((y + 0.057) / 0.015);
-    v.setZ(i, z * 0.96 + front * (0.021 * bridge + 0.022 * tip - 0.014 * socket + 0.011 * zygoma + 0.009 * lip));
-    const stubble = THREE.MathUtils.smoothstep(-0.079 + cheek * 0.55 - y, -0.008, 0.017);
-    const mottling = 0.035 * Math.sin(x * 860 + Math.sin(y * 392)) * Math.cos(z * 510 - y * 720);
-    color.copy(skinColor).lerp(shadow, 0.24 * socket * front);
-    color.lerp(salt, stubble * THREE.MathUtils.smoothstep(z, -0.016, 0.04) * (0.9 + 0.08 * Math.sin(x * 900 + y * 640)));
-    color.multiplyScalar(1 + mottling);
-    colors.push(color.r, color.g, color.b);
-  }
-  sculpture.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  sculpture.computeVertexNormals();
-  const face = M(0xffffff, { vertexColors: true, roughness: 0.81 }); face.userData.asciiSkin = true;
-  mesh(sculpture, face, head);
+  // a real face (real-head.ts, the same scan as the ronin's): weathered skin, grey hair and a short grey
+  // beard; sized to sit inside his cropped scalp and the hachimaki
+  if (headAsset) {
+    const face = realHead({ tint: 0xe2c2a8, hair: 0x5e5a56, beard: 0x77726c });
+    const k = 0.054;
+    face.group.scale.setScalar(k); face.group.position.set(0, 0.13 - SCAN.crown * k, -0.01);
+    head.add(face.group);
+  } else oval(head, skin, [0, 0, 0], [0.09, 0.12, 0.095]);   // the scan failed to load
 
-  const scalp = profile(head, hair, [[0.094, 0.048], [0.098, 0.068], [0.094, 0.089], [0.083, 0.11],
-    [0.064, 0.126], [0.023, 0.136], [0, 0.134]], 0.99);
-  scalp.position.z = -0.006;
-  const strands = scalp.geometry.attributes.position;
-  for (let i = 0; i < strands.count; i++) {
-    const x = strands.getX(i), z = strands.getZ(i);
-    const r = 1 + 0.021 * Math.cos(Math.atan2(x, z) * 15 + strands.getY(i) * 23);
-    strands.setX(i, x * r); strands.setZ(i, z * r);
-  }
-  scalp.geometry.computeVertexNormals();
-  oval(head, hair, [0, 0.067, -0.104], [0.036, 0.022, 0.036]);
+  // his cropped grey hair is painted on the scanned scalp (real-head.ts); the hachimaki follows the skull's
+  // oval (longer front to back than it is wide)
   // red hachimaki: a twisted band round the brow, knotted at the back with two tails
-  profile(head, hachimaki, [[0.094, 0.037], [0.1, 0.048], [0.099, 0.064]], 0.99).position.z = -0.004;
-  profile(head, M(0x7a1712), [[0.1, 0.05], [0.101, 0.053]], 0.998).position.z = -0.003;
-  oval(head, hachimaki, [0, 0.052, -0.103], [0.024, 0.019, 0.016]);
+  const band = profile(head, hachimaki, [[0.094, 0.037], [0.1, 0.048], [0.099, 0.064]], 1.16); band.position.z = -0.006; band.scale.x = 0.95;
+  const twist = profile(head, M(0x7a1712), [[0.1, 0.05], [0.101, 0.053]], 1.17); twist.position.z = -0.006; twist.scale.x = 0.955;
+  oval(head, hachimaki, [0, 0.052, -0.124], [0.024, 0.019, 0.016]);
   for (const side of [-1, 1]) {
-    const tail = mesh(new THREE.PlaneGeometry(0.03, 0.15, 1, 4).translate(0, -0.075, 0), hachimaki, head, side * 0.012, 0.048, -0.108);
+    const tail = mesh(new THREE.PlaneGeometry(0.03, 0.15, 1, 4).translate(0, -0.075, 0), hachimaki, head, side * 0.012, 0.048, -0.13);
     tail.rotation.set(0.35, side * 0.25, side * 0.28);
   }
-  oval(head, skinShade, [0, -0.063, 0.093], [0.022, 0.0026, 0.004]);
-  for (const side of [-1, 1]) {
-    oval(head, skin, [side * 0.09, -0.015, -0.006], [0.013, 0.025, 0.017]);
-    oval(head, skinShade, [side * 0.098, -0.011, 0.001], [0.007, 0.012, 0.007]);
-    oval(head, grey, [side * 0.085, 0.029, 0.007], [0.012, 0.027, 0.037]).rotation.x = -0.25;
-    oval(head, skinShade, [side * 0.04, 0.012, 0.076], [0.019, 0.006, 0.008]).rotation.y = side * 0.36;
-    oval(head, sclera, [side * 0.04, 0.012, 0.082], [0.016, 0.0038, 0.004]).rotation.y = side * 0.36;
-    oval(head, eye, [side * 0.038, 0.012, 0.086], [0.005, 0.0048, 0.003]);
-    oval(head, hair, [side * 0.043, 0.03, 0.084], [0.024, 0.0042, 0.006]).rotation.z = side * 0.095;
-    oval(head, grey, [side * 0.017, -0.049, 0.093], [0.019, 0.0055, 0.004]).rotation.z = side * -0.23;
-    tapered(head, skinShade, [side * 0.060, 0.002, 0.077], [side * 0.071, -0.006, 0.073], 0.0019, 0.0009);
-    tapered(head, skinShade, [side * 0.024, -0.047, 0.094], [side * 0.034, -0.066, 0.08], 0.0016, 0.001);
-  }
+  for (const side of [-1, 1]) oval(head, grey, [side * 0.088, 0.029, 0.004], [0.012, 0.027, 0.034]).rotation.x = -0.25;   // sideburns
 }
 
 export function createSmith() {
@@ -212,7 +170,7 @@ export function createSmith() {
   root.name = 'Masa';
   const head = grp(body, 0, 1.722, 0.048);
   sculptHead(head);
-  tapered(body, skin, [0, 1.52, 0.023], [0, 1.655, 0.042], 0.082, 0.069);
+  tapered(body, skin, [0, 1.52, 0.023], [0, 1.655, 0.042], 0.066, 0.05);   // a neck that fits the manga jaw
   // tenugui towel slung round the neck, its ends tucked into the shirt
   const tw = mesh(new THREE.TorusGeometry(0.093, 0.024, 8, 24), towel, body, 0, 1.57, 0.03); tw.rotation.x = Math.PI / 2 + 0.25; tw.scale.set(1, 0.86, 1);
   for (const side of [-1, 1]) tapered(body, towel, [side * 0.05, 1.55, 0.115], [side * 0.07, 1.42, 0.17], 0.022, 0.018);

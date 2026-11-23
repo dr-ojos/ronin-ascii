@@ -17,7 +17,9 @@ const camRay = new THREE.Raycaster();
 export function updateCamera(dt: number) {
   // the look menu (custom.ts) frames the samurai close up, like the photo mode
   const dress = state.menu === 'custom';
-  camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo || dress ? 1.3 : 1.5), player.pos.z), Math.min(1, dt * 10));
+  // photo mode close up (F + wheel): the camera comes down to eye level and frames the face
+  const close = state.photo ? THREE.MathUtils.clamp((5 - state.photoDist) / 3, 0, 1) : 0;
+  camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo || dress ? 1.3 + 0.3 * close : 1.5), player.pos.z), Math.min(1, dt * 10));
   if (shopStageActive() && !state.photo) {
     camera.position.copy(shopCameraPos);
     shopRight.set(shopCameraPos.z - shopFocus.z, 0, shopFocus.x - shopCameraPos.x).normalize();
@@ -26,7 +28,7 @@ export function updateCamera(dt: number) {
     camera.lookAt(tmp.copy(shopFocus).addScaledVector(shopRight, halfWidth * occupied / innerWidth));
     return;
   }
-  const pt = state.photo ? 0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025) : dress ? 0.32 : state.pitch, cp = Math.cos(pt);
+  const pt = state.photo ? (0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025)) * (1 - close) - 0.03 * close : dress ? 0.32 : state.pitch, cp = Math.cos(pt);
   // inside Masa's shop the camera comes in closer (its roof is hidden, shop.ts)
   const camDist = state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.camDistUser;
   camera.position.set(

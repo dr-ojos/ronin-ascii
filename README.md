@@ -42,3 +42,8 @@ npm run preview    # servir dist/ para probarla
 WASD moverse · SHIFT correr · clic / K tajo · L giro pesado · ESPACIO esquivar · E o tajo abrir cofre · E en el mostrador de Masa: tienda · Q cambiar de arma · P rayo · N mapa del mundo ·
 C paleta · T vista sin ASCII · F modo foto · R lluvia · M sonido · + / - densidad de caracteres.
 - `public/`: modelos 3D y sonidos, copiados tal cual a `dist/`.
+
+## Créditos
+
+- Rostros: "Infinite, 3D Head Scan" de Lee Perry-Smith (CC BY 3.0, basado en una obra de www.triplegangers.com). Detalle en `public/models/head/CREDITOS.md`.
+- Sonidos: ver `public/sounds/CREDITOS.md`.

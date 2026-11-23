@@ -56,6 +56,7 @@ const RONIN_PAINT = /* glsl */`
     float strap = step(0.55, fract((ax + z * 0.8) * 0.33));
     col = uWrap * (0.7 + 0.5 * strap);
   } else if (z > 154.0 && ax < 14.0) {
+    if (z > 158.5) discard;   // the soldier's head: the scanned head (real-head.ts) takes its place
     col = (z > 171.0 || b.y < -3.0) ? vec3(0.025, 0.022, 0.03) : uSkin;
     if (z <= 171.0 && b.y >= -3.0) pixelCls = 0.64;
   } else if (z > 124.0 && ax > 20.0) {

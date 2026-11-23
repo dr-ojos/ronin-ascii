@@ -10,6 +10,8 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { Avatar, AvatarInput, OniWarrior } from './types';
 import { oniCostume, oniEye, oniMask, oniYumi, type OniLook } from './oni-costume';
 import { paintBody, mangaFinish, monTex, tabardTex, pleatTex, waveTex } from './manga-art';
+import { realHead, realMenpoGeometry, SCAN } from './real-head';
+import { headAsset } from './assets';
 
 export type { OniLook } from './oni-costume';
 
@@ -186,7 +188,6 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const teal = new THREE.MeshStandardMaterial({ color: RONIN.teal, map: waves, roughness: 0.85, side: THREE.DoubleSide });
   const tan = new THREE.MeshStandardMaterial({ color: RONIN.tan, roughness: 0.9 });
   const red = new THREE.MeshStandardMaterial({ color: 0xe4573d, roughness: 0.55 });
-  const hair = new THREE.MeshStandardMaterial({ color: 0x0b0a0c, roughness: 0.6, side: THREE.DoubleSide });
   const skin = new THREE.MeshStandardMaterial({ color: 0xc8955a, roughness: 0.6 });
   const scarfMat = new THREE.MeshStandardMaterial({ color: 0x0b0a0c, roughness: 0.6, side: THREE.DoubleSide });
   // roles: which materials / parts the player can restyle (look.ts)
@@ -201,27 +202,29 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const hg = new THREE.Group();
   const hatMat = new THREE.MeshStandardMaterial({ map: hatTex(), roughness: 0.9, side: THREE.DoubleSide }); hatMat.userData.role = 'hat';
   // a kasa a little wider than the shoulders' half-span, not a parasol
-  const kasa = mesh(new THREE.ConeGeometry(0.235, 0.13, 40, 1, true), hatMat, hg, 0, 0.145, 0);
+  const kasa = mesh(new THREE.ConeGeometry(0.235, 0.13, 40, 1, true), hatMat, hg, 0, 0.155, -0.01);
   kasa.rotation.x = 0.14;
-  const rim = mesh(new THREE.TorusGeometry(0.235, 0.007, 4, 48), black, hg, 0, 0.08, 0.017); rim.rotation.x = Math.PI / 2 + 0.14;
-  const knob = mesh(new THREE.ConeGeometry(0.032, 0.034, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.225, -0.01);
+  // rim and cord ride on the cone itself (they used to float apart when the cone tilted)
+  const rim = mesh(new THREE.TorusGeometry(0.235, 0.007, 4, 48), black, kasa, 0, -0.065, 0); rim.rotation.x = Math.PI / 2;
+  const knob = mesh(new THREE.ConeGeometry(0.032, 0.034, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.235, -0.02);
   const cordMat = new THREE.MeshStandardMaterial({ color: 0xb3241c, roughness: 0.55 });
-  const cord = mesh(new THREE.TorusGeometry(0.172, 0.007, 5, 40), cordMat, hg, 0, 0.115, 0.008); cord.rotation.x = Math.PI / 2 + 0.14;
+  const cord = mesh(new THREE.TorusGeometry(0.165, 0.007, 5, 40), cordMat, kasa, 0, -0.027, 0); cord.rotation.x = Math.PI / 2;
   const chin: THREE.Mesh[] = [];
   for (const s of [-1, 1]) {
     const c = mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.2, 5), cordMat, hg, 0.085 * s, 0.01, 0.03); c.rotation.z = 0.32 * s; chin.push(c);
   }
   for (const o of [kasa, rim, knob, cord, ...chin]) o.userData.part = 'hat';
-  const mask = mesh(new THREE.SphereGeometry(0.1, 18, 10, Math.PI / 2 - 0.9, 1.8, 1.45, 0.9), skin, hg, 0, -0.03, 0.012); mask.scale.set(0.95, 1.1, 1.05);
-  mesh(new THREE.BoxGeometry(0.05, 0.006, 0.01), hair, hg, 0, -0.06, 0.112);
-  const strands: { g: THREE.Group; ph: number; base: number; st: THREE.Mesh }[] = [];
-  for (let i = 0; i < 34; i++) {
-    const a = Math.PI * 0.35 + (i / 33) * Math.PI * 1.3, len = rnd(0.35, 0.62);
-    const sg = new THREE.Group(); sg.position.set(Math.cos(a) * 0.095, 0.02, Math.sin(a) * -0.095 - 0.01); sg.rotation.y = -a + Math.PI / 2;
-    const st = new THREE.Mesh(new THREE.PlaneGeometry(rnd(0.025, 0.045), len, 1, 4), hair);
-    st.geometry.translate(0, -len / 2, 0); st.rotation.x = rnd(0.05, 0.25); sg.add(st); hg.add(sg);
-    strands.push({ g: sg, ph: Math.random() * 6, base: st.rotation.x, st });
-  }
+  // a real face (real-head.ts: a 3D head scan) in place of the soldier's, with black hair combed back to a
+  // topknot; human proportions: crown to chin ~0.19 here, the soldier's own head height
+  if (headAsset) {
+    const face = realHead({ hair: 0x141318, topknot: true });
+    const k = 0.189 / (SCAN.crown - SCAN.chin);
+    face.group.scale.setScalar(k); face.group.position.set(0, 0.083 - SCAN.crown * k, 0.004);
+    hg.add(face.group);
+    // the menpo (lower face guard) only when a mask is chosen (look.ts)
+    const mask = mesh(realMenpoGeometry(), skin, face.group);
+    mask.userData.part = 'mask';
+  } else mesh(new THREE.SphereGeometry(0.09, 20, 14), skin, hg, 0, -0.01, 0);   // the scan failed to load
   hg.scale.setScalar(hh / 0.215);
   hg.position.set(head.x, head.y + hh * 0.45, head.z + 0.01);
   attach('Head', hg);
@@ -237,7 +240,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   }
   const mon = mesh(new THREE.CircleGeometry(0.052, 32), new THREE.MeshStandardMaterial({ map: monTex, roughness: 0.4, metalness: 0.3 }), chest, 0, 0.035, 0.183);
   mon.rotation.x = -0.12;
-  for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.07, 0.03, 0.3), black, chest, 0.13 * s, 0.255, -0.01);
+  for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.075, 0.012, 0.26), black, chest, 0.13 * s, 0.248, -0.01);   // flat shoulder straps
   const cs = (sw / 0.2) * 1.02;
   chest.scale.set(cs, (torsoH * 0.82) / 0.52, cs * 1.05);
   chest.position.set(hips.x, hips.y + torsoH * 0.52, hips.z - 0.005);
@@ -454,7 +457,6 @@ export function createRealSamurai(gltf: GLTF): Avatar {
       pa.needsUpdate = true;
     }
     // hair sways in the wind
-    for (const h of strands) { h.st.rotation.x = h.base + 0.08 * Math.sin(t * 3 + h.ph) + m * 0.35; h.st.rotation.z = 0.06 * Math.sin(t * 2.1 + h.ph); }
     for (const g of kusa) g.rotation.x = -0.2 - Math.abs(Math.sin(t * 9)) * 0.08 * m;
     tabard.rotation.x = -0.3 - (0.12 + 0.18 * L.runW) * L.move * Math.abs(Math.sin(TAU * loco.phase)) + 0.02 * Math.sin(t * 1.7);
   }

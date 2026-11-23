@@ -188,8 +188,8 @@ function build(a: Armor) {
   }
   // ---- the helmet
   if (l.helmet) {
-    // r is the bowl's radius: a little more than the skull's, so the helmet sits on the head instead of swallowing it
-    const H = P('Head'), T = P('HeadTop_End'), hh = T.distanceTo(H), r = hh * 0.46;
+    // r is the bowl's radius: a little over the real head's (real-head.ts), its rim resting on the brow
+    const H = P('Head'), T = P('HeadTop_End'), hh = T.distanceTo(H), jingasa = l.helmet === 'jingasa', r = hh * (jingasa ? 0.42 : 0.39);
     const g = new THREE.Group();
     if (l.helmet === 'jingasa') {
       // the foot soldier's lacquered iron hat, with the clan's crest
@@ -201,7 +201,7 @@ function build(a: Armor) {
       const mon = new THREE.Mesh(new THREE.CircleGeometry(r * 0.3, 24), metal);
       mon.position.set(0, y0, rad).addScaledVector(nrm, r * 0.02); mon.rotation.x = -(Math.PI / 2 - slope); g.add(mon);
       const monIn = new THREE.Mesh(new THREE.RingGeometry(r * 0.12, r * 0.2, 24), lacquer); monIn.position.copy(mon.position).addScaledVector(nrm, r * 0.01); monIn.rotation.x = mon.rotation.x; g.add(monIn);
-      g.position.set(H.x, H.y + hh * 0.72, H.z);
+      g.position.set(H.x, H.y + hh * 0.8, H.z);   // sits on the crown
     } else {
       // hachi: a riveted dome of 24 gores, with the ring on top and the metal band round its base
       const ht = hachiTex(l);
@@ -260,7 +260,7 @@ function build(a: Armor) {
           const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.3, r * 0.03, 6, 32), metal); ring.position.z = r * 0.045; sun.add(ring);
         }
       }
-      g.position.set(H.x, H.y + hh * 0.52, H.z + 0.005);   // the smaller bowl still covers the crown
+      g.position.set(H.x, H.y + hh * 0.51, H.z + 0.01);   // rim on the brow line, the bowl over the crown
     }
     hang(a.id, 'Head', g);
   }
@@ -299,7 +299,10 @@ export function dressUp(cur = armor()) {
   for (const [id, g] of auras) g.visible = id === cur.id;
   activeAura = auras.get(cur.id);
   const helmet = rigged && !!cur.look?.helmet;
-  root.traverse(o => { if (o.userData.part === 'hat') o.visible = !helmet && !opt('hat').hidden; });
+  root.traverse(o => {
+    if (o.userData.part === 'hat') o.visible = !helmet && !opt('hat').hidden;
+    if (o.userData.part === 'topknot') o.visible = !helmet;   // the helmet covers the knot
+  });
 }
 dressUp();
 

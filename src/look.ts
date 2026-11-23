@@ -15,7 +15,7 @@ export const LOOK_OPTIONS = {
   ],
   scarf: [{ name: 'negra', c: 0x0b0a0c }, { name: 'carmesí', c: 0x8e1d14 }, { name: 'blanca', c: 0xe8e4dc }, { name: 'añil', c: 0x22336e }, { name: 'dorada', c: 0xc9a227 }],
   hat: [{ name: 'kasa de paja', c: 0xffffff }, { name: 'kasa lacada', c: 0xff6a50 }, { name: 'kasa de hielo', c: 0x9fd0ff }, { name: 'sin sombrero', c: 0xffffff, hidden: true }],
-  mask: [{ name: 'sin máscara', c: 0xc8955a }, { name: 'laca roja', c: 0xb0201a }, { name: 'hueso', c: 0xe8e0cc }, { name: 'negra', c: 0x18161a }, { name: 'oro', c: 0xd8a630 }]
+  mask: [{ name: 'sin máscara', c: 0xc8955a, hidden: true }, { name: 'laca roja', c: 0xb0201a }, { name: 'hueso', c: 0xe8e0cc }, { name: 'negra', c: 0x18161a }, { name: 'oro', c: 0xd8a630 }]
 } satisfies Record<string, Option[]>;
 export type LookPart = keyof typeof LOOK_OPTIONS;
 export const LOOK_LABELS: Record<LookPart, string> = { lacquer: 'Lacado', cloth: 'Kimono y faja', scarf: 'Bufanda', hat: 'Sombrero', mask: 'Máscara' };
@@ -37,6 +37,7 @@ export function randomLook() { for (const k of Object.keys(LOOK_OPTIONS) as Look
 export function applyLook(root: THREE.Object3D) {
   root.traverse(obj => {
     if (obj.userData.part === 'hat') obj.visible = !opt('hat').hidden;
+    if (obj.userData.part === 'mask') obj.visible = !opt('mask').hidden;
     const m = (obj as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
     const role = m?.userData?.role as LookPart | undefined;
     if (!m || !role || !(role in LOOK_OPTIONS)) return;
