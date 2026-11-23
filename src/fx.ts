@@ -38,6 +38,14 @@ export function dashRing(pos: THREE.Vector3) {
   ghosts.push({ g: m, mat, life: 0.4, max: 0.4, peak: 0.7, grow: 2.6 });
 }
 
+/** a ring of light that runs along the ground from a heavy landing */
+export function impactRing(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 4) {
+  const mat = ghostMat.clone(); mat.color.set(color);
+  const m = new THREE.Mesh(GHOST_RING, mat);
+  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.08, pos.z); scene.add(m);
+  ghosts.push({ g: m, mat, life: 0.5, max: 0.5, peak: 0.9, grow: size });
+}
+
 export function updateFx(dt: number) {
   for (let i = ghosts.length - 1; i >= 0; i--) {
     const h = ghosts[i]; h.life -= dt;

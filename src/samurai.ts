@@ -198,19 +198,55 @@ const IDLE = key([-0.02, 1.07, 0.34], [0, 0.55, 0.84], [0, -1, 0]);
 const RUN = key([-0.06, 0.98, 0.3], [-0.05, 0.3, 0.95], [0, -1, 0]);
 const DASH = key([-0.22, 0.98, 0.04], [-0.25, -0.3, -0.92], [0, -1, 0]);
 export const SHOW_WEAPON = key([-0.22, 1.07, 0.27], [0.77, 0.62, 0.16], [0, -0.12, 1]);
+// K1 kesa-giri: from high over the right shoulder down through the left hip
 function kesa(m: boolean): Attack {
   const f = m ? mx : (a: Vec3) => a;
   const W = key(f([-0.2, 1.6, 0.1]), f([-0.15, 0.8, -0.58]), f([0.3, 0.5, 0.66]));
   const M = key(f([-0.02, 1.27, 0.42]), f([0.35, 0.2, 0.9]), f([0.75, -0.5, 0.4]));
   const E = key(f([0.1, 0.98, 0.3]), f([0.75, -0.5, 0.4]), f([0.6, -0.8, -0.3]));
-  return { keys: [[0, W], [0.2, W], [0.45, M], [0.72, E], [1, E]], twist: [[0, -0.45], [0.2, -0.5], [0.45, 0.05], [0.72, 0.45], [1, 0.4]].map(([t, v]): [number, number] => [t, m ? -v : v]) };
+  return {
+    keys: [[0, W], [0.2, W], [0.45, M], [0.72, E], [1, E]],
+    twist: [[0, -0.45], [0.2, -0.5], [0.45, 0.05], [0.72, 0.45], [1, 0.4]].map(([t, v]): [number, number] => [t, m ? -v : v]),
+    lean: [[0, -0.04], [0.2, -0.08], [0.45, 0.2], [0.72, 0.24], [1, 0.08]]
+  };
 }
-const ATTACKS: Attack[] = [kesa(false), kesa(true), ((): Attack => {
+// K2 kiriage: the blade comes back up from the left hip and rises through the right shoulder
+function kiriage(): Attack {
+  const W = key([0.17, 0.93, 0.2], [0.62, -0.62, -0.2], [-0.4, 0.55, 0.7]);
+  const M = key([0.0, 1.24, 0.47], [-0.05, 0.12, 1], [-0.62, 0.78, 0]);
+  const E = key([-0.24, 1.6, 0.2], [-0.5, 0.8, -0.2], [-0.3, 0.3, -0.9]);
+  return {
+    keys: [[0, W], [0.18, W], [0.42, M], [0.64, E], [1, E]],
+    twist: [[0, 0.45], [0.18, 0.52], [0.42, -0.05], [0.64, -0.5], [1, -0.35]],
+    lean: [[0, 0.16], [0.18, 0.22], [0.42, 0.08], [0.64, -0.14], [1, -0.04]]
+  };
+}
+// K3 the full turn: the ronin spins once with the blade flat, cutting all around
+function spinCut(): Attack {
   const W = key([-0.28, 1.2, 0.22], [-0.85, 0.1, 0.5], [0.3, 0, 1]);
   const M = key([0, 1.2, 0.42], [0, 0.05, 1], [1, 0, 0]);
   const E = key([0.28, 1.2, 0.22], [0.85, 0.1, 0.5], [0.6, 0, -0.8]);
-  return { keys: [[0, W], [0.2, W], [0.35, M], [0.8, M], [1, E]], twist: [[0, -0.5], [0.2, -0.55], [0.35, 0], [0.8, 0], [1, 0.45]] };
-})()];
+  return {
+    keys: [[0, W], [0.2, W], [0.35, M], [0.8, M], [1, E]],
+    twist: [[0, -0.5], [0.2, -0.55], [0.35, 0], [0.8, 0], [1, 0.45]],
+    spin: [[0, 0], [0.25, 0], [0.8, TAU], [1, TAU]],
+    lean: [[0, 0], [0.25, 0.12], [0.8, 0.1], [1, 0]]
+  };
+}
+// L iai: blade at the left hip, coiled and leaning in; one dash and a single horizontal draw
+// across the body, held outstretched to the right, then the flick that sheds the blood (chiburi)
+function iai(): Attack {
+  const D = key([0.2, 0.98, 0.04], [0.2, -0.12, -0.97], [0.1, -1, 0]);
+  const M = key([0.02, 1.24, 0.52], [0.28, 0.03, 0.96], [-1, 0, 0.2]);
+  const E = key([-0.5, 1.34, 0.36], [-0.92, 0.14, 0.36], [-0.3, 0, -1]);
+  const C = key([-0.34, 1.02, 0.36], [-0.42, -0.55, 0.72], [-0.6, -0.8, 0]);
+  return {
+    keys: [[0, D], [0.3, D], [0.44, M], [0.56, E], [0.76, E], [0.88, C], [1, C]],
+    twist: [[0, 0.55], [0.3, 0.62], [0.44, 0], [0.56, -0.62], [0.76, -0.58], [0.88, -0.3], [1, -0.1]],
+    lean: [[0, 0.18], [0.3, 0.34], [0.46, 0.28], [0.76, 0.14], [1, 0.02]]
+  };
+}
+const ATTACKS: Attack[] = [kesa(false), kiriage(), spinCut(), iai()];
 function sampleScalar(keys: [number, number][], p: number) {
   let i = 0; while (i < keys.length - 2 && p > keys[i + 1][0]) i++;
   const [t0, a] = keys[i], [t1, b] = keys[i + 1];
@@ -449,8 +485,12 @@ export function createSamurai(): Avatar {
     const p = atk ? clamp(atk.p, 0, 1) : 0;
     const env = atk ? Math.sin(p * Math.PI) : 0;
 
-    // spin (third combo hit)
-    body.rotation.y = form === 'katana' && atk && atk.combo === 2 ? smooth(clamp((p - 0.25) / 0.55, 0, 1)) * TAU : 0;
+    // the move's body choreography: spins, leaps and leaning into the blow
+    const move = atk ? (grip?.attacks ?? ATTACKS)[atk.combo] : undefined;
+    const rise = move?.rise ? sampleScalar(move.rise, p) : 0;
+    const lean = move?.lean ? sampleScalar(move.lean, p) : 0;
+    body.rotation.y = move?.spin ? sampleScalar(move.spin, p) : 0;
+    body.position.y = rise;
 
     // legs: kamae stance (right foot forward) blended into a walk cycle
     const ph = s.walk, sw = Math.sin(ph);
@@ -459,6 +499,7 @@ export function createSamurai(): Avatar {
     let hipY = lerp(0.865, 0.885 + (1 - Math.abs(sw)) * 0.03, m);
     if (atk) { thR -= 0.35 * env; knR += 0.25 * env; thL += 0.3 * env; knL += 0.15 * env; hipY -= 0.05 * env; }
     if (s.dash) { thR = -0.7; knR = 0.6; thL = 0.5; knL = 0.5; hipY = 0.8; }
+    if (rise > 0) { const tuck = clamp(rise / 0.5, 0, 1); thR -= 1.0 * tuck; knR += 1.5 * tuck; thL -= 0.7 * tuck; knL += 1.3 * tuck; }
     legR.thigh.rotation.x = thR; legR.knee.rotation.x = knR; legR.foot.rotation.x = -(thR + knR) * 0.85;
     legL.thigh.rotation.x = thL; legL.knee.rotation.x = knL; legL.foot.rotation.x = -(thL + knL) * 0.85;
     legR.thigh.rotation.z = -0.04; legL.thigh.rotation.z = 0.04;
@@ -471,9 +512,9 @@ export function createSamurai(): Avatar {
     }
 
     // spine / chest
-    const twist = atk ? sampleScalar((grip?.attacks ?? ATTACKS)[atk.combo].twist, p) : 0;
+    const twist = move ? sampleScalar(move.twist, p) : 0;
     spine.rotation.y = lerp(spine.rotation.y, twist - hips.rotation.y * 0.8, 1 - Math.exp(-dt * 25));
-    spine.rotation.x = s.dash ? 0.45 : (atk ? 0.04 + env * 0.18 : 0.05 + 0.08 * m);
+    spine.rotation.x = s.dash ? 0.45 : (atk ? 0.04 + env * 0.06 + lean : 0.05 + 0.08 * m);
     chest.position.y = 0.24 + Math.sin(t * 1.9) * 0.004;
     chest.scale.set(1 + Math.sin(t * 1.9) * 0.008, 1, 1 + Math.sin(t * 1.9) * 0.01);
     look = lerp(look, clamp(s.look ?? 0, -0.9, 0.9) - spine.rotation.y * 0.5, 1 - Math.exp(-dt * 6));

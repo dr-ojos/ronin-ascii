@@ -43,6 +43,19 @@ WASD moverse · SHIFT correr · clic / K combo · L golpe fuerte · ESPACIO esqu
 C paleta · T vista sin ASCII · F modo foto · R lluvia · M sonido · + / - densidad de caracteres.
 - `public/`: modelos 3D y sonidos, copiados tal cual a `dist/`.
 
+## Golpes de cada arma
+
+**K** encadena tres golpes y **L** lanza el golpe fuerte propio del arma, que no se repite en el combo.
+
+| Arma | K1 | K2 | K3 | L |
+| --- | --- | --- | --- | --- |
+| Katana | kesa-giri, en diagonal desde el hombro derecho | kiriage, tajo ascendente | giro completo | iai: embestida y desenvaine horizontal, con chiburi al final |
+| Hojas dobles | uno-dos desde arriba | uno-dos ascendente | cruce en X que se abre | torbellino: salto con dos giros en el aire y caída clavando ambas hojas |
+| Lanza | estocada | doble estocada | barrido | espiral: un giro completo con la lanza y estocada a fondo |
+| Mandoble | diagonal derecha | diagonal izquierda | giro completo | parte-montañas: salto y tajo contra el suelo con onda expansiva |
+
+Los saltos (torbellino y parte-montañas) te hacen intocable mientras estás en el aire.
+
 ## Técnicas de los templos
 
 Empiezas con la **Danza de los Mil Tajos**: al pulsar **P** con la carga llena, el ronin cruza el campo en destellos y atraviesa con la espada hasta a seis onis a 13 m, hiriendo también a quien esté en su camino. Al envainar, todos los cortados reciben un último golpe.

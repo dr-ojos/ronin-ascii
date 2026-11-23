@@ -448,21 +448,32 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     const atk = s.attack, p = atk ? clamp(atk.p, 0, 1) : 0, m = s.moving, t = s.time;
     const form = s.weaponForm;
     const grip = form === 'katana' ? undefined : weaponGrips[form];
-    const spinning = form === 'katana' && atk?.combo === 2;
+    // the move's body choreography: spins, leaps and leaning into the blow
+    const move = atk ? (grip?.attacks ?? ATTACKS)[atk.combo] : undefined;
+    const spinning = !!move?.spin;
     const L = locomotion(dt, atk, spinning);
     mixer.update(dt);
-    const spin = spinning ? smooth(clamp((p - 0.25) / 0.55, 0, 1)) * TAU : 0;
+    const spin = move?.spin ? sampleScalar(move.spin, p) : 0;
+    const rise = move?.rise ? sampleScalar(move.rise, p) : 0;
+    const lean = move?.lean ? sampleScalar(move.lean, p) : 0;
     body.rotation.set(0, spin - loco.lag, loco.bank);
+    body.position.y = rise;
     root.updateMatrixWorld(true);
     body.getWorldQuaternion(bq);
     const leftAxis = axis.copy(AX_X).applyQuaternion(bq);             // +x is the samurai's left; +angle leans forward
+    if (rise > 0) {   // knees tucked in the air
+      const tuck = clamp(rise / 0.5, 0, 1);
+      rotateBoneWorld(B.RightUpLeg, leftAxis, -1.0 * tuck); rotateBoneWorld(B.RightLeg, leftAxis, 1.5 * tuck);
+      rotateBoneWorld(B.LeftUpLeg, leftAxis, -0.7 * tuck); rotateBoneWorld(B.LeftLeg, leftAxis, 1.3 * tuck);
+    }
 
-    const twist = atk ? sampleScalar((grip?.attacks ?? ATTACKS)[atk.combo].twist, p) : 0;
+    const twist = move ? sampleScalar(move.twist, p) : 0;
     // upper body: attack twist + chest and head leading into the turn
     const lead = clamp(loco.lag * 0.5 + loco.turn * 0.03, -0.35, 0.35);
     rotateBoneWorld(B.Spine, UP, twist * 0.6 + lead * 0.35);
     rotateBoneWorld(B.Spine1, UP, twist * 0.4 + lead * 0.25);
-    rotateBoneWorld(B.Spine, leftAxis, loco.lean + (s.dash ? 0.35 : 0));
+    rotateBoneWorld(B.Spine, leftAxis, loco.lean + (s.dash ? 0.35 : 0) + lean * 0.6);
+    rotateBoneWorld(B.Spine1, leftAxis, lean * 0.4);
     look += ((clamp((s.look ?? 0) + lead * 0.8, -0.9, 0.9) - twist * 0.5) - look) * (1 - Math.exp(-dt * 6));
     rotateBoneWorld(B.Neck, UP, look);
     // keep the head steadier than the torso when leaning (eyes stay level)

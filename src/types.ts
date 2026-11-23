@@ -10,8 +10,18 @@ export type WeaponForm = 'katana' | 'spear' | 'broad' | 'dual';
 
 /** katana pose in body space */
 export interface Pose { pos: THREE.Vector3; q: THREE.Quaternion }
-/** one attack: katana keyframes and spine twist, both keyed by attack progress 0..1 */
-export interface Attack { keys: [number, Pose][]; twist: [number, number][] }
+/** one attack: weapon keyframes and body motion, all keyed by attack progress 0..1 */
+export interface Attack {
+  keys: [number, Pose][];
+  /** spine twist (radians, + turns the chest to the samurai's left) */
+  twist: [number, number][];
+  /** whole-body turn (radians): spinning cuts */
+  spin?: [number, number][];
+  /** the body leaves the ground by this much (metres): leaps */
+  rise?: [number, number][];
+  /** torso pitch (radians, + leans into the blow, - arches back) */
+  lean?: [number, number][];
+}
 
 /** what the samurai animation needs each frame */
 export interface AvatarInput {
@@ -22,6 +32,7 @@ export interface AvatarInput {
   weaponForm: WeaponForm;
   showWeapon?: boolean;
   look?: number;           // head turn towards the nearest oni (radians)
+  /** combo 0..2 = K chain, 3 = L heavy attack */
   attack: { combo: number; p: number } | null;
 }
 /** the player's samurai, procedural (samurai.ts) or mocap-rigged (rig.ts) */

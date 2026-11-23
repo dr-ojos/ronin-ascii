@@ -9,7 +9,7 @@ import { dmgMult, dashCdMult, runMult } from './upgrades';
 import { weapon, type Weapon } from './weapons';
 import { charge } from './special';
 import { hitChests, chestInReach } from './loot';
-import { burst, dashGhost, dashRing } from './fx';
+import { burst, dashGhost, dashRing, impactRing } from './fx';
 import { sfx, panOf } from './sfx';
 import { collide } from './physics';
 import { surfaceY, wadeDepth } from './structures';
@@ -20,40 +20,69 @@ import { angDiff } from './utils';
 
 import type { WeaponForm } from './types';
 
-interface Strike { at: number; arc: number; power: number; offset?: number }
-interface Move { duration: number; lunge: number; reach: number; strikes: readonly Strike[] }
-const katanaCut: Move = { duration: 0.38, lunge: 3, reach: 2.8, strikes: [{ at: 0.45, arc: 1.35, power: 1 }] };
-const spearThrust: Move = { duration: 0.42, lunge: 3.8, reach: 2.8, strikes: [{ at: 0.41, arc: 0.40, power: 1 }] };
-const broadCut: Move = { duration: 0.46, lunge: 2.2, reach: 2.85, strikes: [{ at: 0.52, arc: 1.57, power: 1 }] };
+interface Strike { at: number; arc: number; power: number; offset?: number; quake?: boolean }
+interface Move {
+  duration: number; reach: number; strikes: readonly Strike[];
+  /** forward speed (m/s) while the move carries you, and when (attack progress) */
+  lunge: number; lungeAt?: readonly [number, number];
+  /** leaps (weapon-poses.ts `rise`): untouchable while in the air */
+  air?: boolean;
+}
+// Each weapon has a chain of three cuts on K (index 0..2) and its own heavy attack on L (index 3).
+// Strike times match the impact keyframes of the animations (samurai.ts, weapon-poses.ts).
 const doubleCut = (first: number): Move => ({
   duration: 0.52, lunge: 3.2, reach: 2.7, strikes: [
     { at: 0.36, arc: 1.13, offset: first * 0.23, power: 0.62 },
     { at: 0.60, arc: 1.13, offset: -first * 0.23, power: 0.61 }
   ]
 });
-const moves: Record<WeaponForm, readonly [Move, Move, Move]> = {
-  katana: [katanaCut, katanaCut, { duration: 0.55, lunge: 3, reach: 3.3, strikes: [{ at: 0.40, arc: Math.PI, power: 2 }] }],
-  spear: [spearThrust, spearThrust, { duration: 0.59, lunge: 2.1, reach: 2.9, strikes: [{ at: 0.48, arc: 1.55, power: 1.62 }] }],
-  broad: [broadCut, broadCut, { duration: 0.67, lunge: 2.8, reach: 3.2, strikes: [{ at: 0.52, arc: 2.15, power: 2.12 }] }],
-  dual: [doubleCut(-1), doubleCut(1), { duration: 0.57, lunge: 3.2, reach: 2.9, strikes: [{ at: 0.49, arc: 1.70, power: 1.76 }] }]
+const moves: Record<WeaponForm, readonly [Move, Move, Move, Move]> = {
+  katana: [
+    { duration: 0.38, lunge: 3, reach: 2.8, strikes: [{ at: 0.45, arc: 1.35, power: 1 }] },                    // kesa-giri
+    { duration: 0.4, lunge: 3, reach: 2.8, strikes: [{ at: 0.43, arc: 1.35, power: 1.05 }] },                   // kiriage
+    { duration: 0.55, lunge: 3, reach: 3.3, strikes: [{ at: 0.5, arc: Math.PI, power: 1.8 }] },                // full turn
+    { duration: 0.78, lunge: 15, lungeAt: [0.3, 0.46], reach: 3.4, strikes: [{ at: 0.45, arc: 1.25, power: 2.6 }] }  // iai
+  ],
+  spear: [
+    { duration: 0.42, lunge: 3.8, reach: 2.8, strikes: [{ at: 0.41, arc: 0.40, power: 1 }] },
+    { duration: 0.5, lunge: 3.4, reach: 2.8, strikes: [{ at: 0.28, arc: 0.40, power: 0.65 }, { at: 0.52, arc: 0.40, power: 0.75 }] },
+    { duration: 0.59, lunge: 2.1, reach: 2.9, strikes: [{ at: 0.48, arc: 1.55, power: 1.62 }] },
+    { duration: 0.95, lunge: 12, lungeAt: [0.62, 0.76], reach: 3.1,
+      strikes: [{ at: 0.36, arc: Math.PI, power: 0.9 }, { at: 0.72, arc: 0.42, power: 2.3 }] }
+  ],
+  broad: [
+    { duration: 0.46, lunge: 2.2, reach: 2.85, strikes: [{ at: 0.52, arc: 1.57, power: 1 }] },
+    { duration: 0.46, lunge: 2.2, reach: 2.85, strikes: [{ at: 0.52, arc: 1.57, power: 1 }] },
+    { duration: 0.7, lunge: 1.5, reach: 3.2, strikes: [{ at: 0.52, arc: Math.PI, power: 2 }] },
+    { duration: 0.92, lunge: 7, lungeAt: [0.14, 0.5], reach: 3.4, air: true, strikes: [{ at: 0.55, arc: Math.PI, power: 2.9, quake: true }] }
+  ],
+  dual: [
+    doubleCut(-1), doubleCut(1),
+    { duration: 0.62, lunge: 3.2, reach: 2.9, strikes: [{ at: 0.49, arc: 1.7, power: 1.2 }, { at: 0.7, arc: 1.7, power: 0.7 }] },
+    { duration: 1.05, lunge: 5, lungeAt: [0.16, 0.7], reach: 2.9, air: true, strikes: [
+      { at: 0.34, arc: Math.PI, power: 0.55 }, { at: 0.5, arc: Math.PI, power: 0.55 }, { at: 0.66, arc: Math.PI, power: 0.55 },
+      { at: 0.82, arc: Math.PI, power: 1.4, quake: true }] }
+  ]
 };
 
-// K / click chain the current weapon's moves; L goes directly to its heavy finisher.
+// K / click chain the current weapon's three cuts; L is the weapon's own heavy attack.
 export function tryAttack(heavy = false) {
   if (player.dancing) return;
   const w = weapon();
   if (player.attackT >= 0 && (player.attackT < player.attackDur * (heavy ? 0.85 : 0.6) || (w.form === 'dual' && !player.hitDone))) return;
-  if (heavy) player.combo = 2;
-  else player.combo = state.time - player.lastAttackEnd < 0.55 ? (player.combo + 1) % 3 : 0;
+  const chained = player.attackT >= 0 || state.time - player.lastAttackEnd < 0.55;
+  if (heavy) player.combo = 3;
+  else player.combo = chained && player.combo < 2 ? player.combo + 1 : 0;
   player.attackT = 0; player.hitDone = false;
   const move = moves[w.form ?? 'katana'][player.combo];
   player.attackDur = move.duration * w.speed;
+  if (move.air) player.invuln = Math.max(player.invuln, player.attackDur * 0.6);
   // auto-aim: turn towards the closest oni in reach, otherwise keep the current heading
   let best = 4.5 + w.reach, aim = null;
   for (const en of enemies) { const d = Math.hypot(en.g.position.x - player.pos.x, en.g.position.z - player.pos.z); if (d < best) { best = d; aim = en; } }
   if (aim) player.face = Math.atan2(aim.g.position.x - player.pos.x, aim.g.position.z - player.pos.z);
   else { const c = chestInReach(player.pos.x, player.pos.z, 3.2 + w.reach); if (c) player.face = Math.atan2(c.x - player.pos.x, c.z - player.pos.z); }
-  sfx.swing({ power: player.combo === 2 ? 1.35 : 1, pan: player.combo === 1 ? 0.3 : -0.3 });
+  sfx.swing({ power: heavy ? 1.6 : player.combo === 2 ? 1.35 : 1, pan: heavy ? 0 : player.combo === 1 ? 0.3 : -0.3 });
 }
 export function tryDash() {
   if (!state.playing || state.dead || player.dashCd > 0 || player.dancing) return;
@@ -114,7 +143,8 @@ export function updatePlayer(dt: number) {
     player.attackT += dt;
     const p = Math.min(1, player.attackT / player.attackDur);
     const w = weapon(), move = moves[w.form ?? 'katana'][player.combo];
-    if (p > 0.2 && p < 0.55 && !player.dancing) {
+    const [from, to] = move.lungeAt ?? [0.2, 0.55];
+    if (p > from && p < to && !player.dancing) {
       player.pos.x += Math.sin(player.face) * move.lunge * dt;
       player.pos.z += Math.cos(player.face) * move.lunge * dt;
       collide(player.pos, 0.45);
@@ -122,7 +152,8 @@ export function updatePlayer(dt: number) {
     if (!player.hitDone) {
       for (const [i, strike] of move.strikes.entries()) if (previous <= strike.at && p > strike.at) {
         if (i) sfx.swing({ power: 0.7, pan: strike.offset ?? 0 });
-        strikeWith(w, strike, move.reach + w.reach, player.combo === 2);
+        strikeWith(w, strike, move.reach + w.reach, player.combo >= 2);
+        if (strike.quake) quake(player.pos.clone().addScaledVector(tmp.set(Math.sin(player.face), 0, Math.cos(player.face)), 0.9));
         if (i === move.strikes.length - 1) player.hitDone = true;
       }
     }
@@ -130,6 +161,15 @@ export function updatePlayer(dt: number) {
   }
   // blink while invulnerable
   sam.root.visible = !(player.invuln > 0 && player.dashT <= 0 && Math.floor(state.time * 20) % 2 === 0);
+}
+
+/** a heavy landing: a ring of dust and light runs along the ground and the camera shakes */
+function quake(at: THREE.Vector3) {
+  impactRing(at, 0xffd9a0, 4.2);
+  burst(at.clone().setY(at.y + 0.2), 0xc9b38a, 46, 6, 0.16);
+  burst(at.clone().setY(at.y + 0.4), 0xffffff, 18, 4, 0.12);
+  state.shake = Math.max(state.shake, 0.65);
+  sfx.taiko(0.8);
 }
 
 function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
