@@ -1,19 +1,28 @@
 // Materials and rounded geometry for the direct 3D view.
 import * as THREE from 'three';
 import { seeded } from './map';
+import { DIRT, FINISH_HELPERS, MASONRY, PAVERS, PLASTER, SIDING, THATCH, TILES } from './architecture-finishes';
 
 export const detailedSurfaces = { value: 0 };
 const geometryVariants: { mesh: THREE.Mesh; original: THREE.BufferGeometry; rounded: THREE.BufferGeometry }[] = [];
+const modeDetails: { object: THREE.Object3D; detailed: boolean }[] = [];
 
 export function setDetailedSurfaces(enabled: boolean) {
   const value = Number(enabled);
   if (detailedSurfaces.value === value) return;
   detailedSurfaces.value = value;
   for (const { mesh, original, rounded } of geometryVariants) mesh.geometry = enabled ? rounded : original;
+  for (const { object, detailed } of modeDetails) object.visible = enabled === detailed;
 }
 
 export function addRoundedSurface(mesh: THREE.Mesh, rounded: THREE.BufferGeometry) {
   geometryVariants.push({ mesh, original: mesh.geometry, rounded });
+}
+
+export function showSurfaceDetail(object: THREE.Object3D, detailed = true) {
+  object.visible = detailedSurfaces.value === Number(detailed);
+  if (detailed) object.raycast = () => {};
+  modeDetails.push({ object, detailed });
 }
 
 function tileNoise(width: number, height: number, random: () => number) {
@@ -54,6 +63,31 @@ function surfaceTexture() {
 }
 
 let texture: THREE.DataTexture | undefined;
+const TRACK = '#define WORN_TRACK\n' + DIRT;
+const SWEPT_TILES = '#define SWEPT_EAVES\n' + TILES;
+const flagstone = /* glsl */`
+  float patina = texture2D(uSurfaceTile, vSurfacePosition.xz * 0.28 + vec2(0.17, 0.41)).r;
+  float lichen = smoothstep(0.57, 0.80, grit * 0.27 + stain * 0.39 + patina * 0.34);
+  float crack = fissure * smoothstep(0.38, 0.70, patina);
+  vec3 slate = diffuseColor.rgb * stoneTint * (0.80 + 0.32 * patina - 0.52 * crack);
+  diffuseColor.rgb = mix(slate, vec3(0.084, 0.094, 0.041), lichen * 0.74);
+  relief = mineral - 0.18 * crack;
+`;
+const paper = /* glsl */`
+  float fibres = texture2D(uSurfaceTile, vSurfacePosition.xy * vec2(1.1, 0.52)).b;
+  float paperAge = smoothstep(0.33, 0.72, stain * 0.73 + fibres * 0.27);
+  // Preserve the separate paper light and stain it in the same places as the diffuse texture.
+  paperTint = mix(vec3(1.0, 0.96, 0.86), vec3(0.75, 0.64, 0.49), paperAge);
+  diffuseColor.rgb *= paperTint;
+  relief = grit * 0.12;
+`;
+const cloth = /* glsl */`
+  vec3 weave = surfaceSample(vSurfacePosition * vec3(0.92, 0.77, 0.92), worldNormal);
+  float bleached = smoothstep(0.32, 0.75, stain * 0.59 + weave.b * 0.41);
+  vec3 dyed = diffuseColor.rgb * (0.72 + 0.32 * grit + 0.13 * weave.b);
+  diffuseColor.rgb = mix(dyed, mix(dyed, vec3(0.30, 0.218, 0.135), 0.25), bleached);
+  relief = weave.g * 0.46 + weave.b * 0.26;
+`;
 const finishes = {
   stone: { scale: 0.46, stretch: 1, bump: 0.020, height: 'mineral', color: 'stoneTint', roughness: 0.94 },
   boulder: { scale: 0.46, stretch: 1, bump: 0.017, height: 'mineral', color: 'stoneTint', roughness: 0.96 },
@@ -63,10 +97,24 @@ const finishes = {
   clay: { scale: 0.53, stretch: 1, bump: 0.009, height: 'mineral', color: 'clayTint', roughness: 0.93 },
   foliage: { scale: 0.85, stretch: 1, bump: 0.005, height: 'grit', color: 'leafTint', roughness: 0.94 },
   terrain: { scale: 0.34, stretch: 1, bump: 0.012, height: 'mineral', color: 'stoneTint', roughness: 0.98 },
+  track: { scale: 0.75, stretch: 1, bump: 0.030, height: 'grit', color: '', roughness: 0.99, shader: TRACK },
+  lane: { scale: 0.65, stretch: 1, bump: 0.024, height: 'grit', color: '', roughness: 0.99, shader: DIRT },
+  pavers: { scale: 0.62, stretch: 1, bump: 0.027, height: 'mineral', color: '', roughness: 0.97, shader: PAVERS },
+  flagstone: { scale: 0.55, stretch: 1, bump: 0.022, height: 'mineral', color: '', roughness: 0.95, shader: flagstone },
+  tiles: { scale: 0.45, stretch: 1, bump: 0.016, height: 'mineral', color: '', roughness: 0.92, shader: TILES },
+  sweptTiles: { scale: 0.45, stretch: 1, bump: 0.018, height: 'mineral', color: '', roughness: 0.92, shader: SWEPT_TILES },
+  thatch: { scale: 0.43, stretch: 1, bump: 0.013, height: 'grit', color: '', roughness: 0.98, shader: THATCH },
+  siding: { scale: 0.42, stretch: 0.5, bump: 0.018, height: 'grain', color: '', roughness: 0.93, shader: SIDING },
+  plaster: { scale: 0.54, stretch: 1, bump: 0.008, height: 'grit', color: '', roughness: 0.98, shader: PLASTER },
+  masonry: { scale: 0.46, stretch: 1, bump: 0.036, height: 'mineral', color: '', roughness: 0.97, shader: MASONRY },
+  paper: { scale: 0.67, stretch: 1, bump: 0.003, height: 'grit', color: '', roughness: 0.94, shader: paper },
+  cloth: { scale: 0.42, stretch: 1, bump: 0.005, height: 'grit', color: '', roughness: 0.97, shader: cloth },
 };
 
 export function surfaceMaterial(mat: THREE.MeshStandardMaterial, style: keyof typeof finishes, smooth?: 'mesh' | 'rounded') {
   const finish = finishes[style], compile = mat.onBeforeCompile, cacheKey = mat.customProgramCacheKey();
+  const pattern = 'shader' in finish ? finish.shader : '';
+  const roofVarying = style === 'sweptTiles' ? 'varying vec2 vRoofPanelPosition;\n' : '';
   mat.onBeforeCompile = (sh, renderer) => {
     compile.call(mat, sh, renderer);
     sh.uniforms.uDetailedSurfaces = detailedSurfaces;
@@ -74,12 +122,13 @@ export function surfaceMaterial(mat: THREE.MeshStandardMaterial, style: keyof ty
     const smoothVarying = smooth ? 'varying vec3 vSurfaceNormal;\n' : '';
     sh.vertexShader = `varying vec3 vSurfacePosition;
 uniform float uDetailedSurfaces;
-${smoothVarying}${smooth === 'rounded' ? 'attribute vec3 aRoundedNormal;\n' : ''}` + sh.vertexShader
+${smoothVarying}${roofVarying}${smooth === 'rounded' ? 'attribute vec3 aRoundedNormal;\n' : ''}` + sh.vertexShader
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
         ${smooth === 'rounded' ? 'if (uDetailedSurfaces > 0.5) objectNormal = aRoundedNormal;' : ''}`)
       .replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
         ${smooth ? 'vSurfaceNormal = normalize(transformedNormal);' : ''}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+        ${style === 'sweptTiles' ? 'vRoofPanelPosition = position.xz;' : ''}
         vSurfacePosition = vec3(0.0);
         if (uDetailedSurfaces > 0.5) {
           vec4 surfacePosition = vec4(position, 1.0);
@@ -89,7 +138,7 @@ ${smoothVarying}${smooth === 'rounded' ? 'attribute vec3 aRoundedNormal;\n' : ''
           vSurfacePosition = (modelMatrix * surfacePosition).xyz;
         }`);
     sh.fragmentShader = `varying vec3 vSurfacePosition;
-${smoothVarying}
+${smoothVarying}${roofVarying}
 uniform float uDetailedSurfaces;
 uniform sampler2D uSurfaceTile;
 
@@ -109,7 +158,9 @@ vec3 surfaceRelief(vec3 n, float h, vec3 p) {
   vec3 gradient = (dFdx(h) * rx + dFdy(h) * ry) * sign(det) / max(abs(det), 0.000001);
   return normalize(n - gradient / max(1.0, length(gradient) * 1.5));
 }
-` + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+${pattern ? FINISH_HELPERS : ''}
+` + sh.fragmentShader
+    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
     if (uDetailedSurfaces > 0.5) {
       ${smooth ? 'normal = normalize(vSurfaceNormal * faceDirection);' : ''}
       vec3 worldNormal = inverseTransformDirection(normal, viewMatrix);
@@ -130,7 +181,7 @@ vec3 surfaceRelief(vec3 n, float h, vec3 p) {
       vec3 leafTint = mix(vec3(0.68, 0.66, 0.62), vec3(1.14, 1.16, 1.07), grit);
       ${style === 'boulder' ? `float moss = smoothstep(0.44, 0.92, worldNormal.y * 0.76 + stain * 0.50);
         diffuseColor.rgb = mix(vec3(0.108, 0.115, 0.132), vec3(0.042, 0.084, 0.029), moss);` : ''}
-      diffuseColor.rgb *= ${finish.color};
+      ${finish.color ? `diffuseColor.rgb *= ${finish.color};` : ''}
       ${style === 'terrain' ? `vec3 soil = mix(vec3(0.019, 0.013, 0.007), vec3(0.049, 0.036, 0.017), stain);
         diffuseColor.rgb = mix(soil * (0.76 + 0.51 * grit), diffuseColor.rgb, smoothstep(0.1, 0.75, vRock));` : ''}
       ${style === 'boards' ? `float joint = abs(fract(board + 0.5) - 0.5);
@@ -138,8 +189,16 @@ vec3 surfaceRelief(vec3 n, float h, vec3 p) {
         diffuseColor.rgb *= mix(0.36, 0.86 + offset * 0.22, mix(1.0, seam, abs(worldNormal.y)));` : ''}
       roughnessFactor = max(roughnessFactor, ${finish.roughness.toFixed(2)});
       metalnessFactor = 0.0;
-      normal = surfaceRelief(normal, ${finish.height} * ${finish.bump.toFixed(3)}, -vViewPosition);
+      float relief = ${finish.height};
+      ${pattern}
+      normal = surfaceRelief(normal, relief * ${finish.bump.toFixed(3)}, -vViewPosition);
     }`);
+    if (style === 'paper') {
+      // The paper light uses an emissive map, applied after the normal and diffuse weathering.
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <map_fragment>', 'vec3 paperTint = vec3(1.0);\n#include <map_fragment>')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= paperTint;');
+    }
   };
   mat.customProgramCacheKey = () => `${cacheKey}|surface:${style}:${smooth ?? ''}`;
   return mat;

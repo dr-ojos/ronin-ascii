@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { scene } from './renderer';
 import { M, CLS, tagMat, shadowTree } from './materials';
 import { POND, POND_SHORE_GLSL, pondDepth, wind } from './nature';
-import { surfaceMaterial } from './surfaces';
+import { addRoundedSurface, surfaceMaterial } from './surfaces';
 import { addCollider } from './physics';
 import { addLight } from './lights';
 import { campfire } from './campfire';
@@ -20,45 +20,50 @@ const rnd = (a: number, b: number) => a + R() * (b - a);
 // ------------------------------------------------------------ materials
 export const MT = {
   wood: tagMat(surfaceMaterial(M(0x3e2b22, { roughness: 0.9 }), 'wood'), CLS.wood),
+  siding: tagMat(surfaceMaterial(M(0x3e2b22, { roughness: 0.9 }), 'siding'), CLS.wood),
   woodL: tagMat(surfaceMaterial(M(0x6a4630, { roughness: 0.8 }), 'wood'), CLS.wood),
   red: tagMat(surfaceMaterial(M(0xb3261e, { roughness: 0.6 }), 'wood'), CLS.wood),
   vermilion: tagMat(surfaceMaterial(M(0xd8381c, { roughness: 0.55, emissive: 0x5a1004, emissiveIntensity: 1 }), 'wood'), CLS.wood),
   black: tagMat(surfaceMaterial(M(0x16141a), 'wood'), CLS.wood),
-  roof: tagMat(surfaceMaterial(M(0x2b3246, { roughness: 0.6, metalness: 0.25 }), 'clay'), CLS.wood),
+  roof: tagMat(surfaceMaterial(M(0x2b3246, { roughness: 0.6, metalness: 0.25 }), 'tiles'), CLS.wood),
   roofL: tagMat(surfaceMaterial(M(0x5a6478, { roughness: 0.6, metalness: 0.3 }), 'clay'), CLS.wood),
-  thatch: tagMat(surfaceMaterial(M(0x5e5038, { roughness: 1 }), 'wood'), CLS.wood),
-  plaster: tagMat(surfaceMaterial(M(0xc9c6bc, { roughness: 0.9 }), 'clay'), CLS.wood),
+  thatch: tagMat(surfaceMaterial(M(0x5e5038, { roughness: 1 }), 'thatch'), CLS.wood),
+  plaster: tagMat(surfaceMaterial(M(0xc9c6bc, { roughness: 0.9 }), 'plaster'), CLS.wood),
   stone: tagMat(surfaceMaterial(M(0x6e6f75, { roughness: 1 }), 'stone'), CLS.ground),
-  stoneD: tagMat(surfaceMaterial(M(0x4d4f57, { roughness: 1, flatShading: true }), 'stone'), CLS.ground),
+  foundation: tagMat(surfaceMaterial(M(0x6e6f75, { roughness: 1 }), 'masonry'), CLS.ground),
+  stoneD: tagMat(surfaceMaterial(M(0x4d4f57, { roughness: 1, flatShading: true }), 'masonry'), CLS.ground),
   gravel: tagMat(surfaceMaterial(M(0x33374a, { roughness: 0.4, metalness: 0.1 }), 'gravel'), CLS.ground),
+  lane: tagMat(surfaceMaterial(M(0x33374a, { roughness: 0.4, metalness: 0.1 }), 'lane'), CLS.ground),
+  pavers: tagMat(surfaceMaterial(M(0x33374a, { roughness: 0.4, metalness: 0.1 }), 'pavers'), CLS.ground),
   fire: tagMat(M(0xffb050, { emissive: 0xff9530, emissiveIntensity: 2.4 }), CLS.light),
   chochin: tagMat(M(0xff6a2a, { emissive: 0xff5a1a, emissiveIntensity: 2.2 }), CLS.light),
   gold: tagMat(M(0xffd060, { emissive: 0xffb030, emissiveIntensity: 1.6, metalness: 0.6 }), CLS.light),
-  cloth: tagMat(M(0xd8d0b8, { roughness: 1, side: THREE.DoubleSide }), CLS.wood),
+  cloth: tagMat(surfaceMaterial(M(0xd8d0b8, { roughness: 1, side: THREE.DoubleSide }), 'cloth'), CLS.wood),
   banner: [0xb3261e, 0xe8e0cc, 0x1c2a4a].map(c => tagMat(M(c, { roughness: 1, side: THREE.DoubleSide }), CLS.wood)),
   water: waterMaterial(),
   road: roadMaterial(),
   lily: tagMat(M(0x2f5a2a, { roughness: 0.7, side: THREE.DoubleSide }), CLS.foliage),
   reed: tagMat(M(0x4f6a3a, { roughness: 0.8 }), CLS.grass),
-  shoji: tagMat(new THREE.MeshStandardMaterial({ map: shojiTexture(), emissiveMap: shojiTexture(), emissive: 0xffffff, emissiveIntensity: 1.4, color: 0x333333 }), CLS.light),
-  shojiDark: tagMat(new THREE.MeshStandardMaterial({ map: shojiTexture(true), color: 0x8a8478, roughness: 0.9 }), CLS.wood)
+  shoji: tagMat(surfaceMaterial(new THREE.MeshStandardMaterial({ map: shojiTexture(), emissiveMap: shojiTexture(), emissive: 0xffffff, emissiveIntensity: 1.4, color: 0x333333 }), 'paper'), CLS.light),
+  shojiDark: tagMat(surfaceMaterial(new THREE.MeshStandardMaterial({ map: shojiTexture(true), color: 0x8a8478, roughness: 0.9 }), 'paper'), CLS.wood)
 };
 
 function roadMaterial() {
   const mat = surfaceMaterial(new THREE.MeshStandardMaterial({
     vertexColors: true, map: gravelTexture(), roughness: 0.9, metalness: 0
-  }), 'gravel');
+  }), 'track');
   const compile = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, renderer) => {
     compile.call(mat, sh, renderer);
     sh.fragmentShader = POND_SHORE_GLSL + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      float roadFringe = 0.0;
       if (uDetailedSurfaces > 0.5) {
         vec2 fromPond = vSurfacePosition.xz - vec2(${POND.x.toFixed(2)}, ${POND.z.toFixed(2)});
         if (length(fromPond) < pondRadius(fromPond * vec2(1.0, -1.0))) discard;
         float edge = min(vMapUv.x, 1.0 - vMapUv.x);
-        float wear = texture2D(uSurfaceTile, vSurfacePosition.xz * 0.32).r;
-        if (edge < 0.12 * wear) discard;
-        diffuseColor.rgb = mix(diffuseColor.rgb * 0.62, diffuseColor.rgb, smoothstep(0.0, 0.18, edge));
+        vec3 wear = texture2D(uSurfaceTile, vSurfacePosition.xz * 0.27).rgb;
+        roadFringe = 0.012 + smoothstep(0.33, 0.74, wear.r) * 0.129 + wear.g * 0.028;
+        if (edge < roadFringe) discard;
       }`);
   };
   return tagMat(mat, CLS.ground);
@@ -129,6 +134,29 @@ export const G = {
   sphere: new THREE.SphereGeometry(0.5, 12, 8),
   plane: new THREE.PlaneGeometry(1, 1)
 };
+
+// Hipped roof with a raised ridge and a slight outward sweep at the eaves.
+const thatchedHip = (() => {
+  const rings = [
+    [[-0.50, 0, -0.50], [-0.50, 0, 0.50], [0.50, 0, 0.50], [0.50, 0, -0.50]],
+    [[-0.40, 0.28, -0.35], [-0.40, 0.28, 0.35], [0.40, 0.28, 0.35], [0.40, 0.28, -0.35]],
+    [[-0.23, 1, 0], [-0.23, 1, 0], [0.23, 1, 0], [0.23, 1, 0]],
+  ];
+  const vertices: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const [a, b] = [rings[0][i], rings[0][j]];
+    const [c, d] = [rings[1][i], rings[1][j]];
+    const [e, f] = [rings[2][i], rings[2][j]];
+    vertices.push(...a, ...b, ...d, ...a, ...d, ...c, ...c, ...d, ...f);
+    if (e[0] !== f[0]) vertices.push(...c, ...f, ...e);
+  }
+  vertices.push(...rings[0][0], ...rings[0][2], ...rings[0][1], ...rings[0][0], ...rings[0][3], ...rings[0][2]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+})();
 // a ridge tent: triangular prism along local z, apex up
 export const TENT = new THREE.CylinderGeometry(1.8, 1.8, 4.2, 3, 1, true).rotateX(-Math.PI / 2).translate(0, 0.9, 0);
 export type Obj = THREE.Object3D;
@@ -196,8 +224,8 @@ export function torii(p: Obj, x: number, y: number, z: number, ry: number, k = 1
 /** a small shrine hall (the main one, scaled down) */
 export function miniShrine(p: Obj, x: number, y: number, z: number, ry: number, k: number) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry; g.scale.setScalar(k); p.add(g);
-  box(g, 10, 0.7, 7, MT.stone, 0, 0, 0);
-  box(g, 7.9, 2.6, 5, MT.wood, 0, 0.85, -0.1);
+  box(g, 10, 0.7, 7, MT.foundation, 0, 0, 0);
+  box(g, 7.9, 2.6, 5, MT.siding, 0, 0.85, -0.1);
   for (const sx of [-3, -1, 1, 3]) add(g, G.plane, MT.shoji, sx, 2.0, 2.42, 1.85, 2.2, 1);
   for (const sx of [-4, -2, 0, 2, 4]) post(g, 0.15, 2.9, MT.woodL, sx, 0.75, 2.55);
   for (const sgn of [1, -1]) { const r = box(g, 11, 0.22, 4.7, MT.roof, 0, 3.95, 2.06 * sgn); r.rotation.x = 0.5 * sgn; }
@@ -368,21 +396,22 @@ export function wadeDepth(x: number, z: number) {
 // ------------------------------------------------------------ the village of Kiri
 function house(p: Obj, x: number, z: number, ry: number, w: number, d: number, lit: boolean) {
   const y = groundY(x, z), g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry; p.add(g);
-  box(g, w + 0.8, 0.45, d + 0.8, MT.stone, 0, -0.1, 0);
-  box(g, w, 2.5, d, MT.wood, 0, 0.35, 0);
+  box(g, w + 0.8, 0.45, d + 0.8, MT.foundation, 0, -0.1, 0);
+  box(g, w, 2.5, d, MT.siding, 0, 0.35, 0);
   const n = Math.max(2, Math.floor(w / 1.6));
   for (let i = 0; i < n; i++) add(g, G.plane, lit && i % 3 !== 1 ? MT.shoji : MT.shojiDark, (i - (n - 1) / 2) * (w / n), 1.5, d / 2 + 0.02, w / n * 0.86, 1.9, 1);
   for (const sx of [-w / 2, w / 2]) for (const sz of [-d / 2, d / 2]) post(g, 0.13, 2.85, MT.woodL, sx, 0.35, sz);
   box(g, w + 0.6, 0.12, 1.2, MT.woodL, 0, 0.5, d / 2 + 0.7);                  // engawa veranda
-  pyr(g, w + 2.4, 3.1, d + 2.4, MT.thatch, 0, 2.75, 0);
+  const roof = pyr(g, w + 2.4, 3.1, d + 2.4, MT.thatch, 0, 2.75, 0);
+  addRoundedSurface(roof, thatchedHip);
   box(g, w * 0.5, 0.3, 0.5, MT.thatch, 0, 5.7, 0);
   if (lit) { post(g, 0.06, 2.2, MT.wood, w / 2 + 1.6, 0, d / 2 + 1.7); box(g, 0.08, 0.08, 0.9, MT.wood, w / 2 + 1.6, 2.1, d / 2 + 1.35); hangingLantern(g, w / 2 + 1.6, 1.75, d / 2 + 1.0, 0.6); const [lx, lz] = toWorld(x, z, ry, 0, d / 2 + 1.6); addLight({ x: lx, y: y + 2, z: lz, color: 0xffa050, intensity: 5, distance: 12, decay: 1.4 }); }
   solidBox(x, z, w + 0.8, d + 0.8, ry);
 }
 function buildVillage() {
   const pl = place('aldea'), y = pl.level!, g = new THREE.Group();
-  // gravel plaza + the well in the middle, lantern strings around
-  const plaza = new THREE.Mesh(new THREE.CircleGeometry(15, 40), MT.gravel); plaza.rotation.x = -Math.PI / 2; plaza.position.set(pl.x, y + 0.03, pl.z); plaza.receiveShadow = true; g.add(plaza);
+  // paved plaza with a central well and strings of lanterns
+  const plaza = new THREE.Mesh(new THREE.CircleGeometry(15, 40), MT.pavers); plaza.rotation.x = -Math.PI / 2; plaza.position.set(pl.x, y + 0.06, pl.z); plaza.receiveShadow = true; g.add(plaza);
   disc(pl.x, pl.z, 15.5);
   const well = new THREE.Group(); well.position.set(pl.x, y, pl.z); g.add(well);
   add(well, G.cyl, MT.stone, 0, 0.45, 0, 2.2, 0.9, 2.2);

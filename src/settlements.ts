@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { M, CLS, tagMat } from './materials';
+import { showSurfaceDetail, surfaceMaterial } from './surfaces';
 import { addCollider } from './physics';
 import { addLight } from './lights';
 import { groundY } from './terrain';
@@ -21,11 +22,11 @@ const rnd = (a: number, b: number) => a + R() * (b - a);
 const pick = <T,>(l: T[]) => l[Math.floor(R() * l.length)];
 
 const MAT = {
-  charred: tagMat(M(0x17131a, { roughness: 1, flatShading: true }), CLS.wood),
+  charred: tagMat(surfaceMaterial(M(0x17131a, { roughness: 1, flatShading: true }), 'wood'), CLS.wood),
   moss: tagMat(M(0x4a5a3e, { roughness: 1, flatShading: true }), CLS.ground),
   wisp: tagMat(M(0x9ff0ff, { emissive: 0x6fd8ff, emissiveIntensity: 2.2 }), CLS.light),
-  noren: [0x1c2a4a, 0x7a1c16, 0x2e4a2a, 0xd8d0b8].map(c => tagMat(M(c, { roughness: 1, side: THREE.DoubleSide }), CLS.wood)),
-  awning: [0xb3261e, 0xe8e0cc, 0x3a5a8a, 0xc08a2a].map(c => tagMat(M(c, { roughness: 1, side: THREE.DoubleSide }), CLS.wood)),
+  noren: [0x1c2a4a, 0x7a1c16, 0x2e4a2a, 0xd8d0b8].map(c => tagMat(surfaceMaterial(M(c, { roughness: 1, side: THREE.DoubleSide }), 'cloth'), CLS.wood)),
+  awning: [0xb3261e, 0xe8e0cc, 0x3a5a8a, 0xc08a2a].map(c => tagMat(surfaceMaterial(M(c, { roughness: 1, side: THREE.DoubleSide }), 'cloth'), CLS.wood)),
   crate: tagMat(M(0x7a5a3a, { roughness: 1 }), CLS.wood)
 };
 /** gable roof: triangular prism, base 1 x 1 at y = 0, apex at y = 1, ridge along local z */
@@ -39,36 +40,73 @@ const roof = (p: Obj, across: number, h: number, along: number, mat: THREE.Mater
 function bake(g: THREE.Group) {
   g.updateMatrixWorld(true);
   const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const facadeByMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
   g.traverse(o => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || (m as THREE.InstancedMesh).isInstancedMesh) return;
     const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
     for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(k)) geo.deleteAttribute(k);
-    const mat = m.material as THREE.Material; let l = byMat.get(mat); if (!l) byMat.set(mat, l = []); l.push(geo);
+    const mat = m.material as THREE.Material;
+    const batch = m.parent?.userData.detailedFacade ? facadeByMat : byMat;
+    let parts = batch.get(mat);
+    if (!parts) batch.set(mat, parts = []);
+    parts.push(geo);
   });
   const out = new THREE.Group();
-  for (const [mat, geos] of byMat) {
-    const merged = mergeGeometries(geos, false); geos.forEach(x => x.dispose());
-    if (merged) out.add(new THREE.Mesh(merged, mat));
+  for (const batches of [byMat, facadeByMat]) for (const [mat, geos] of batches) {
+    const merged = mergeGeometries(geos, false);
+    geos.forEach(x => x.dispose());
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    if (batches === facadeByMat) showSurfaceDetail(mesh);
+    out.add(mesh);
   }
   return out;
+}
+
+function shopFront(g: THREE.Group, w: number, d: number, door: number, lit: boolean) {
+  const trim = new THREE.Group();
+  trim.userData.detailedFacade = true;
+  g.add(trim);
+  const front = d / 2;
+  box(trim, 1.13, 2.18, 0.055, MT.black, door, 0.26, front + 0.042);
+  for (const s of [-1, 1]) {
+    box(trim, 0.12, 2.69, 0.16, MT.woodL, door + s * 0.64, 0.21, front + 0.08);
+    box(trim, 0.16, 2.98, 0.16, MT.woodL, s * (w / 2 - 0.10), 0.28, front + 0.055);
+    box(trim, 0.14, 2.25, 0.10, MT.woodL, s * (w / 2 - 0.135), 3.20, front - 1.39);
+  }
+  box(trim, w - 0.09, 0.14, 0.17, MT.woodL, 0, 2.96, front + 0.06);
+  box(trim, w - 0.22, 0.10, 0.12, MT.woodL, 0, 5.37, front - 1.39);
+  box(trim, w * 0.62, 0.095, 0.10, MT.woodL, 0, 3.86, front - 1.35);
+  box(trim, w * 0.62, 0.08, 0.09, MT.woodL, 0, 4.78, front - 1.35);
+  for (let x = -w * 0.28; x < w * 0.29; x += 0.26) {
+    box(trim, 0.046, 0.91, 0.07, MT.woodL, x, 3.91, front - 1.335);
+  }
+  if (lit) {
+    const window = -door * 0.5 + (door > 0 ? -w / 4 : w / 4);
+    box(trim, w * 0.44, 0.10, 0.14, MT.woodL, window, 0.50, front + 0.064);
+    for (let dx = -w * 0.19; dx < w * 0.20; dx += 0.27) {
+      if (Math.abs(window + dx - door) > 0.70) box(trim, 0.042, 2.04, 0.07, MT.woodL, window + dx, 0.52, front + 0.07);
+    }
+  }
 }
 
 // ------------------------------------------------------------ the town of Asagiri
 /** a two-storey town house with a lattice front, a shop curtain and a tiled gable roof (front = local +z) */
 function machiya(p: Obj, x: number, y: number, z: number, ry: number, w: number, d: number, lit: boolean, wx: number, wz: number) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry; p.add(g);
-  box(g, w + 0.3, 0.35, d + 0.3, MT.stone, 0, -0.15, 0);
-  box(g, w, 3, d, MT.wood, 0, 0.2, 0);
+  box(g, w + 0.3, 0.35, d + 0.3, MT.foundation, 0, -0.15, 0);
+  box(g, w, 3, d, MT.siding, 0, 0.2, 0);
   const door = rnd(-w / 4, w / 4);
   if (lit) add(g, G.plane, MT.shoji, -door * 0.5 + (door > 0 ? -w / 4 : w / 4), 1.6, d / 2 + 0.03, w * 0.42, 2.1, 1);
   else for (let sx = -w / 2 + 0.3; sx < w / 2 - 0.2; sx += 0.32) if (Math.abs(sx - door) > 0.8) box(g, 0.07, 2.5, 0.07, MT.woodL, sx, 0.35, d / 2 + 0.05);
   add(g, G.plane, pick(MAT.noren), door, 2.45, d / 2 + 0.08, 1.4, 0.9, 1);                     // noren over the door
   const eave = box(g, w + 0.6, 0.12, 1.5, MT.roof, 0, 3.15, d / 2 + 0.55); eave.rotation.x = 0.32;  // pent roof
-  box(g, w - 0.2, 2.3, d - 1.4, R() < 0.5 ? MT.plaster : MT.wood, 0, 3.2, -0.7);
+  box(g, w - 0.2, 2.3, d - 1.4, R() < 0.5 ? MT.plaster : MT.siding, 0, 3.2, -0.7);
   add(g, G.plane, MT.shojiDark, 0, 4.35, d / 2 - 1.38, w * 0.6, 0.9, 1);                        // mushiko window
   roof(g, d - 1.4 + 1.8, 1.9, w + 1.1, MT.roof, 0, 5.45, -0.7, Math.PI / 2);
   box(g, w + 1.1, 0.22, 0.4, MT.roofL, 0, 7.25, -0.7);
+  shopFront(g, w, d, door, lit);
   if (R() < 0.55) { box(g, 0.55, 1.7, 0.08, MT.woodL, door + 1.2, 0.8, d / 2 + 0.25); }       // shop sign board
   if (lit) {
     hangingLantern(g, door - 0.9, 2.3, d / 2 + 0.85, 0.5);
@@ -80,8 +118,8 @@ function machiya(p: Obj, x: number, y: number, z: number, ry: number, w: number,
 /** a thatched cottage for the back lanes */
 function cottage(p: Obj, x: number, y: number, z: number, ry: number, w: number, d: number, lit: boolean, wx: number, wz: number) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry; p.add(g);
-  box(g, w + 0.6, 0.35, d + 0.6, MT.stone, 0, -0.15, 0);
-  box(g, w, 2.4, d, MT.wood, 0, 0.2, 0);
+  box(g, w + 0.6, 0.35, d + 0.6, MT.foundation, 0, -0.15, 0);
+  box(g, w, 2.4, d, MT.siding, 0, 0.2, 0);
   add(g, G.plane, lit ? MT.shoji : MT.shojiDark, 0, 1.4, d / 2 + 0.03, w * 0.55, 1.6, 1);
   pyr(g, w + 2.2, 3, d + 2.2, MT.thatch, 0, 2.55, 0);
   box(g, w * 0.45, 0.3, 0.45, MT.thatch, 0, 5.45, 0);
@@ -125,14 +163,17 @@ function buildTown() {
   const pl = place('pueblo'), cx = pl.x, cz = pl.z, L = pl.level!, g = new THREE.Group(); g.position.set(cx, L, cz);
   const ly = (x: number, z: number) => groundY(cx + x, cz + z) - L;
   const HALF_ST = 106, ST = 8, BACK = 44;
-  // streets: gravel, no grass
-  const street = (x: number, z: number, w: number, d: number) => {
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(w, d), MT.gravel); s.rotation.x = -Math.PI / 2; s.position.set(x, ly(x, z) + 0.04, z); g.add(s);
+  // Packed earth on the streets and worn paving around the well.
+  const street = (x: number, z: number, w: number, d: number, paved = false) => {
+    const s = new THREE.Mesh(new THREE.PlaneGeometry(w, d), paved ? MT.pavers : MT.lane);
+    s.rotation.x = -Math.PI / 2;
+    s.position.set(x, ly(x, z) + (paved ? 0.065 : 0.04), z);
+    g.add(s);
     FOOTPRINTS.rects.push([cx + x, cz + z, w, d, 0]);
   };
   street(0, 0, HALF_ST * 2, ST); street(0, 0, ST, HALF_ST * 2);
   for (const s of [-1, 1]) street(0, s * BACK, HALF_ST * 1.7, 5);
-  street(0, 0, 32, 32);                                                           // plaza
+  street(0, 0, 32, 32, true);                                                     // plaza
   // machiya rows along both main streets, contiguous like a real town
   const rowAlong = (axis: 'x' | 'z', side: number) => {
     for (let t = -HALF_ST + 4; t < HALF_ST - 4;) {

@@ -9,7 +9,7 @@ import { addCollider, isFree } from './physics';
 import { addLight, updateLights } from './lights';
 import { buildTerrainMesh, buildSkyline } from './terrain';
 import { buildStructures, updateStructures, blockers, floors, MT } from './structures';
-import { addRoundedSurface, surfaceMaterial } from './surfaces';
+import { addRoundedSurface, showSurfaceDetail, surfaceMaterial } from './surfaces';
 import { updateChunks, chunkBlockers } from './chunks';
 import { buildMasks } from './map';
 import { buildLandmarks } from './landmarks';
@@ -124,7 +124,7 @@ function wornFlagstone(width: number, depth: number, index: number) {
 
 // stone path + gravel courtyard
 {
-  const slab = tagMat(surfaceMaterial(M(0x5c5e66, { roughness: 0.32, metalness: 0.15 }), 'stone'), CLS.ground);
+  const slab = tagMat(surfaceMaterial(M(0x5c5e66, { roughness: 0.32, metalness: 0.15 }), 'flagstone'), CLS.ground);
   for (let z = 6.2, i = 0; z > -15.5; z -= rnd(0.85, 1.0), i++) {
     const w = rnd(1.9, 2.4), d = rnd(0.65, 0.8);
     const b = box(w, 0.08, d, slab);
@@ -164,6 +164,17 @@ function wornFlagstone(width: number, depth: number, index: number) {
 // shrine with glowing shoji: hollow, with the middle doors slid open. Inside is Masa's shop (shop.ts);
 // its roof hides while you are in, so the camera sees you
 export const shrineRoof = new THREE.Group();
+const shrineEaveRise = (x: number, z: number) =>
+  0.28 * Math.pow(Math.abs(x) / 5.5, 6) + 0.33 * Math.pow(THREE.MathUtils.clamp(z / 4.7 + 0.5, 0, 1), 2.5);
+function bendShrineRoof(geometry: THREE.BufferGeometry, sign: number, atEave?: number) {
+  const pos = geometry.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const z = atEave ?? pos.getZ(i);
+    pos.setY(i, pos.getY(i) + shrineEaveRise(pos.getX(i), sign * z));
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
 {
   const shojiTex = (() => {
     const c = document.createElement('canvas'); c.width = 128; c.height = 160;
@@ -176,20 +187,24 @@ export const shrineRoof = new THREE.Group();
     x.fillRect(0, 0, 128, 8); x.fillRect(0, 152, 128, 8);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   })();
-  const { wood, woodL, roof: roofM, roofL } = MT;
+  const { wood, woodL, siding, roof: roofM, roofL } = MT;
+  const roofPanel = tagMat(surfaceMaterial(M(0x2b3246, { roughness: 0.6, metalness: 0.25 }), 'sweptTiles'), CLS.wood);
   const boards = tagMat(surfaceMaterial(M(0x3e2b22, { roughness: 0.9 }), 'boards'), CLS.wood);
   const stoneB = tagMat(surfaceMaterial(M(0x5d6068, { roughness: 1 }), 'stone'), CLS.ground);
-  const shoji = tagMat(new THREE.MeshStandardMaterial({ map: shojiTex, emissiveMap: shojiTex, emissive: 0xffffff, emissiveIntensity: 1.5, color: 0x333333, side: THREE.DoubleSide }), CLS.light);
+  const stoneBase = tagMat(surfaceMaterial(M(0x5d6068, { roughness: 1 }), 'masonry'), CLS.ground);
+  const shoji = tagMat(surfaceMaterial(new THREE.MeshStandardMaterial({
+    map: shojiTex, emissiveMap: shojiTex, emissive: 0xffffff, emissiveIntensity: 1.5, color: 0x333333, side: THREE.DoubleSide
+  }), 'paper'), CLS.light);
   const chochin = tagMat(M(0xff6a2a, { emissive: 0xff5a1a, emissiveIntensity: 2.2 }), CLS.light);
   const g = new THREE.Group(); g.position.set(0, 0, -24);
   g.add(shrineRoof);
   const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, p: THREE.Object3D = g) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); p.add(o); return o; };
-  const foundation = add(new THREE.BoxGeometry(10, 0.7, 7), stoneB, 0, 0.35, 0);
+  const foundation = add(new THREE.BoxGeometry(10, 0.7, 7), stoneBase, 0, 0.35, 0);
   addRoundedSurface(foundation, new RoundedBoxGeometry(10, 0.7, 7, 1, 0.07));
   add(new THREE.BoxGeometry(9.4, 0.15, 6.4), boards, 0, 0.78, 0);
   // walls (back, sides), a ceiling that goes with the roof; the two middle shoji slid aside make the door
-  add(new THREE.BoxGeometry(7.9, 2.6, 0.15), wood, 0, 2.15, -2.53);
-  for (const x of [-3.88, 3.88]) add(new THREE.BoxGeometry(0.15, 2.6, 5), wood, x, 2.15, -0.1);
+  add(new THREE.BoxGeometry(7.9, 2.6, 0.15), siding, 0, 2.15, -2.53);
+  for (const x of [-3.88, 3.88]) add(new THREE.BoxGeometry(0.15, 2.6, 5), siding, x, 2.15, -0.1);
   add(new THREE.BoxGeometry(7.9, 0.1, 5), wood, 0, 3.42, -0.1, shrineRoof);
   for (const x of [-3, 3]) add(new THREE.PlaneGeometry(1.85, 2.2), shoji, x, 2.0, 2.42);
   for (const x of [-2.75, 2.75]) add(new THREE.PlaneGeometry(1.85, 2.2), shoji, x, 2.0, 2.36);
@@ -203,10 +218,26 @@ export const shrineRoof = new THREE.Group();
     const step = add(new THREE.BoxGeometry(2.6, 0.24, 0.45), stoneB, 0, 0.12 + i * 0.24, 4.55 - i * 0.4);
     addRoundedSurface(step, wornStep);
   }
+  const eaveTile = new THREE.SphereGeometry(0.117, 10, 6).scale(1, 0.74, 0.68);
+  const endTileTransform = new THREE.Matrix4();
   for (const sgn of [1, -1]) {
-    const panel = add(new THREE.BoxGeometry(11, 0.22, 4.7), roofM, 0, 4.15, 2.06 * sgn, shrineRoof); panel.rotation.x = 0.5 * sgn;
-    for (let k = -5; k <= 5; k++) { const rib = add(new THREE.BoxGeometry(0.08, 0.06, 4.7), roofL, k, 4.29, 2.06 * sgn, shrineRoof); rib.rotation.x = 0.5 * sgn; rib.position.y += 0.02; }
-    add(new THREE.BoxGeometry(11.2, 0.14, 0.22), roofL, 0, 3.05, 4.1 * sgn, shrineRoof);
+    const panel = add(new THREE.BoxGeometry(11, 0.22, 4.7), roofPanel, 0, 4.15, 2.06 * sgn, shrineRoof); panel.rotation.x = 0.5 * sgn;
+    addRoundedSurface(panel, bendShrineRoof(new THREE.BoxGeometry(11, 0.22, 4.7, 24, 1, 10), sgn));
+    for (let k = -5; k <= 5; k++) {
+      const rib = add(new THREE.BoxGeometry(0.08, 0.06, 4.7), roofL, k, 4.31, 2.06 * sgn, shrineRoof);
+      rib.rotation.x = 0.5 * sgn;
+      showSurfaceDetail(rib, false);
+    }
+    showSurfaceDetail(add(new THREE.BoxGeometry(11.2, 0.14, 0.22), roofL, 0, 3.05, 4.1 * sgn, shrineRoof), false);
+    const fascia = bendShrineRoof(new THREE.BoxGeometry(11.14, 0.13, 0.16, 24), sgn, 2.34 * sgn);
+    showSurfaceDetail(add(fascia, woodL, 0, -0.117, sgn * 2.30, panel));
+    const endTiles = new THREE.InstancedMesh(eaveTile, roofL, 26);
+    for (let i = 0; i < endTiles.count; i++) {
+      const x = (i - (endTiles.count - 1) / 2) * 0.42;
+      endTiles.setMatrixAt(i, endTileTransform.makeTranslation(x, 0.115 + shrineEaveRise(x, 2.35), sgn * 2.34));
+    }
+    panel.add(endTiles);
+    showSurfaceDetail(endTiles);
     const lan = add(new THREE.SphereGeometry(0.32, 14, 10), chochin, 2.6 * sgn, 2.95, 3.55); lan.scale.y = 1.35;
     add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), wood, 2.6 * sgn, 3.42, 3.55);
     add(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 10), wood, 2.6 * sgn, 2.5, 3.55);
