@@ -201,19 +201,24 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   // ---- straw kasa + long hair + half mask
   const hg = new THREE.Group();
   const hatMat = new THREE.MeshStandardMaterial({ map: hatTex(), roughness: 0.9, side: THREE.DoubleSide }); hatMat.userData.role = 'hat';
-  // a kasa a little wider than the shoulders' half-span, not a parasol
-  const kasa = mesh(new THREE.ConeGeometry(0.235, 0.13, 40, 1, true), hatMat, hg, 0, 0.155, -0.01);
-  kasa.rotation.x = 0.14;
-  // rim and cord ride on the cone itself (they used to float apart when the cone tilted)
+  // a kasa a little wider than the shoulders' half-span, not a parasol. It is worn, not perched: the crown of
+  // the head sits inside the cone on the atama-wa (the inner head ring), the brim comes down to the brow and
+  // tilts a little forward, and a red cord runs from the ring down under the chin
+  const kasa = mesh(new THREE.ConeGeometry(0.235, 0.13, 40, 1, true), hatMat, hg, 0, 0.104, -0.012);
+  kasa.rotation.x = 0.04;
+  // rim, cord, knob and head ring ride on the cone itself
   const rim = mesh(new THREE.TorusGeometry(0.235, 0.007, 4, 48), black, kasa, 0, -0.065, 0); rim.rotation.x = Math.PI / 2;
-  const knob = mesh(new THREE.ConeGeometry(0.032, 0.034, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), hg, 0, 0.235, -0.02);
+  const knob = mesh(new THREE.ConeGeometry(0.032, 0.034, 8), new THREE.MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.6 }), kasa, 0, 0.074, 0);
   const cordMat = new THREE.MeshStandardMaterial({ color: 0xb3241c, roughness: 0.55 });
   const cord = mesh(new THREE.TorusGeometry(0.165, 0.007, 5, 40), cordMat, kasa, 0, -0.027, 0); cord.rotation.x = Math.PI / 2;
+  const ring = mesh(new THREE.TorusGeometry(0.068, 0.008, 6, 32), black, kasa, 0, -0.046, 0.006); ring.rotation.x = Math.PI / 2; ring.scale.set(1, 1.14, 1);
   const chin: THREE.Mesh[] = [];
   for (const s of [-1, 1]) {
-    const c = mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.2, 5), cordMat, hg, 0.085 * s, 0.01, 0.03); c.rotation.z = 0.32 * s; chin.push(c);
+    const a = new V(0.064 * s, 0.05, 0.0), b = new V(0.014 * s, -0.112, 0.034), d = b.clone().sub(a);
+    const c = mesh(new THREE.CylinderGeometry(0.004, 0.004, d.length(), 5), cordMat, hg);
+    c.position.copy(a).lerp(b, 0.5); c.quaternion.setFromUnitVectors(UP, d.normalize()); chin.push(c);
   }
-  for (const o of [kasa, rim, knob, cord, ...chin]) o.userData.part = 'hat';
+  for (const o of [kasa, rim, knob, cord, ring, ...chin]) o.userData.part = 'hat';
   // a real face (real-head.ts: a 3D head scan) in place of the soldier's, with black hair combed back to a
   // topknot; human proportions: crown to chin ~0.19 here, the soldier's own head height
   if (headAsset) {
