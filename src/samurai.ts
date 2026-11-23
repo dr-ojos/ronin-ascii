@@ -155,10 +155,12 @@ function curvedPanel(w: number, h: number, curve: number, m: THREE.Material, sx 
 }
 const openCyl = (rt: number, rb: number, h: number, ts: number, tl: number, seg = 24) => new THREE.CylinderGeometry(rt, rb, h, seg, 1, true, ts, tl);
 
+export const BLADE_PROFILE = { base: 0.162, length: 0.72, curve: 0.022, width: 0.031, taper: 0.008 } as const;
 function bladeGeometry() {
-  const L = 0.72, sori = 0.022, sh = new THREE.Shape(), N = 24;
-  const w = (s: number) => 0.031 - 0.008 * (s / L);
-  const c = (s: number) => sori * Math.pow(s / L, 2);
+  const { base, length: L, curve, width, taper } = BLADE_PROFILE;
+  const sh = new THREE.Shape(), N = 24;
+  const w = (s: number) => width - taper * (s / L);
+  const c = (s: number) => curve * Math.pow(s / L, 2);
   sh.moveTo(0, c(0) - w(0) / 2);
   for (let i = 1; i <= N; i++) { const s = (i / N) * (L - 0.05); sh.lineTo(s, c(s) - w(s) / 2); }
   sh.quadraticCurveTo(L - 0.012, c(L) - w(L) * 0.2, L, c(L) + w(L) * 0.35); // kissaki
@@ -166,7 +168,7 @@ function bladeGeometry() {
   const depth = 0.004;
   const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: 0.0022, bevelSize: 0.0016, bevelSegments: 1, curveSegments: 6 });
   g.rotateY(-Math.PI / 2);
-  g.translate(depth / 2, 0, 0.162);
+  g.translate(depth / 2, 0, base);
   g.computeVertexNormals();
   return g;
 }

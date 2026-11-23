@@ -2,7 +2,7 @@
 // character per cell), with a finer character grid for the actors and light-aware contours.
 import * as THREE from 'three';
 import { renderer, DPR } from './renderer';
-import { asciiGrid, BLADE_SPARK_ALPHA, FLOWER_GLYPHS } from './materials';
+import { asciiGrid, BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, FLOWER_GLYPHS } from './materials';
 
 export const bufSize = new THREE.Vector2();
 renderer.getDrawingBufferSize(bufSize);
@@ -200,7 +200,8 @@ export const cellMat = new THREE.ShaderMaterial({
         bool outline = length(mg) > 1.8;
         // what the pixel is made of (alpha: 0.60 cloth, 0.62 metal / lacquer, 0.64 skin)
         float sub = texture2D(tScene, uv).a;
-        float ramp = sub > 0.63 ? ${SKIN_ROW.toFixed(1)} : sub > 0.61 ? ${METAL_ROW.toFixed(1)} : 6.0;
+        bool bladeSheen = abs(surface.a - ${BLADE_SHEEN_ALPHA.toFixed(2)}) < 0.002;
+        float ramp = !bladeSheen && sub > 0.63 ? ${SKIN_ROW.toFixed(1)} : sub > 0.61 ? ${METAL_ROW.toFixed(1)} : 6.0;
         // light and shadow pick the density; an ordered jitter keeps neighbouring cells from repeating
         // the same letter in rows, so the shading reads as a gradient of characters
         float dith = (hash(cell) - 0.5) * 0.9 + (mod(cell.x + cell.y * 2.0, 3.0) - 1.0) * 0.25;
@@ -233,6 +234,11 @@ export const cellMat = new THREE.ShaderMaterial({
           c = mix(c, rimC, rim * lit);
           c *= 1.0 - rim * (1.0 - lit) * 0.78;
           if (outline) c = max(c, tint * 0.1);                             // shadow side: dim, but still a character
+        }
+        if (bladeSheen) {
+          float peak = max(max(surface.r, surface.g), surface.b);
+          vec3 steel = sqrt(surface.rgb / max(peak, 0.01));
+          c = mix(c, steel * (0.30 + 0.95 * sqrt(min(1.0, peak))), 0.86);
         }
         c = modeCol(c, al);
       } else {

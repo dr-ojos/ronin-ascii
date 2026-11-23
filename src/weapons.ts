@@ -3,6 +3,7 @@
 // player.ts reads the current blade through the helpers below; applyWeapon() reshapes the katana mesh.
 import * as THREE from 'three';
 import { sam, bladeMat } from './avatar';
+import { BLADE_PROFILE } from './samurai';
 import { state } from './state';
 
 export interface Weapon {
@@ -72,14 +73,13 @@ export function cycleWeapon() {
 export function resetWeapons() { state.owned = ['katana']; state.weapon = 'katana'; applyWeapon(); }
 
 // ------------------------------------------------------------ the blade mesh
-export const BLADE_BASE = 0.162;
-const BLADE_TIP = 0.882;   // where the blade ends along the katana (samurai.ts bladeGeometry)
+export const BLADE_BASE = BLADE_PROFILE.base;
 let blade: THREE.Mesh | null = null;
 sam.katana.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry.type === 'ExtrudeGeometry') blade = m; });
 let displayed = WEAPONS[0];
 export const displayedWeapon = () => displayed;
 /** katana-space z of the blade's tip (the trail and sparks follow it) */
-export const tipZ = (w: Weapon) => BLADE_BASE + (BLADE_TIP - BLADE_BASE) * w.len;
+export const tipZ = (w: Weapon) => BLADE_BASE + BLADE_PROFILE.length * w.len;
 export function applyWeapon(w = weapon()) {
   displayed = w;
   if (blade) { blade.scale.z = w.len; blade.position.z = BLADE_BASE * (1 - w.len); }

@@ -1,8 +1,9 @@
 // Katana effects: blade light, sparks shed by the edge, and the vapour trail of each cut.
 import * as THREE from 'three';
 import { scene } from './renderer';
-import { BLADE_SPARK_ALPHA, CLS, tagMat } from './materials';
+import { BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, tagMat } from './materials';
 import { sam, bladeMat } from './avatar';
+import { BLADE_PROFILE } from './samurai';
 import { BLADE_BASE, displayedWeapon, tipZ, type Weapon } from './weapons';
 import { player, state } from './state';
 import { rnd } from './utils';
@@ -12,6 +13,55 @@ import { shopStageActive } from './shop-stage';
 const samGlow = new THREE.PointLight(0xffe6c0, 0.8, 3.6, 2);
 const bladeLight = new THREE.PointLight(0xa6dcff, 3, 6, 1.6);
 scene.add(samGlow, bladeLight);
+
+// Paint the moving reflections into the steel. Blade-space coordinates keep them on the bevel
+// even when the shop preview changes the length or a swing turns the katana edge-on.
+const bladeSheen = {
+  uBladeStrength: { value: 0 },
+  uBladeGlints: { value: new THREE.Vector3() },
+  uBladeColors: { value: [new THREE.Color(), new THREE.Color(), new THREE.Color()] }
+};
+{
+  const compile = bladeMat.onBeforeCompile;
+  const cacheKey = bladeMat.customProgramCacheKey.bind(bladeMat);
+  bladeMat.onBeforeCompile = (shader, renderer) => {
+    compile.call(bladeMat, shader, renderer);
+    Object.assign(shader.uniforms, bladeSheen);
+    shader.vertexShader = 'varying vec2 vBlade;\n' + shader.vertexShader.replace(
+      '#include <begin_vertex>', '#include <begin_vertex>\nvBlade = position.yz;'
+    );
+    shader.fragmentShader = /* glsl */`
+      varying vec2 vBlade;
+      uniform float uBladeStrength;
+      uniform vec3 uBladeGlints;
+      uniform vec3 uBladeColors[3];
+    ` + shader.fragmentShader.replace('#include <emissivemap_fragment>', /* glsl */`
+      #include <emissivemap_fragment>
+      if (uBladeStrength > 0.0) {
+        float along = clamp((vBlade.y - ${BLADE_PROFILE.base.toFixed(3)}) / ${BLADE_PROFILE.length.toFixed(3)}, 0.0, 1.0);
+        float width = ${BLADE_PROFILE.width.toFixed(3)} - ${BLADE_PROFILE.taper.toFixed(3)} * along;
+        float center = ${BLADE_PROFILE.curve.toFixed(3)} * along * along;
+        float across = (vBlade.x - center) / width + 0.5;
+        float bevel = 1.0 - smoothstep(0.08, 0.59, across);
+        vec3 d = abs(vec3(along + across * 0.027) - uBladeGlints);
+        vec3 flashes = 1.0 - smoothstep(vec3(0.006), vec3(0.115), d);
+        flashes *= flashes;
+        vec3 glints = flashes.x * uBladeColors[0] + flashes.y * uBladeColors[1] + flashes.z * uBladeColors[2];
+        vec3 tint = mix(uBladeColors[0], uBladeColors[1], smoothstep(0.12, 0.85, along));
+        float grain = 0.9 + 0.1 * sin(along * 121.0 + across * 8.0);
+        totalEmissiveRadiance *= mix(0.28, 0.50, bevel);
+        totalEmissiveRadiance += uBladeStrength * (tint * bevel * grain * 0.48 + glints * (0.24 + bevel * 1.55));
+      }
+    `).replace('#include <opaque_fragment>', /* glsl */`
+      if (uBladeStrength > 0.0) {
+        // Keep the forge lights from bleaching the coloured steel while preserving its reflections.
+        outgoingLight = mix(totalEmissiveRadiance, outgoingLight, 0.25);
+      }
+      #include <opaque_fragment>
+    `).replace(/}\s*$/, `  if (uBladeStrength > 0.0) gl_FragColor.a = ${BLADE_SHEEN_ALPHA.toFixed(2)};\n}`);
+  };
+  bladeMat.customProgramCacheKey = () => cacheKey() + '|blade-sheen';
+}
 
 // ---------------------------------------------------------------- blade halo
 // a soft sleeve of light around the blade in the weapon's own colour: faint at rest, blazing in the cut
@@ -37,6 +87,7 @@ function setWeaponFx(w: Weapon) {
   halo.position.set(0, 0.004, BLADE_BASE + len / 2);
   const palette = w.fx.sparks;
   if (palette) {
+    bladeSheen.uBladeColors.value.forEach((color, i) => color.set(palette[i]));
     for (let i = 0; i < edgeColors.count; i++) {
       edgeColor.set(palette[i % palette.length]);
       edgeColors.setXYZ(i, edgeColor.r, edgeColor.g, edgeColor.b);
@@ -47,7 +98,7 @@ function setWeaponFx(w: Weapon) {
 
 // Small flashes and drifting grains kept in blade space, so they follow the edge even on a run.
 const WHITE = new THREE.Color(0xffffff), edgeColor = new THREE.Color();
-const EDGE_SPARKS = 18;
+const BLADE_GLINTS = 3, EDGE_SPARKS = BLADE_GLINTS + 18;
 const edgePositions = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3).setUsage(THREE.DynamicDrawUsage);
 const edgePulses = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS), 1).setUsage(THREE.DynamicDrawUsage);
 const edgeColors = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3);
@@ -103,19 +154,33 @@ edgeSparks.onBeforeRender = renderer => {
 sam.katana.add(edgeSparks);
 function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
   edgeSparks.visible = Boolean(w.fx.sparks) && !state.dead;
+  bladeSheen.uBladeStrength.value = edgeSparks.visible ? 1 + heat * 0.42 : 0;
   if (!edgeSparks.visible) return;
   const length = tipZ(w) - BLADE_BASE;
   const time = state.time;
-  for (let i = 0; i < EDGE_SPARKS; i++) {
+  const glints = bladeSheen.uBladeGlints.value;
+  for (let i = 0; i < BLADE_GLINTS; i++) {
+    const cycle = (time * (0.70 + i * 0.08) + i * 0.34) % 1;
+    const travel = cycle * 1.21 - 0.10;
+    glints.setComponent(i, travel);
+    const along = THREE.MathUtils.clamp(travel, 0.04, 0.96);
+    const { curve, width, taper } = BLADE_PROFILE;
+    const edgeY = curve * along * along - (width - taper * along) * 0.5;
+    // The center travels just outside the cutting edge so the flash is visible from both faces.
+    edgePositions.setXYZ(i, 0, edgeY - 0.005, BLADE_BASE + along * length);
+    const fade = THREE.MathUtils.smoothstep(travel, 0.04, 0.16) * (1 - THREE.MathUtils.smoothstep(travel, 0.82, 0.96));
+    edgePulses.setX(i, fade * (0.94 + 0.24 * Math.sin(time * 26 + i * 2)));
+  }
+  for (let i = 0; i < EDGE_SPARKS - BLADE_GLINTS; i++) {
     const cycle = time * (1.2 + (i % 5) * 0.19) + i * 0.618;
     const age = cycle % 1;
     const angle = (i + Math.floor(cycle) * 0.43) * 2.4 + age * 1.5;
     const radius = 0.018 + age * (0.27 + (i % 4) * 0.045 + heat * 0.17);
     const along = 0.19 + ((i * 7) % EDGE_SPARKS) / EDGE_SPARKS * 0.79;
-    edgePositions.setXYZ(i, Math.cos(angle) * radius, Math.sin(angle) * radius + age * 0.075, BLADE_BASE + along * length + age * 0.09);
+    edgePositions.setXYZ(i + BLADE_GLINTS, Math.cos(angle) * radius, Math.sin(angle) * radius + age * 0.075, BLADE_BASE + along * length + age * 0.09);
     const blink = 0.77 + 0.23 * Math.sin(cycle * 28);
     const life = Math.min(1, age * 12) * (1 - age * age);
-    edgePulses.setX(i, life * blink * (displaying ? 1 : 0.83 + 0.17 * heat));
+    edgePulses.setX(i + BLADE_GLINTS, life * blink * (displaying ? 1 : 0.83 + 0.17 * heat));
   }
   edgePositions.needsUpdate = true;
   edgePulses.needsUpdate = true;
@@ -340,6 +405,7 @@ export function updateSparks(dt: number, emit: boolean) {
   const hk = Math.min(1, swingF * 1.2 + bladeHeat * 0.5);
   haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 * calm + hk * 0.2 + edgeGlow * 0.14;
   haloCore.opacity = 0.08 * calm + hk * 0.25;
+  if (w.fx.sparks) { haloMat.opacity *= 0.65; haloCore.opacity *= 0.45; }
   halo.scale.set(1 + hk * 0.25, 1 + hk * 0.25, 1);
   halo.visible = sam.root.visible && (w.fx.sparks ? !state.dead : !displaying && (calm > 0.03 || hk > 0.01));
   updateEdgeSparks(w, hk, displaying);
