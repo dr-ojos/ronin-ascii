@@ -4,11 +4,9 @@ import * as THREE from 'three';
 import { rigGltf } from './assets';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { createOniWarrior, oniDrum, oniScythe, type OniLook } from './rig';
-import { oniCostume, oniMask, oniYumi } from './oni-costume';
-import { bladeGeometry } from './samurai';
+import { oniCostume, oniMask } from './oni-costume';
 import { scene } from './renderer';
 import { ACTOR_LAYER } from './ascii';
-import { mountIllustration, removeIllustration, type Illustration } from './illustrated-actors';
 import { M, CLS, tagTree } from './materials';
 import { surfaceY } from './structures';
 import { addLight, removeLights } from './lights';
@@ -95,13 +93,9 @@ const oniGeo = {
   robe: new THREE.CylinderGeometry(0.247, 0.221, 0.59, 14), neck: new THREE.CylinderGeometry(0.063, 0.086, 0.16, 10),
   arm: new THREE.CapsuleGeometry(0.075, 0.47, 4, 9), leg: new THREE.CylinderGeometry(0.105, 0.075, 0.79, 10),
   sandal: new THREE.SphereGeometry(1, 10, 7), ring: new THREE.RingGeometry(0.85, 1.05, 28),
-  shield: new THREE.CylinderGeometry(0.39, 0.37, 0.078, 10).rotateX(Math.PI / 2),
+  shield: new THREE.CylinderGeometry(0.46, 0.46, 0.1, 8).rotateX(Math.PI / 2),
   staff: new THREE.CylinderGeometry(0.04, 0.04, 1.95, 6), crystal: new THREE.OctahedronGeometry(0.19),
-  blade: bladeGeometry(), hilt: new THREE.CylinderGeometry(0.024, 0.021, 0.27, 10).rotateX(Math.PI / 2),
-  guard: new THREE.CylinderGeometry(0.06, 0.06, 0.012, 10).rotateX(Math.PI / 2),
-  yari: new THREE.CylinderGeometry(0.018, 0.022, 1.78, 9), point: new THREE.ConeGeometry(0.054, 0.26, 4),
-  club: new THREE.CylinderGeometry(0.062, 0.025, 0.91, 10),
-  clubRing: new THREE.TorusGeometry(0.05, 0.012, 5, 10).rotateX(Math.PI / 2)
+  blade: new THREE.BoxGeometry(0.1, 1.1, 0.055), hilt: new THREE.BoxGeometry(0.28, 0.08, 0.09)
 };
 const hornMat = M(0xdccca2), bladeMat = M(0xdbe4ed, { metalness: 0.7 }), bootMat = M(0x2e2426);
 export const enemies: Enemy[] = [];
@@ -143,72 +137,35 @@ export function spawnOni(camp: Camp, kind: EnemyKind, x: number, z: number) {
     g.add(a, leg, foot);
   }
   if (def.look.shield) {
-    const shield = new THREE.Mesh(oniGeo.shield, maskMat); shield.position.set(0.37, 1.015, 0.28); g.add(shield);
+    const shield = new THREE.Mesh(oniGeo.shield, maskMat); shield.position.set(0.43, 1.02, 0.47); g.add(shield);
   }
   if (def.look.weapon === 'staff') {
-    const staff = new THREE.Mesh(oniGeo.staff, bootMat); staff.position.set(-0.34, 1.05, 0.212); g.add(staff);
-    const gem = new THREE.Mesh(oniGeo.crystal, maskMat); gem.position.set(-0.34, 2.13, 0.212); g.add(gem);
+    const staff = new THREE.Mesh(oniGeo.staff, robeMat); staff.position.set(-0.55, 1.05, 0.33); g.add(staff);
+    const gem = new THREE.Mesh(oniGeo.crystal, maskMat); gem.position.set(-0.55, 2.13, 0.33); g.add(gem);
   } else if (def.look.weapon === 'sword') {
     const sword = new THREE.Group();
-    const guard = new THREE.Mesh(oniGeo.guard, hornMat); guard.position.z = 0.14;
-    sword.add(new THREE.Mesh(oniGeo.blade, bladeMat), new THREE.Mesh(oniGeo.hilt, bootMat), guard);
-    sword.position.set(-0.328, 0.92, 0.187); sword.rotation.set(-0.9, -0.35, 0.14); g.add(sword);
+    const blade = new THREE.Mesh(oniGeo.blade, bladeMat); blade.position.y = 0.6; sword.add(blade);
+    sword.add(new THREE.Mesh(oniGeo.hilt, hornMat));
+    sword.position.set(-0.54, 1, 0.32); sword.rotation.set(0.65, 0, 0.35); g.add(sword);
   } else if (def.look.weapon === 'scythe') {
-    const scythe = oniScythe(); scythe.position.set(-0.334, 0.934, 0.194); scythe.rotation.z = 0.22; g.add(scythe);
+    const scythe = oniScythe(); scythe.position.set(-0.57, 1.05, 0.21); scythe.rotation.z = 0.22; g.add(scythe);
   } else if (def.look.weapon === 'drum') {
     const drum = oniDrum(maskMat); drum.position.set(0, 1.05, 0.4); g.add(drum);
-  } else if (def.look.weapon === 'bow') {
-    const bow = oniYumi(); bow.position.set(0.33, 0.931, 0.188); bow.rotation.set(-0.18, 0.66, -0.17); g.add(bow);
-  } else if (def.look.weapon === 'spear') {
-    const yari = new THREE.Group();
-    const shaft = new THREE.Mesh(oniGeo.yari, bootMat); shaft.position.y = 0.32;
-    const tip = new THREE.Mesh(oniGeo.point, bladeMat); tip.position.y = 1.306; tip.scale.z = 0.48;
-    yari.add(shaft, tip); yari.position.set(-0.333, 0.927, 0.191); yari.rotation.z = 0.24; g.add(yari);
-  } else {
-    const club = new THREE.Group(), shaft = new THREE.Mesh(oniGeo.club, bootMat);
-    shaft.position.y = 0.331; club.add(shaft);
-    for (let i = 0; i < 4; i++) {
-      const ring = new THREE.Mesh(oniGeo.clubRing, bladeMat);
-      ring.position.y = 0.42 + i * 0.102; ring.scale.setScalar(0.9 + i * 0.083); club.add(ring);
-    }
-    club.position.set(-0.337, 0.925, 0.193); club.rotation.set(-0.33, -0.26, 0.43);
-    if (def.look.weapon === 'bigclub') club.scale.set(1.38, 1.34, 1.38);
-    g.add(club);
   }
   const ring = new THREE.Mesh(oniGeo.ring, new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring);
   const k = def.scale * rnd(0.95, 1.05); g.scale.setScalar(k);
   place(g, x, z, ring);
   enemies.push({ g, robeMat, maskMat, ring, scale: k, ...stats(camp, kind, x, z), state: 'idle', t: 0, knock: new THREE.Vector3(), flash: 0, seed: Math.random() * 10 });
-  styleEnemy(enemies[enemies.length - 1]);
+  glow(enemies[enemies.length - 1]);
 }
 /** bosses and guardians carry their own light */
-function styleEnemy(en: Enemy) {
+function glow(en: Enemy) {
   const def = KINDS[en.kind], e = def.boss ?? def.elite;
   if (e) en.aura = addLight({ x: en.g.position.x, y: en.g.position.y + 2, z: en.g.position.z, color: e.aura, intensity: 2.6, distance: 9, decay: 1.4, flicker: 0.6, owner: en });
-  const { look } = def;
-  const image: Illustration = en.kind === 'kuro' ? 'kuro'
-    : en.kind === 'raijinMayor' || en.kind === 'raijin' ? 'raijin'
-    : en.kind === 'coloso' ? 'coloso'
-    : look.weapon === 'drum' ? 'tambor'
-    : look.tengu ? 'tengu'
-    : look.shield ? 'shield'
-    : look.plated || look.weapon === 'bigclub' ? 'heavy'
-    : look.weapon === 'spear' ? 'spear'
-    : look.weapon === 'bow' ? 'bow'
-    : look.weapon === 'staff' ? 'ritual'
-    : look.weapon === 'sword' || look.weapon === 'scythe' ? 'shadow'
-    : 'oni';
-  mountIllustration(en.g, image, def.heavy ? 1.98 : 1.84, en.g.children.filter(part => part !== en.ring), () => ({
-    moving: en.state === 'chase' || en.state === 'return' || en.state === 'charge' || ('move' in en && en.move > 0.4),
-    brace: en.state === 'windup' ? Math.max(0.18, 1 - en.t / (en.attack?.windup ?? en.windup)) : 0,
-    strike: en.state === 'charge' ? 1 : def.moves ? Math.min(en.strikeT / 0.18, 1)
-      : en.state === 'recover' ? Math.max(0, Math.min(1, (en.t - 0.43) * 5)) : 0,
-    hit: en.flash
-  }));
 }
 /** take an oni out of the world (killed, or its camp left behind) */
-export function despawn(en: Enemy) { clearEnemyAttack(en); removeIllustration(en.g); scene.remove(en.g); removeLights(en); }
+export function despawn(en: Enemy) { clearEnemyAttack(en); scene.remove(en.g); removeLights(en); }
 
 function spawnRealOni(gltf: GLTF, camp: Camp, kind: EnemyKind, x: number, z: number) {
   const def = KINDS[kind];
@@ -217,5 +174,5 @@ function spawnRealOni(gltf: GLTF, camp: Camp, kind: EnemyKind, x: number, z: num
   const k = def.scale * rnd(0.97, 1.03); g.scale.setScalar(k);
   place(g, x, z, oni.ring);
   enemies.push({ g, oni, ring: oni.ring, scale: k, move: 0, ...stats(camp, kind, x, z), state: 'idle', t: 0, knock: new THREE.Vector3(), flash: 0, seed: Math.random() * 10 });
-  styleEnemy(enemies[enemies.length - 1]);
+  glow(enemies[enemies.length - 1]);
 }

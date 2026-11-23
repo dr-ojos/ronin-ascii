@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { TessellateModifier } from 'three/addons/modifiers/TessellateModifier.js';
 import { grp, mesh, openCyl } from './samurai';
 
 export interface OniLook {
@@ -23,7 +22,6 @@ const brass = new THREE.MeshStandardMaterial({ color: 0xb19868, metalness: 0.51,
 const cord = new THREE.MeshStandardMaterial({ color: 0x9b8768, roughness: 0.94 });
 const recess = new THREE.MeshStandardMaterial({ color: 0x130e12, roughness: 0.87 });
 const stud = new THREE.SphereGeometry(0.009, 6, 4);
-const tessellate = new TessellateModifier(0.013, 5);
 
 const masks = new Map<number, THREE.MeshPhysicalMaterial>();
 const eyes = new Map<number, THREE.MeshBasicMaterial>();
@@ -100,9 +98,7 @@ function frontMask() {
 
 function inlay(g: THREE.Group, material: THREE.Material, points: [number, number][], lift: number) {
   const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
-  const flat = new THREE.ShapeGeometry(shape);
-  const geo = tessellate.modify(flat);
-  flat.dispose();
+  const geo = new THREE.ShapeGeometry(shape);
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) p.setZ(i, relief(p.getX(i), p.getY(i)) + lift);
   geo.computeVertexNormals();
@@ -176,7 +172,6 @@ function carveHead(look: OniLook, mask: THREE.Material, eye: THREE.Material, clo
   }
 
   if (look.crest === 'crescent') {
-    mesh(taper([[0, 0.081, 0.104], [0, 0.121, 0.122], [0, 0.155, 0.126]], 0.025, 0.016), brass, g);
     const moon = new THREE.Shape();
     moon.moveTo(-0.182, 0.104);
     moon.quadraticCurveTo(0, -0.113, 0.182, 0.104);
@@ -223,19 +218,19 @@ function bodyArmor(look: OniLook, cloth: THREE.Material, lacquer: THREE.Material
   const chest = new THREE.Group(), belt = new THREE.Group();
   const heavy = look.big || look.plated, bound = heavy || look.shield || look.weapon === 'spear' || look.crest === 'crescent';
   if (bound) {
-    const dō = mesh(openCyl(0.248, 0.204, 0.35, -1.84, 3.68, 26), lames, chest, 0, -0.24, 0.029);
-    dō.scale.z = 0.87;
-    mesh(openCyl(0.232, 0.25, 0.076, -1.82, 3.64, 24), lacquer, chest, 0, -0.071, 0.03).scale.z = 0.89;
-    mesh(new THREE.RingGeometry(0.028, 0.039, 18), brass, chest, 0, -0.126, 0.248);
-    mesh(new THREE.OctahedronGeometry(0.024), lacquer, chest, 0, -0.126, 0.249).scale.z = 0.35;
+    const dō = mesh(openCyl(0.248, 0.204, 0.35, -1.84, 3.68, 26), lames, chest, 0, -0.233, 0.014);
+    dō.scale.z = 0.78;
+    mesh(openCyl(0.232, 0.25, 0.07, -1.82, 3.64, 24), lacquer, chest, 0, -0.071, 0.016).scale.z = 0.8;
+    mesh(new THREE.RingGeometry(0.028, 0.039, 18), brass, chest, 0, -0.119, 0.214);
+    mesh(new THREE.OctahedronGeometry(0.024), lacquer, chest, 0, -0.12, 0.216).scale.z = 0.35;
   } else {
-    const fold = mesh(openCyl(0.149, 0.257, 0.193, -1.85, 3.7, 20), cloth, chest, 0, -0.098, 0.038);
-    fold.scale.z = 0.9;
-    mesh(taper([[-0.151, -0.045, 0.144], [-0.089, -0.119, 0.209], [0.047, -0.191, 0.263], [0.153, -0.279, 0.18]],
+    const fold = mesh(openCyl(0.13, 0.25, 0.17, -1.85, 3.7, 20), cloth, chest, 0, -0.09, 0.023);
+    fold.scale.z = 0.83;
+    mesh(taper([[-0.156, -0.045, 0.112], [-0.089, -0.116, 0.176], [0.047, -0.184, 0.204], [0.153, -0.259, 0.149]],
       0.015, 0.011), cord, chest);
     if (look.weapon === 'staff' || look.weapon === 'drum') for (let i = -1; i <= 1; i++) {
-      mesh(new THREE.BoxGeometry(0.037, 0.106, 0.009), bone, chest, i * 0.049, -0.196 - 0.018 * Math.abs(i), 0.257).rotation.z = i * -0.23;
-      mesh(new THREE.BoxGeometry(0.013, 0.063, 0.007), lacquer, chest, i * 0.049, -0.196 - 0.018 * Math.abs(i), 0.265).rotation.z = i * -0.23;
+      mesh(new THREE.BoxGeometry(0.037, 0.106, 0.009), bone, chest, i * 0.049, -0.196 - 0.018 * Math.abs(i), 0.187).rotation.z = i * -0.23;
+      mesh(new THREE.BoxGeometry(0.013, 0.063, 0.007), lacquer, chest, i * 0.049, -0.196 - 0.018 * Math.abs(i), 0.194).rotation.z = i * -0.23;
     }
   }
   for (const side of [-1, 1]) {
@@ -309,22 +304,3 @@ export function oniCostume(look: OniLook) {
   }
   return { head: outfit.head.clone(), chest: outfit.chest.clone(), belt: outfit.belt.clone() };
 }
-
-const bow = (() => {
-  const g = new THREE.Group(), wood = new THREE.MeshStandardMaterial({ color: 0x775939, roughness: 0.67 });
-  const grip: XYZ = [0, 0, 0.021], lower: XYZ = [0, -0.614, -0.168], upper: XYZ = [0, 0.934, -0.192];
-  mesh(taper([grip, [0, -0.28, 0.006], [0, -0.49, -0.078], lower], 0.025, 0.006), wood, g);
-  mesh(taper([grip, [0, 0.38, 0.045], [0, 0.72, -0.044], upper], 0.025, 0.006), wood, g);
-  const string = new THREE.MeshBasicMaterial({ color: 0xc1ae92 });
-  const a = new THREE.Vector3(...lower), b = new THREE.Vector3(...upper), axis = b.clone().sub(a);
-  const line = mesh(new THREE.CylinderGeometry(0.0032, 0.0032, axis.length(), 6), string, g);
-  line.position.copy(a).lerp(b, 0.5);
-  line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.normalize());
-  mesh(new THREE.CylinderGeometry(0.028, 0.027, 0.168, 9), recess, g, 0, -0.005, 0.022);
-  for (let i = -2; i <= 2; i++) {
-    const band = mesh(new THREE.TorusGeometry(0.026, 0.0038, 4, 10), cord, g, 0, i * 0.032, 0.022);
-    band.rotation.x = Math.PI / 2;
-  }
-  return packed(g);
-})();
-export const oniYumi = () => bow.clone();

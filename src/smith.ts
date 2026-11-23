@@ -2,21 +2,19 @@ import * as THREE from 'three';
 import { M } from './materials';
 import { grp, mesh } from './samurai';
 
-const skin = M(0xa97d60, { roughness: 0.79 });
-const skinShade = M(0x724b3f);
-const hair = M(0x494646, { roughness: 0.91 });
-const grey = M(0x746d65, { roughness: 0.92 });
-const eye = M(0x262421);
-const sclera = M(0x9b8c78);
-const indigo = M(0x303f4e, { roughness: 0.94 });
-const binding = M(0x555e64, { roughness: 1 });
+const skin = M(0xab7854, { roughness: 0.78 });
+const skinShade = M(0x82573f);
+const hair = M(0x423d3a, { roughness: 0.92 });
+const grey = M(0x79746d, { roughness: 0.92 });
+const eye = M(0x251f1c);
+const indigo = M(0x354558, { roughness: 0.94 });
+const binding = M(0x596575, { roughness: 1 });
 const pants = M(0x292933, { roughness: 1 });
-const cloth = M(0x393e42, { roughness: 1 });
+const cloth = M(0xc6b49a, { roughness: 1 });
 const leather = M(0x67452e, { roughness: 0.86 });
 const leatherEdge = M(0x997358, { roughness: 0.88 });
 const iron = M(0x494851, { metalness: 0.68, roughness: 0.47 });
 const steel = M(0x929097, { metalness: 0.54, roughness: 0.4 });
-const brass = M(0xa68b60, { metalness: 0.51, roughness: 0.49 });
 
 type Point = [x: number, y: number, z: number];
 type Profile = [radius: number, height: number][];
@@ -77,110 +75,52 @@ function apron(parent: THREE.Group) {
   canvas.width = 128;
   canvas.height = 192;
   const paint = canvas.getContext('2d')!;
-  const shade = paint.createLinearGradient(0, 0, 128, 72);
-  shade.addColorStop(0, '#746252'); shade.addColorStop(0.18, '#c1b09c');
-  shade.addColorStop(0.47, '#96816f'); shade.addColorStop(0.69, '#bca897'); shade.addColorStop(1, '#65564c');
+  const shade = paint.createRadialGradient(65, 82, 20, 52, 86, 115);
+  shade.addColorStop(0, '#e3d6c2'); shade.addColorStop(1, '#9b8d7c');
   paint.fillStyle = shade;
   paint.fillRect(0, 0, 128, 192);
   paint.strokeStyle = 'rgba(73,52,38,0.13)';
-  for (let i = 0; i < 117; i++) {
-    const x = (i * 83) % 126, y = (i * 49) % 192;
+  for (let i = 0; i < 68; i++) {
+    const x = (i * 83) % 126, y = (i * 43) % 192;
     paint.beginPath();
     paint.moveTo(x, y);
     paint.lineTo(x + 1 + (i % 5), y + 0.5 + (i % 4));
     paint.stroke();
   }
-  paint.strokeStyle = '#c5ae91';
+  paint.strokeStyle = '#bfae93';
   paint.setLineDash([2, 3]);
   paint.strokeRect(5, 5, 118, 182);
   material.map = new THREE.CanvasTexture(canvas);
   material.map.colorSpace = THREE.SRGBColorSpace;
-  paint.setLineDash([]);
-  // Small, pressed workshop stamp that holds up in the conversation close-up.
-  paint.translate(77, 29);
-  paint.rotate(Math.PI / 4);
-  paint.strokeStyle = '#625344';
-  paint.lineWidth = 2.4;
-  paint.strokeRect(-9, -9, 18, 18);
-  paint.rotate(-Math.PI / 4);
-  for (let x = -5; x <= 5; x += 5) {
-    paint.beginPath(); paint.moveTo(x - 2, 4); paint.lineTo(x + 2, -4); paint.stroke();
-  }
-  material.color.setHex(0x8a6b54);
+  material.color.setHex(0x896347);
   mesh(geometry, material, parent);
   const tie = profile(parent, leatherEdge, [[0.213, 0.975], [0.222, 0.989], [0.222, 1.018], [0.208, 1.028]], 0.73);
   tie.position.z = 0.021;
   for (const side of [-1, 1]) {
     tapered(parent, leatherEdge, [side * 0.117, 1.39, 0.189], [side * 0.105, 1.492, 0.164], 0.015, 0.014);
     tapered(parent, leatherEdge, [side * 0.105, 1.492, 0.164], [side * 0.087, 1.55, 0.131], 0.014, 0.013);
-    const buckle = mesh(new THREE.BoxGeometry(0.047, 0.033, 0.009), brass, parent, side * 0.108, 1.38, 0.2);
-    buckle.rotation.z = side * 0.12;
-    mesh(new THREE.BoxGeometry(0.03, 0.016, 0.01), leather, parent, side * 0.108, 1.381, 0.203).rotation.z = side * 0.12;
+    oval(parent, iron, [side * 0.106, 1.365, 0.198], [0.012, 0.012, 0.005]);
   }
-
-  const pocket = mesh(new THREE.BoxGeometry(0.108, 0.116, 0.023), leather, parent, -0.112, 1.096, 0.205);
-  pocket.rotation.y = -0.16;
-  const welt = mesh(new THREE.BoxGeometry(0.116, 0.019, 0.018), leatherEdge, parent, -0.112, 1.153, 0.215);
-  welt.rotation.y = pocket.rotation.y;
-  tapered(parent, leatherEdge, [-0.131, 1.119, 0.21], [-0.144, 1.235, 0.216], 0.014, 0.011);
-  tapered(parent, iron, [-0.144, 1.235, 0.216], [-0.153, 1.283, 0.222], 0.011, 0.004);
 }
 
-const softPeak = (x: number) => Math.exp(-(x * x));
-
 function sculptHead(head: THREE.Group) {
-  const contour = [[0, -0.119], [0.049, -0.115], [0.076, -0.093], [0.085, -0.059], [0.089, -0.024],
-    [0.094, 0.017], [0.092, 0.055], [0.082, 0.093], [0.053, 0.113], [0, 0.121]];
-  const spline = new THREE.SplineCurve(contour.map(([r, y]) => new THREE.Vector2(r, y)));
-  const sculpture = new THREE.LatheGeometry(spline.getPoints(64), 72, -Math.PI, Math.PI * 2);
-  const v = sculpture.attributes.position;
-  const skinColor = skin.color, salt = new THREE.Color(0x686561), shadow = new THREE.Color(0x684b42), color = new THREE.Color();
-  const colors: number[] = [];
-  for (let i = 0; i < v.count; i++) {
-    const x = v.getX(i), y = v.getY(i), z = v.getZ(i);
-    const front = THREE.MathUtils.smoothstep(z, 0.023, 0.076), cheek = Math.abs(x);
-    const socket = softPeak((cheek - 0.042) / 0.027) * softPeak((y - 0.013) / 0.016);
-    const bridge = softPeak(x / 0.019) * softPeak((y + 0.003) / 0.041);
-    const tip = softPeak(x / 0.02) * softPeak((y + 0.032) / 0.014);
-    const zygoma = softPeak((cheek - 0.060) / 0.022) * softPeak((y + 0.016) / 0.022);
-    const lip = softPeak(x / 0.029) * softPeak((y + 0.057) / 0.015);
-    v.setZ(i, z * 0.96 + front * (0.021 * bridge + 0.022 * tip - 0.014 * socket + 0.011 * zygoma + 0.009 * lip));
-    const stubble = THREE.MathUtils.smoothstep(-0.079 + cheek * 0.55 - y, -0.008, 0.017);
-    const mottling = 0.035 * Math.sin(x * 860 + Math.sin(y * 392)) * Math.cos(z * 510 - y * 720);
-    color.copy(skinColor).lerp(shadow, 0.24 * socket * front);
-    color.lerp(salt, stubble * THREE.MathUtils.smoothstep(z, -0.016, 0.04) * (0.9 + 0.08 * Math.sin(x * 900 + y * 640)));
-    color.multiplyScalar(1 + mottling);
-    colors.push(color.r, color.g, color.b);
-  }
-  sculpture.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  sculpture.computeVertexNormals();
-  mesh(sculpture, M(0xffffff, { vertexColors: true, roughness: 0.81 }), head);
-
-  const scalp = profile(head, hair, [[0.094, 0.048], [0.098, 0.068], [0.094, 0.089], [0.083, 0.11],
-    [0.064, 0.126], [0.023, 0.136], [0, 0.134]], 0.99);
-  scalp.position.z = -0.006;
-  const strands = scalp.geometry.attributes.position;
-  for (let i = 0; i < strands.count; i++) {
-    const x = strands.getX(i), z = strands.getZ(i);
-    const r = 1 + 0.021 * Math.cos(Math.atan2(x, z) * 15 + strands.getY(i) * 23);
-    strands.setX(i, x * r); strands.setZ(i, z * r);
-  }
-  scalp.geometry.computeVertexNormals();
-  oval(head, hair, [0, 0.067, -0.104], [0.036, 0.022, 0.036]);
-  profile(head, cloth, [[0.094, 0.039], [0.098, 0.049], [0.097, 0.063]], 0.99).position.z = -0.004;
-  profile(head, binding, [[0.097, 0.051], [0.098, 0.054]], 0.998).position.z = -0.003;
-  oval(head, skinShade, [0, -0.063, 0.093], [0.022, 0.0026, 0.004]);
+  profile(head, skin, [[0, -0.118], [0.044, -0.118], [0.071, -0.095], [0.085, -0.059], [0.091, -0.019],
+    [0.094, 0.018], [0.091, 0.058], [0.080, 0.093], [0.055, 0.113], [0, 0.122]], 0.96);
+  profile(head, grey, [[0.043, -0.119], [0.061, -0.107], [0.077, -0.084], [0.087, -0.056]], 1.015, 2.67);
+  profile(head, hair, [[0.095, 0.055], [0.096, 0.074], [0.091, 0.092], [0.078, 0.112],
+    [0.052, 0.127], [0, 0.135]], 0.99).position.z = -0.003;
+  oval(head, hair, [0, 0.077, -0.101], [0.041, 0.026, 0.038]);   // hair gathered low at the back
+  profile(head, cloth, [[0.094, 0.045], [0.097, 0.055], [0.093, 0.076]], 0.995).position.z = -0.004;
+  oval(head, skin, [0, 0.001, 0.091], [0.014, 0.042, 0.018]).rotation.x = -0.28;
+  oval(head, skin, [0, -0.027, 0.104], [0.019, 0.011, 0.018]);
+  oval(head, skinShade, [0, -0.065, 0.081], [0.034, 0.005, 0.01]);
   for (const side of [-1, 1]) {
-    oval(head, skin, [side * 0.09, -0.015, -0.006], [0.013, 0.025, 0.017]);
-    oval(head, skinShade, [side * 0.098, -0.011, 0.001], [0.007, 0.012, 0.007]);
-    oval(head, grey, [side * 0.085, 0.029, 0.007], [0.012, 0.027, 0.037]).rotation.x = -0.25;
-    oval(head, skinShade, [side * 0.04, 0.012, 0.076], [0.019, 0.006, 0.008]).rotation.y = side * 0.36;
-    oval(head, sclera, [side * 0.04, 0.012, 0.082], [0.016, 0.0038, 0.004]).rotation.y = side * 0.36;
-    oval(head, eye, [side * 0.038, 0.012, 0.086], [0.005, 0.0048, 0.003]);
-    oval(head, hair, [side * 0.043, 0.03, 0.084], [0.024, 0.0042, 0.006]).rotation.z = side * 0.095;
-    oval(head, grey, [side * 0.017, -0.049, 0.093], [0.019, 0.0055, 0.004]).rotation.z = side * -0.23;
-    tapered(head, skinShade, [side * 0.060, 0.002, 0.077], [side * 0.071, -0.006, 0.073], 0.0019, 0.0009);
-    tapered(head, skinShade, [side * 0.024, -0.047, 0.094], [side * 0.034, -0.066, 0.08], 0.0016, 0.001);
+    oval(head, skin, [side * 0.09, -0.015, -0.006], [0.015, 0.024, 0.016]);
+    oval(head, grey, [side * 0.086, 0.012, 0.016], [0.011, 0.032, 0.033]);
+    oval(head, skinShade, [side * 0.039, -0.001, 0.079], [0.026, 0.011, 0.008]);
+    oval(head, eye, [side * 0.039, 0.006, 0.081], [0.021, 0.004, 0.008]).rotation.y = side * 0.36;
+    oval(head, hair, [side * 0.039, 0.021, 0.084], [0.028, 0.007, 0.009]).rotation.z = side * 0.16;
+    oval(head, grey, [side * 0.023, -0.052, 0.087], [0.025, 0.009, 0.008]).rotation.z = side * -0.23;
   }
 }
 
@@ -217,11 +157,7 @@ export function createSmith() {
   const [armR, armL] = arms;
   const hammer = grp(armR, -0.053, -0.546, 0.114);
   tapered(hammer, leather, [0, 0, -0.115], [0, 0.054, 0.302], 0.022, 0.025);
-  const forge = new THREE.Shape();
-  forge.moveTo(-0.075, -0.027); forge.lineTo(0.066, -0.027); forge.lineTo(0.071, -0.016);
-  forge.lineTo(0.071, 0.023); forge.lineTo(0.052, 0.032); forge.lineTo(-0.075, 0.032); forge.closePath();
-  mesh(new THREE.ExtrudeGeometry(forge, { depth: 0.058, bevelThickness: 0.006, bevelSize: 0.008, bevelSegments: 2 }),
-    iron, hammer, 0, 0.05, 0.251);
+  mesh(new THREE.BoxGeometry(0.154, 0.079, 0.079), iron, hammer, 0, 0.05, 0.28);
   mesh(new THREE.BoxGeometry(0.026, 0.075, 0.072), steel, hammer, -0.076, 0.05, 0.28);
   mesh(new THREE.CylinderGeometry(0.027, 0.034, 0.036, 8).rotateZ(Math.PI / 2), steel, hammer, 0.084, 0.05, 0.28);
   return { root, body, head, armR, armL };

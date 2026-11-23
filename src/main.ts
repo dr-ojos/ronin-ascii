@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import './assets';   // first: shows "cargando..." while the character model loads
 import { renderer, scene, camera } from './renderer';
 import { cellMat, renderAscii, resizeAscii } from './ascii';
-import { updateIllustrations } from './illustrated-actors';
 import { animSamurai } from './avatar';
 import { updateOutfit } from './outfit';
 import { updateSparks } from './katana-fx';
@@ -35,7 +34,7 @@ function frame() {
   cellMat.uniforms.uMode.value = state.colorMode;
   setDetailedSurfaces(!state.asciiOn);
   if (state.asciiOn) renderAscii(scene, camera);
-  else { updateIllustrations(scene, camera); renderer.setRenderTarget(null); renderer.render(scene, camera); }
+  else { renderer.setRenderTarget(null); renderer.render(scene, camera); }
 }
 
 addEventListener('resize', () => {
