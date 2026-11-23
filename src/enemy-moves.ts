@@ -13,8 +13,9 @@ type Move = {
   color: number;
 } & (
   | { shape: 'arc'; radius: number; angle: number; innerRadius?: number; pull?: number; parry?: boolean; heal?: number }
-  | { shape: 'charge'; length: number; width: number }
-  | { shape: 'zones'; radius: number; layout: 'single' | 'line' | 'cross'; effect: 'curse' | 'wind' | 'thunder' | 'fire' }
+  | { shape: 'charge'; length: number; width: number; duration?: number }
+  | { shape: 'wave'; length: number; width: number }
+  | { shape: 'zones'; radius: number; layout: 'single' | 'line' | 'cross'; effect: 'curse' | 'wind' | 'thunder' | 'fire' | 'web' }
   | { shape: 'volley'; arrows: number; angle: number }
 );
 
@@ -38,7 +39,15 @@ const MOVES = {
   riposte:    { shape: 'arc', range: 3.0, radius: 3.75, angle: 0.58, windup: 0.88, recovery: 1.02, power: 1.10, parry: true, color: 0xe7c47a },
   rally:      { shape: 'arc', range: 8.5, radius: 7, angle: Math.PI, windup: 0.85, recovery: 1.45, power: 0, heal: 0.24, color: 0x8bdc7a },
   shadowCut:  { shape: 'arc', range: 3.35, radius: 4.0, angle: 1.45, windup: 0.57, recovery: 0.82, power: 1, color: 0xcaa2ff },
-  shockwave:  { shape: 'arc', range: 5.9, radius: 7.25, innerRadius: 2.4, angle: Math.PI, windup: 1.03, recovery: 1.45, power: 1.06, color: 0x86d9ff }
+  shockwave:  { shape: 'arc', range: 5.9, radius: 7.25, innerRadius: 2.4, angle: Math.PI, windup: 1.03, recovery: 1.45, power: 1.06, color: 0x86d9ff },
+  wolfPounce: { shape: 'charge', range: 4.4, length: 5.2, width: 0.69, duration: 0.29, windup: 0.56, recovery: 1.05, power: 1, color: 0xfecb8c },
+  alphaPounce: { shape: 'charge', range: 5.7, length: 6.6, width: 0.92, duration: 0.34, windup: 0.64, recovery: 1.14, power: 1.08, color: 0xffb772 },
+  bite:       { shape: 'arc', range: 1.8, radius: 2.65, angle: 0.86, windup: 0.49, recovery: 0.82, power: 0.92, color: 0xfecb8c },
+  bearSwipe:  { shape: 'arc', range: 3.2, radius: 4.05, angle: 1.52, windup: 0.88, recovery: 1.1, power: 1, color: 0xf69a61 },
+  bearRush:   { shape: 'charge', range: 6.5, length: 7.6, width: 1.22, duration: 0.53, windup: 0.97, recovery: 1.65, power: 1.12, color: 0xfa8e5b },
+  boarRush:   { shape: 'charge', range: 7, length: 8.9, width: 0.77, duration: 0.48, windup: 0.8, recovery: 1.35, power: 1.08, color: 0xe5ac70 },
+  web:        { shape: 'zones', range: 9.7, radius: 2.05, layout: 'single', effect: 'web', windup: 0.87, recovery: 1.12, power: 0.78, color: 0xd6bedf },
+  crescent:   { shape: 'wave', range: 10.5, length: 12.2, width: 1.32, windup: 0.91, recovery: 1.32, power: 0.92, color: 0x9aeaff }
 } satisfies Record<string, Move>;
 export type EnemyMove = keyof typeof MOVES;
 export const moveDef = (id: EnemyMove): Move => MOVES[id];
@@ -114,7 +123,7 @@ export function prepareEnemyAttack(en: Enemy, move: Move, target: THREE.Vector3,
   const windup = move.windup * (en.enraged ? 0.86 : 1);
   const zones: XZ[] = [];
   let outlines: XZ[][], length = 0;
-  if (move.shape === 'charge') {
+  if (move.shape === 'charge' || move.shape === 'wave') {
     for (let d = 0.25; d <= move.length; d += 0.25) {
       if (chargeBlocked(en, origin.x + fx * d, origin.z + fz * d)) break;
       length = d;

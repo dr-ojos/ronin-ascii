@@ -41,17 +41,19 @@ export type Collider =
 export interface XZ { x: number; z: number }
 
 /** the kinds of oni: each looks and fights differently (enemies.ts KINDS) */
+export type Wildlife = 'lobos' | 'oso' | 'jabalies' | 'aranas';
 export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 'acechador' | 'hechicero'
   | 'guadanero' | 'piromante' | 'duelista' | 'tambor' | 'sombra' | 'coloso'
+  | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'espectro'
   | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'kensei' | 'tengu' | 'raijin';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
 
-/** the mocap-rigged oni returned by createOniWarrior (rig.js) */
-export interface OniWarrior {
+export interface EnemyModel {
   root: THREE.Object3D;
   ring: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   update(dt: number, o: { moving: number; speed: number; state: 'windup' | 'strike' | 'idle' }): void;
   setFlash(v: number): void;
+  dispose?(): void;
 }
 
 interface EnemyBase {
@@ -108,6 +110,7 @@ export interface Camp {
   /** state.time when cleared (-1 = not cleared) */
   clearedAt: number;
   name?: string;
+  wildlife?: Wildlife;
   /** patrols walk a road: their home moves along it */
   route?: [number, number][];
   routeT?: number;
@@ -126,12 +129,11 @@ export interface Chest {
   lid?: THREE.Object3D;
   openT: number;
 }
-/** rigged oni (when the character model loaded) */
-export interface RiggedEnemy extends EnemyBase { oni: OniWarrior; move: number }
+export interface AnimatedEnemy extends EnemyBase { model: EnemyModel; move: number }
 /** procedural oni (fallback): flashes through its two materials */
 export interface ProceduralEnemy extends EnemyBase {
-  oni?: undefined;
+  model?: undefined;
   robeMat: THREE.MeshStandardMaterial;
   maskMat: THREE.MeshStandardMaterial;
 }
-export type Enemy = RiggedEnemy | ProceduralEnemy;
+export type Enemy = AnimatedEnemy | ProceduralEnemy;

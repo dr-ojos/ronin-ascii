@@ -37,6 +37,7 @@ export function tryDash() {
   const mv = moveInput();
   if (mv.lengthSq() < 0.01) mv.set(Math.sin(player.face), 0, Math.cos(player.face));
   player.dashDir.copy(mv.normalize()); player.dashT = 0.2; player.dashCd = 0.75 * dashCdMult(); player.invuln = 0.3;
+  player.snareT = 0;
   player.face = Math.atan2(mv.x, mv.z);
   dashRing(player.pos);
   sfx.dash();
@@ -55,10 +56,12 @@ const wade = wader();
 export function updatePlayer(dt: number) {
   player.invuln = Math.max(0, player.invuln - dt);
   player.dashCd = Math.max(0, player.dashCd - dt);
+  player.snareT = Math.max(0, player.snareT - dt);
   const mv = moveInput();
   // Shift: run (to cross the open world); attacking slows you down
   let speed = (keys.ShiftLeft || keys.ShiftRight ? 10 : 5.6) * runMult();
   if (player.attackT >= 0) speed = 5.6 * 0.35;
+  if (player.snareT > 0) speed *= 0.53;
   speed *= 1 - 0.4 * depth;                     // wading through the river is slow
   if (player.dashT > 0) {
     player.dashT -= dt;
@@ -97,7 +100,7 @@ export function updatePlayer(dt: number) {
         const ang = Math.abs(angDiff(Math.atan2(tmp.x, tmp.z), player.face));
         if (d < reach && (spin || ang < 1.35)) {
           const incoming = Math.atan2(-tmp.x, -tmp.z);
-          const guarding = KINDS[en.kind].look.shield && (en.state === 'idle' || en.state === 'chase')
+          const guarding = KINDS[en.kind].look?.shield && (en.state === 'idle' || en.state === 'chase')
             && Math.abs(angDiff(incoming, en.g.rotation.y)) < 1.05;
           const attack = en.attack;
           const parrying = en.state === 'windup' && attack?.move.shape === 'arc' && attack.move.parry

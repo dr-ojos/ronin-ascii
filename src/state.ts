@@ -4,7 +4,7 @@ import * as THREE from 'three';
 
 export const player = {
   pos: new THREE.Vector3(0, 0, 4), face: Math.PI, hp: 100, maxHp: 100, attackT: -1, attackDur: 0.3, combo: 0, lastAttackEnd: -9,
-  hitDone: false, dashT: 0, dashCd: 0, dashDir: new THREE.Vector3(), invuln: 0, walk: 0, moving: 0
+  hitDone: false, dashT: 0, dashCd: 0, dashDir: new THREE.Vector3(), invuln: 0, snareT: 0, walk: 0, moving: 0
 };
 
 export const state = {

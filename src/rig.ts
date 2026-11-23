@@ -7,7 +7,7 @@ import {
   DASH, ATTACKS, SHOW_WEAPON, sampleKeys, sampleScalar, smooth, clamp, key
 } from './samurai';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
-import type { Avatar, AvatarInput, OniWarrior } from './types';
+import type { Avatar, AvatarInput, EnemyModel } from './types';
 import { oniCostume, oniEye, oniMask, oniYumi, type OniLook } from './oni-costume';
 import { paintBody, mangaFinish, monTex, tabardTex, pleatTex, waveTex } from './manga-art';
 import { realHead, realMenpoGeometry, SCAN } from './real-head';
@@ -502,7 +502,7 @@ export function oniDrum(lacquer: THREE.Material) {
   return g;
 }
 
-export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
+export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
   const big = look.big, mMask = oniMask(look.mask), mEye = oniEye(look.eye ?? 0xffd040);
   mMask.userData.asciiSkin = true;   // the carved demon face draws with round letters
   const rig = prepareRig(gltf, look.tint);
@@ -623,7 +623,7 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
   let lift = 0;
   act.Run && (act.Run.time = Math.random() * 2);
   mixer.update(0);  // show the idle pose from the first visible frame
-  function update(dt: number, s: Parameters<OniWarrior['update']>[1]) {
+  function update(dt: number, s: Parameters<EnemyModel['update']>[1]) {
     const run = clamp(s.moving, 0, 1);
     act.Idle?.setEffectiveWeight(1 - run);
     act.Run?.setEffectiveWeight(run);

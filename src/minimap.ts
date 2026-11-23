@@ -10,7 +10,7 @@ import { discovered, camps } from './encounters';
 import { POIS } from './landmarks';
 import { chests } from './loot';
 import { smithPos } from './shop';
-import type { Camp } from './types';
+import type { Camp, Wildlife } from './types';
 import { addPoints, POINTS } from './score';
 import { player, state } from './state';
 
@@ -19,6 +19,7 @@ const COL = {
   grass: '#2c4a3a', contour: '#3d5e4c', water: '#4f86c6', road: '#b59d72', built: '#d8d4c8', sakura: '#f2a5c4',
   pine: '#4f8a5a', cypress: '#3a6e48', bamboo: '#8fbf5a', rock: '#7a7f8c', snow: '#c9d2e6', place: '#ffd27a', you: '#ffffff', oni: '#ff5a4a'
 };
+const WILDLIFE_MARK: Record<Wildlife, string> = { lobos: 'w', oso: 'U', jabalies: 'j', aranas: '8' };
 function hash(x: number, z: number) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
 /** one map character for a point of the world */
 function classify(x: number, z: number, step: number): [string, string] {
@@ -95,7 +96,9 @@ function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, 
   for (const c of camps) {
     if (c.route || c.temp || !seen.has(c) || !near(c.x, c.z, 260)) continue;
     const [px, py] = toPx(c.x, c.z);
-    ctx.fillStyle = c.roster.length ? '#c0483a' : '#5c6478'; ctx.fillText(c.roster.length ? (c.boss ? 'X' : c.elite ? '!' : 'x') : '.', px, py);
+    const wildlife = c.wildlife && WILDLIFE_MARK[c.wildlife];
+    ctx.fillStyle = c.roster.length ? (wildlife ? '#ce9d61' : '#c0483a') : '#5c6478';
+    ctx.fillText(c.roster.length ? (wildlife || (c.boss ? 'X' : c.elite ? '!' : 'x')) : '.', px, py);
   }
   for (const c of chests) {
     if (c.state === 'open' || !near(c.x, c.z, c.kind === 'oculto' ? 45 : 140)) continue;
@@ -107,8 +110,11 @@ function stamp(ctx: CanvasRenderingContext2D, a: Atlas, ox: number, oy: number, 
   }
   // Masa's shop, in the shrine at the start
   if (near(smithPos.x, smithPos.z, 400)) { const [sx, sy] = toPx(smithPos.x, smithPos.z); ctx.fillStyle = '#8fb4ff'; ctx.fillText('†', sx, sy); }
-  ctx.fillStyle = COL.oni;
-  for (const e of enemies) { const [px, py] = toPx(e.g.position.x, e.g.position.z); ctx.fillText(KINDS[e.kind].glyph, px, py); }
+  for (const e of enemies) {
+    const [px, py] = toPx(e.g.position.x, e.g.position.z), kind = KINDS[e.kind];
+    ctx.fillStyle = kind.beast ? '#ffc381' : COL.oni;
+    ctx.fillText(kind.glyph, px, py);
+  }
   const [px, py] = toPx(player.pos.x, player.pos.z);
   ctx.fillStyle = '#000'; ctx.fillRect(px - 5, py - 6, 10, 12);
   ctx.fillStyle = COL.you; ctx.fillText(state.time % 1 < 0.75 ? arrow() : '@', px, py);

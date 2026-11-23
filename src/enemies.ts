@@ -2,8 +2,8 @@
 // Their behaviour is in enemy-ai.ts; where they stand and when they appear, in encounters.ts.
 import * as THREE from 'three';
 import { rigGltf } from './assets';
-import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { createOniWarrior, oniDrum, oniScythe, type OniLook } from './rig';
+import { createBeast, type BeastLook } from './beasts';
 import { oniCostume, oniMask, oniYumi } from './oni-costume';
 import { bladeGeometry } from './samurai';
 import { scene } from './renderer';
@@ -13,12 +13,12 @@ import { surfaceY } from './structures';
 import { addLight, removeLights } from './lights';
 import { clearEnemyAttack, type EnemyMove } from './enemy-moves';
 import { rnd } from './utils';
-import type { Camp, Enemy, EnemyKind } from './types';
+import type { Camp, Enemy, EnemyKind, EnemyModel } from './types';
 
 /** every kind of oni: size, toughness, speed, how hard and how far it hits, its look and its worth */
-export interface KindDef {
+type KindDef = {
   name: string; scale: number; hp: number; speed: [number, number]; dmg: number; reach: number; windup: number;
-  heavy: boolean; points: number; glyph: string; look: Omit<OniLook, 'big'>; robe: number; maskC: number;
+  heavy: boolean; points: number; glyph: string;
   /** shoots instead of striking (keeps its distance) */
   ranged?: boolean;
   /** a sub-boss: guards a chest, glows with its own colour, its name shows over the life bar */
@@ -26,7 +26,10 @@ export interface KindDef {
   /** a major boss changes its attack cycle at half health */
   boss?: { aura: number; enraged: readonly EnemyMove[] };
   moves?: readonly EnemyMove[];
-}
+} & (
+  | { beast: BeastLook; look?: never }
+  | { beast?: never; look: Omit<OniLook, 'big'>; robe: number; maskC: number }
+);
 export const KINDS: Record<EnemyKind, KindDef> = {
   // the club-wielding oni: the common one
   oni:      { name: 'oni', scale: 1, hp: 3, speed: [2.8, 3.6], dmg: 11, reach: 1.55, windup: 0.55, heavy: false, points: 100, glyph: 'o',
@@ -62,6 +65,19 @@ export const KINDS: Record<EnemyKind, KindDef> = {
   coloso: { name: 'coloso de obsidiana', scale: 1.48, hp: 13, speed: [2.3, 2.6], dmg: 26, reach: 3.5, windup: 1, heavy: true, points: 490, glyph: 'Q',
             look: { tint: 0x22262d, mask: 0x48677d, eye: 0x8be8ff, weapon: 'bigclub', plated: true }, robe: 0x292e3b, maskC: 0x48677d,
             moves: ['shockwave', 'crush'] },
+  lobo: { name: 'lobo gris', scale: 0.94, hp: 3, speed: [5.6, 6.2], dmg: 10, reach: 4, windup: 0.56, heavy: false, points: 130, glyph: 'w',
+          beast: { species: 'wolf', coat: 0x5f6573, trim: 0x98999d, eye: 0xffd293 }, moves: ['wolfPounce', 'bite'] },
+  loboAlfa: { name: 'lobo alfa', scale: 1.18, hp: 7, speed: [6.1, 6.5], dmg: 15, reach: 5, windup: 0.62, heavy: false, points: 250, glyph: 'W',
+              beast: { species: 'wolf', coat: 0xbac6d1, trim: 0x657485, eye: 0xffbb66 }, moves: ['alphaPounce', 'bite'] },
+  oso: { name: 'oso pardo', scale: 1.26, hp: 15, speed: [2.9, 3.2], dmg: 24, reach: 3.3, windup: 0.85, heavy: true, points: 470, glyph: 'U',
+         beast: { species: 'bear', coat: 0x594031, trim: 0x997457, eye: 0xcfa974 }, moves: ['bearSwipe', 'bearRush', 'bearSwipe'] },
+  jabali: { name: 'jabalí', scale: 1.14, hp: 5, speed: [3.2, 3.8], dmg: 15, reach: 7, windup: 0.75, heavy: true, points: 190, glyph: 'j',
+            beast: { species: 'boar', coat: 0x56514a, trim: 0x8d7662, eye: 0xffa873 }, moves: ['boarRush'] },
+  arana: { name: 'araña de seda', scale: 1.08, hp: 4, speed: [3.5, 4.0], dmg: 11, reach: 9, windup: 0.82, heavy: false, points: 205, glyph: '8', ranged: true,
+           beast: { species: 'spider', coat: 0x382c43, trim: 0x946d74, eye: 0xffb05c }, moves: ['web', 'bite'] },
+  espectro: { name: 'samurái espectral', scale: 1.11, hp: 7, speed: [3.3, 3.7], dmg: 16, reach: 10, windup: 0.9, heavy: false, points: 315, glyph: 'S',
+              look: { tint: 0x314861, mask: 0xa1c9d8, eye: 0xbbfcff, weapon: 'sword', crest: 'halo' }, robe: 0x3d6079, maskC: 0xa1c9d8,
+              moves: ['crescent', 'shadowCut'] },
   // major bosses, with separate attack cycles for each phase
   jefe:     { name: 'oni sepulcral', scale: 1.58, hp: 21, speed: [2.4, 2.6], dmg: 25, reach: 3.3, windup: 0.67, heavy: true, points: 720, glyph: 'O',
               look: { tint: 0x3d1e12, mask: 0xad6037, eye: 0xffb353, weapon: 'bigclub' }, robe: 0x8a1a14, maskC: 0xc06038,
@@ -121,9 +137,11 @@ function place(g: THREE.Object3D, x: number, z: number, skip?: THREE.Object3D) {
   tagTree(g, CLS.actor);
   scene.add(g);
 }
-export function spawnOni(camp: Camp, kind: EnemyKind, x: number, z: number) {
-  if (rigGltf) return spawnRealOni(rigGltf, camp, kind, x, z);
-  const def = KINDS[kind], g = new THREE.Group();
+export function spawnEnemy(camp: Camp, kind: EnemyKind, x: number, z: number) {
+  const def = KINDS[kind];
+  if (def.beast) return spawnAnimated(createBeast(def.beast), camp, kind, x, z);
+  if (rigGltf) return spawnAnimated(createOniWarrior(rigGltf, { ...def.look, big: def.heavy }), camp, kind, x, z);
+  const g = new THREE.Group();
   const robeMat = M(def.robe, { roughness: 0.8, emissive: 0x000000 });
   const look = { ...def.look, big: def.heavy, mask: def.maskC };
   const baseMask = oniMask(look.mask), maskMat = baseMask.clone();
@@ -187,14 +205,12 @@ function glow(en: Enemy) {
   if (e) en.aura = addLight({ x: en.g.position.x, y: en.g.position.y + 2, z: en.g.position.z, color: e.aura, intensity: 2.6, distance: 9, decay: 1.4, flicker: 0.6, owner: en });
 }
 /** take an oni out of the world (killed, or its camp left behind) */
-export function despawn(en: Enemy) { clearEnemyAttack(en); scene.remove(en.g); removeLights(en); }
+export function despawn(en: Enemy) { clearEnemyAttack(en); scene.remove(en.g); removeLights(en); en.model?.dispose?.(); }
 
-function spawnRealOni(gltf: GLTF, camp: Camp, kind: EnemyKind, x: number, z: number) {
-  const def = KINDS[kind];
-  const oni = createOniWarrior(gltf, { ...def.look, big: def.heavy });
-  const g = oni.root;
-  const k = def.scale * rnd(0.97, 1.03); g.scale.setScalar(k);
-  place(g, x, z, oni.ring);
-  enemies.push({ g, oni, ring: oni.ring, scale: k, move: 0, ...stats(camp, kind, x, z), state: 'idle', t: 0, knock: new THREE.Vector3(), flash: 0, seed: Math.random() * 10 });
+function spawnAnimated(model: EnemyModel, camp: Camp, kind: EnemyKind, x: number, z: number) {
+  const { root: g, ring } = model, k = KINDS[kind].scale * rnd(0.97, 1.03);
+  g.scale.setScalar(k);
+  place(g, x, z, ring);
+  enemies.push({ g, model, ring, scale: k, move: 0, ...stats(camp, kind, x, z), state: 'idle', t: 0, knock: new THREE.Vector3(), flash: 0, seed: Math.random() * 10 });
   glow(enemies[enemies.length - 1]);
 }

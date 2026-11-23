@@ -229,6 +229,24 @@ export function createAudio() {
     out(g, { wet: 0.4, pan }); out(ng, { wet: 0.4, pan });
     o.start(t); o.stop(t + dur + 0.1); trem.start(t); trem.stop(t + dur + 0.1);
   }
+  function howl(pan = 0) {
+    if (!ok()) return;
+    const t = ctx.currentTime, duration = 1.1;
+    const voice = ctx.createOscillator(), wobble = ctx.createOscillator();
+    const vibrato = ctx.createGain(), loudness = ctx.createGain(), filter = ctx.createBiquadFilter();
+    voice.type = 'triangle'; voice.frequency.setValueAtTime(385, t);
+    voice.frequency.exponentialRampToValueAtTime(625, t + 0.26);
+    voice.frequency.exponentialRampToValueAtTime(435, t + duration);
+    wobble.frequency.value = 5.5; vibrato.gain.value = 14;
+    wobble.connect(vibrato).connect(voice.frequency);
+    filter.type = 'lowpass'; filter.frequency.value = 1680;
+    env(loudness, t, 0.18, 0.22, duration);
+    voice.connect(filter).connect(loudness); out(loudness, { wet: 0.6, pan });
+    for (const osc of [voice, wobble]) { osc.start(t); osc.stop(t + duration + 0.05); }
+  }
+  function growl(pan = 0, big = true) {
+    if (ok()) roarSynth(ctx.currentTime, big, pan);
+  }
   function death({ big = false, pan = 0 }: { big?: boolean; pan?: number } = {}) {
     if (!ok()) return;
     voice(big ? ['deathBig', ['death', { rate: 0.82, gain: 1.2 }]] : ['death'], { pan }, () => deathSynth(big, pan));
@@ -356,7 +374,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, death, hurt, dash, splash, warn, chime, coin, anvil, arrow, thunder, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, splash, warn, chime, coin, anvil, arrow, thunder, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

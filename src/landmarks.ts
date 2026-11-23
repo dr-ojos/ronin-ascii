@@ -10,8 +10,9 @@ import { addLight } from './lights';
 import { campfire } from './campfire';
 import { banner, bannerMat } from './banner';
 import { groundY } from './terrain';
-import { WORLD_R, PLACES, ROADS, RIVER, FOOTPRINTS, inLake, lineDist, seeded, type P2 } from './map';
+import { WORLD_R, PLACES, ROADS, RIVER, FOOTPRINTS, inLake, lineDist, place, seeded, type P2 } from './map';
 import { MT, G, TENT, add, box, post, pyr, stoneLantern, site, solidBox, disc } from './structures';
+import type { Wildlife } from './types';
 
 export interface CampSpot { x: number; z: number; size: number; r: number; tier: number; boss: boolean; chest: [number, number, number] }
 export type PoiKind = 'hokora' | 'jizo' | 'torii' | 'arbol' | 'circulo' | 'ruina' | 'batalla';
@@ -22,6 +23,7 @@ export const POI_NAMES: Record<PoiKind, [string, string]> = {
 };
 
 export const CAMP_SPOTS: CampSpot[] = [];
+export const WILDLIFE_SPOTS: { x: number; z: number; r: number; wildlife: Wildlife }[] = [];
 export const POIS: Poi[] = [];
 /** hidden chests: [x, z, rotY] */
 export const HIDDEN_CHESTS: [number, number, number][] = [];
@@ -228,5 +230,23 @@ export function buildLandmarks() {
     const a = R() * Math.PI * 2, d = Math.sqrt(R()) * WORLD_R, x = Math.cos(a) * d, z = Math.sin(a) * d;
     if (!spotOk(x, z, 1.5, 25)) continue;
     claim(x, z, 1.5); HIDDEN_CHESTS.push([x, z, rnd(0, Math.PI * 2)]); n++;
+  }
+
+  const habitats: [Wildlife, string, number, number][] = [
+    ['lobos', 'claro', 225, 3], ['lobos', 'pinos', 265, 5], ['lobos', 'bosquenegro', 290, 5], ['lobos', 'llanura', 265, 4],
+    ['oso', 'lago', 190, 4], ['oso', 'pinos', 255, 3], ['oso', 'bosquenegro', 285, 3],
+    ['jabalies', 'cerezos', 205, 5], ['jabalies', 'bambu', 215, 4], ['jabalies', 'llanura', 225, 4],
+    ['aranas', 'bambu', 220, 5], ['aranas', 'bosquenegro', 260, 4]
+  ];
+  R = seeded(8615);
+  for (const [wildlife, id, reach, quota] of habitats) {
+    const p = place(id), r = wildlife === 'lobos' ? 12 : 9;
+    for (let tries = 0, n = 0; tries < 600 && n < quota; tries++) {
+      const a = R() * Math.PI * 2, d = Math.sqrt(R()) * reach;
+      const x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d;
+      if (Math.hypot(x, z) < 128 || !spotOk(x, z, r, 25, 9)) continue;
+      claim(x, z, r);
+      WILDLIFE_SPOTS.push({ x, z, r, wildlife }); n++;
+    }
   }
 }
