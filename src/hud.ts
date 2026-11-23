@@ -27,7 +27,6 @@ export function updateHud(dt: number) {
   promptEl.textContent = state.menu ? '' : state.prompt;
   const n = Math.round(24 * player.maxHp / 100), f = Math.round(player.hp / player.maxHp * n);
   const bar = '#'.repeat(f) + '-'.repeat(n - f);
-  const modes = ['color', 'fósforo', 'ámbar', 'papel'];
   const streak = state.mult > 1 ? `  <span class="r">x${state.mult}</span> <span class="d">${'·'.repeat(Math.ceil(state.streakT * 2))}</span>` : '';
   const gain = state.gainT > 0 ? `<span class="y" style="opacity:${Math.min(1, state.gainT).toFixed(2)}">${state.gain}</span>` : '';
   const lairs = camps.filter(c => !c.route && !c.temp), cleared = lairs.filter(c => !c.roster.length).length;
@@ -60,7 +59,7 @@ export function updateHud(dt: number) {
     (ups ? `<span class="y">${ups}</span>\n` : '') +
     foeBar +
     `${gain}\n` +
-    `<span class="d">esquiva ${player.dashCd > 0 ? '·'.repeat(Math.ceil(player.dashCd * 8)) : 'lista'}  ·  paleta ${modes[state.colorMode]}${sfx.muted ? '  ·  sin sonido' : ''}</span>`;
+    `<span class="d">esquiva ${player.dashCd > 0 ? '·'.repeat(Math.ceil(player.dashCd * 8)) : 'lista'}${sfx.muted ? '  ·  sin sonido' : ''}</span>`;
 }
 
 export function showDeathScreen() {

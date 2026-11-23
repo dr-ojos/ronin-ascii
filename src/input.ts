@@ -30,7 +30,6 @@ addEventListener('keydown', e => {
     showMsg(w ? `— ${w.name} —` : 'solo tienes esta katana · Masa vende más en la casa del santuario', w ? 1.2 : 2.2);
   }
   if (!e.repeat && e.code === 'KeyP') tryLightning();
-  if (e.code === 'KeyC') state.colorMode = (state.colorMode + 1) % 4;
   if (e.code === 'KeyT') state.asciiOn = !state.asciiOn;
   if (e.code === 'KeyM') sfx.setMuted(!sfx.muted);
   if (e.code === 'KeyR') toggleRain();

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { rigGltf } from './assets';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { createOniWarrior, oniDrum, oniScythe, type OniLook } from './rig';
+import { oniCostume, oniMask } from './oni-costume';
 import { scene } from './renderer';
 import { ACTOR_LAYER } from './ascii';
 import { M, CLS, tagTree } from './materials';
@@ -68,7 +69,7 @@ export const KINDS: Record<EnemyKind, KindDef> = {
               look: { tint: 0x281e24, mask: 0x9a2830, eye: 0xff503d, weapon: 'sword', crest: 'crescent' }, robe: 0x301923, maskC: 0xac382b,
               moves: ['bladeRush', 'blade', 'blade'], boss: { aura: 0xff453c, enraged: ['whirlwind', 'bladeRush', 'blade', 'bladeRush'] } },
   tenguMayor: { name: 'tengu de los Cinco Vientos', scale: 1.36, hp: 23, speed: [3.5, 3.7], dmg: 17, reach: 15, windup: 0.83, heavy: false, points: 900, glyph: 'V', ranged: true,
-                look: { tint: 0x193f39, mask: 0x57bba5, eye: 0xc0ffbe, weapon: 'bow', crest: 'feathers' }, robe: 0x1d5447, maskC: 0x70cdad,
+                look: { tint: 0x193f39, mask: 0x57bba5, eye: 0xc0ffbe, weapon: 'bow', tengu: true, crest: 'feathers' }, robe: 0x1d5447, maskC: 0x70cdad,
                 moves: ['arrows', 'gust'], boss: { aura: 0x74ffd1, enraged: ['arrowStorm', 'gust', 'arrows', 'gust'] } },
   raijinMayor: { name: 'Raijin de la Cumbre', scale: 1.6, hp: 28, speed: [2.7, 2.9], dmg: 25, reach: 3.8, windup: 0.9, heavy: true, points: 1000, glyph: 'J',
                  look: { tint: 0x222f6c, mask: 0x6876d8, eye: 0xd0eaff, weapon: 'bigclub', crest: 'halo' }, robe: 0x222f6c, maskC: 0x8695df,
@@ -79,7 +80,7 @@ export const KINDS: Record<EnemyKind, KindDef> = {
               look: { tint: 0x101018, mask: 0xe8e0d0, eye: 0xff2040, weapon: 'spear' }, robe: 0x1a1a2a, maskC: 0xe8e0d0, elite: { aura: 0xbfe8ff } },
   // a tengu: shoots fans of arrows and vanishes in a gust when you get too close
   tengu:    { name: 'tengu de la niebla', scale: 1.06, hp: 7, speed: [4.0, 4.0], dmg: 10, reach: 15, windup: 0.75, heavy: false, points: 450, glyph: 'T', ranged: true,
-              look: { tint: 0x1a1a22, mask: 0xc8201a, eye: 0xfff0a0, weapon: 'bow' }, robe: 0x6a1a14, maskC: 0xc8201a, elite: { aura: 0xff6a40 } },
+              look: { tint: 0x1a1a22, mask: 0xc8201a, eye: 0xfff0a0, weapon: 'bow', tengu: true }, robe: 0x6a1a14, maskC: 0xc8201a, elite: { aura: 0xff6a40 } },
   // the thunder oni: calls lightning down where you stand (marked on the ground first) and slams
   raijin:   { name: 'oni del trueno', scale: 1.4, hp: 12, speed: [2.4, 2.4], dmg: 18, reach: 2.2, windup: 0.8, heavy: true, points: 500, glyph: 'R',
               look: { tint: 0x141a2e, mask: 0x2a4aa8, eye: 0xcfe0ff, weapon: 'bigclub' }, robe: 0x1a2a5a, maskC: 0x4a6ad8, elite: { aura: 0x7fa8ff } }
@@ -89,14 +90,14 @@ export const isElite = (k: EnemyKind) => !!KINDS[k].elite;
 export const isBoss = (k: EnemyKind) => !!KINDS[k].boss;
 
 const oniGeo = {
-  robe: new THREE.ConeGeometry(0.55, 1.5, 7), head: new THREE.SphereGeometry(0.28, 12, 10),
-  horn: new THREE.ConeGeometry(0.06, 0.28, 5), eye: new THREE.SphereGeometry(0.045, 6, 5),
-  arm: new THREE.ConeGeometry(0.1, 0.8, 5), ring: new THREE.RingGeometry(0.85, 1.05, 28),
+  robe: new THREE.CylinderGeometry(0.247, 0.221, 0.59, 14), neck: new THREE.CylinderGeometry(0.063, 0.086, 0.16, 10),
+  arm: new THREE.CapsuleGeometry(0.075, 0.47, 4, 9), leg: new THREE.CylinderGeometry(0.105, 0.075, 0.79, 10),
+  sandal: new THREE.SphereGeometry(1, 10, 7), ring: new THREE.RingGeometry(0.85, 1.05, 28),
   shield: new THREE.CylinderGeometry(0.46, 0.46, 0.1, 8).rotateX(Math.PI / 2),
   staff: new THREE.CylinderGeometry(0.04, 0.04, 1.95, 6), crystal: new THREE.OctahedronGeometry(0.19),
   blade: new THREE.BoxGeometry(0.1, 1.1, 0.055), hilt: new THREE.BoxGeometry(0.28, 0.08, 0.09)
 };
-const hornMat = M(0xdccca2), bladeMat = M(0xdbe4ed, { metalness: 0.7 }), eyeMat = new THREE.MeshBasicMaterial({ color: 0xff5a3a });
+const hornMat = M(0xdccca2), bladeMat = M(0xdbe4ed, { metalness: 0.7 }), bootMat = M(0x2e2426);
 export const enemies: Enemy[] = [];
 
 /** Regional danger and acquired gear scale independently. */
@@ -119,13 +120,21 @@ export function spawnOni(camp: Camp, kind: EnemyKind, x: number, z: number) {
   if (rigGltf) return spawnRealOni(rigGltf, camp, kind, x, z);
   const def = KINDS[kind], g = new THREE.Group();
   const robeMat = M(def.robe, { roughness: 0.8, emissive: 0x000000 });
-  const maskMat = M(def.maskC, { roughness: 0.6, emissive: 0x000000 });
-  const robe = new THREE.Mesh(oniGeo.robe, robeMat); robe.position.y = 0.75; g.add(robe);
-  const head = new THREE.Mesh(oniGeo.head, maskMat); head.position.y = 1.72; g.add(head);
+  const look = { ...def.look, big: def.heavy, mask: def.maskC };
+  const baseMask = oniMask(look.mask), maskMat = baseMask.clone();
+  const { head, chest, belt } = oniCostume(look);
+  head.traverse(o => { const part = o as THREE.Mesh; if (part.material === baseMask) part.material = maskMat; });
+  head.position.set(0, 1.665, 0.015);
+  chest.position.y = 1.48;
+  belt.position.y = 0.93;
+  const robe = new THREE.Mesh(oniGeo.robe, robeMat); robe.position.y = 1.19; robe.scale.z = 0.72;
+  const neck = new THREE.Mesh(oniGeo.neck, robeMat); neck.position.y = 1.52;
+  g.add(robe, neck, head, chest, belt);
   for (const s of [1, -1]) {
-    const h = new THREE.Mesh(oniGeo.horn, hornMat); h.position.set(0.13 * s, 2.0, 0); h.rotation.z = -0.35 * s; g.add(h);
-    const e = new THREE.Mesh(oniGeo.eye, eyeMat); e.position.set(0.1 * s, 1.76, 0.24); g.add(e);
-    const a = new THREE.Mesh(oniGeo.arm, robeMat); a.position.set(0.48 * s, 1.05, 0.15); a.rotation.set(-1.1, 0, -0.5 * s); g.add(a);
+    const a = new THREE.Mesh(oniGeo.arm, robeMat); a.position.set(0.29 * s, 1.165, 0.08); a.rotation.set(-0.35, 0, 0.12 * s);
+    const leg = new THREE.Mesh(oniGeo.leg, robeMat); leg.position.set(0.118 * s, 0.48, 0.04 * s); leg.rotation.z = 0.08 * s;
+    const foot = new THREE.Mesh(oniGeo.sandal, bootMat); foot.position.set(0.149 * s, 0.052, 0.065 + 0.04 * s); foot.scale.set(0.071, 0.052, 0.122);
+    g.add(a, leg, foot);
   }
   if (def.look.shield) {
     const shield = new THREE.Mesh(oniGeo.shield, maskMat); shield.position.set(0.43, 1.02, 0.47); g.add(shield);
