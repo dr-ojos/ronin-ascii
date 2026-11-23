@@ -3,8 +3,8 @@
 // The trees come from a reusable "kit" so the streamed forest chunks (chunks.ts) grow the same species.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { tagMat, CLS } from './materials';
-import { addRoundedSurface, addSurfaceVariant, detailedSurfaces, surfaceMaterial } from './surfaces';
+import { tagMat, CLS, asciiGrid, FLOWER_GLYPHS } from './materials';
+import { addRoundedSurface, addSurfaceVariant, detailedSurfaces, showSurfaceDetail, surfaceMaterial } from './surfaces';
 import { bambooBlade, canopySprays, canopyTexture, GRASS_COLOUR, GRASS_SHAPE } from './vegetation-art';
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
 import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, treeBlocked } from './map';
@@ -563,6 +563,7 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
 
   // ---------------- dense infinite grass
   buildGrass(scene);
+  buildMeadowFlowers(scene);
 
   // ---------------- sakura petals drifting down from the canopies
   const petalSources = kit.petalSources;
@@ -611,24 +612,8 @@ export function buildNature(scene: THREE.Scene, ctx: NatureCtx) {
 }
 
 // ------------------------------------------------------------ grass
-function buildGrass(scene: THREE.Scene) {
-  const TILE = 84, N = 210000;
-  const geo = new THREE.PlaneGeometry(0.075, 0.7, 1, 4);
-  geo.translate(0, 0.35, 0);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) pos.setX(i, pos.getX(i) * Math.pow(1 - pos.getY(i) / 0.72, 0.8));
-  const nrm = geo.attributes.normal; for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, 0, 1, 0);
-  // roads, water and built ground (map.ts) have no grass
-  const maskTex = new THREE.DataTexture(groundMask, MASK_RES, MASK_RES, THREE.RGBAFormat);
-  maskTex.minFilter = maskTex.magFilter = THREE.LinearFilter; maskTex.needsUpdate = true;
-  const mat = new THREE.MeshLambertMaterial({ color: 0x5f9a72, side: THREE.DoubleSide });
-  mat.onBeforeCompile = sh => {
-    sh.uniforms.uTime = wind.uTime; sh.uniforms.uCenter = wind.uCenter; sh.uniforms.uPush = wind.uPush;
-    sh.uniforms.uHeight = terrainUniforms.uHeight; sh.uniforms.uMask = { value: maskTex };
-    sh.uniforms.uDetailedSurfaces = detailedSurfaces;
-    sh.vertexShader = WIND_GLSL + `
-      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask; uniform float uDetailedSurfaces;
-      varying float vH; varying float vVar; varying float vSheen; varying vec3 vPlant;
+/** GLSL: where grass (and the meadow flowers) may grow: 0 on paths, water, plazas and bare mountains */
+const GRASS_KEEP = /* glsl */`
       float grassKeep(vec2 p) {
         if (abs(p.x) < 1.55 && p.y > -16.0 && p.y < 7.0) return 0.0;                 // stone path
         if (abs(p.x) < 12.3 && p.y < -14.7 && p.y > -31.3) return 0.0;               // shrine courtyard
@@ -637,6 +622,33 @@ function buildGrass(scene: THREE.Scene) {
         vec4 m = texture2D(uMask, (p + ${HALF.toFixed(1)}) / ${SIZE.toFixed(1)});
         return 1.0 - smoothstep(0.25, 0.5, max(m.r, max(m.g, m.b)));               // roads, water, plazas
       }
+`;
+/** the ground mask as a texture (roads, water and built ground have no grass) */
+let maskTexture: THREE.DataTexture | null = null;
+function grassMask() {
+  if (maskTexture) return maskTexture;
+  maskTexture = new THREE.DataTexture(groundMask, MASK_RES, MASK_RES, THREE.RGBAFormat);
+  maskTexture.minFilter = maskTexture.magFilter = THREE.LinearFilter; maskTexture.needsUpdate = true;
+  return maskTexture;
+}
+function buildGrass(scene: THREE.Scene) {
+  const TILE = 84, N = 210000;
+  const geo = new THREE.PlaneGeometry(0.075, 0.7, 1, 4);
+  geo.translate(0, 0.35, 0);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setX(i, pos.getX(i) * Math.pow(1 - pos.getY(i) / 0.72, 0.8));
+  const nrm = geo.attributes.normal; for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, 0, 1, 0);
+  // roads, water and built ground (map.ts) have no grass
+  const maskTex = grassMask();
+  const mat = new THREE.MeshLambertMaterial({ color: 0x5f9a72, side: THREE.DoubleSide });
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uTime = wind.uTime; sh.uniforms.uCenter = wind.uCenter; sh.uniforms.uPush = wind.uPush;
+    sh.uniforms.uHeight = terrainUniforms.uHeight; sh.uniforms.uMask = { value: maskTex };
+    sh.uniforms.uDetailedSurfaces = detailedSurfaces;
+    sh.vertexShader = WIND_GLSL + `
+      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask; uniform float uDetailedSurfaces;
+      varying float vH; varying float vVar; varying float vSheen; varying vec3 vPlant; varying vec2 vGp;
+      ${GRASS_KEEP}
     ` + sh.vertexShader
       .replace('#include <project_vertex>', /* glsl */`
         vH = uv.y;
@@ -662,10 +674,30 @@ function buildGrass(scene: THREE.Scene) {
           wPos.xz += normalize(d + 1e-4) * push * 0.75;
           wPos.y -= push * 0.42;
         }
+        vGp = wPos.xz;
         vec4 mvPosition = viewMatrix * wPos;
         gl_Position = projectionMatrix * mvPosition;`)
       .replace('#include <worldpos_vertex>', 'vec4 worldPosition = wPos;');
-    sh.fragmentShader = 'uniform float uDetailedSurfaces; varying float vH; varying float vVar; varying float vSheen; varying vec3 vPlant;\n' + sh.fragmentShader
+    sh.fragmentShader = `uniform float uDetailedSurfaces, uTime; varying float vH; varying float vVar; varying float vSheen; varying vec3 vPlant; varying vec2 vGp;
+      float gHash(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+      float gNoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+` + sh.fragmentShader
+      .replace('#include <opaque_fragment>', `
+        { // light play: where the moon or a lantern catches the tips, in patches of fresh growth, and where a
+          // gust rolls the blades over, the grass flashes a vivid young green
+          float lit = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+          float tip = smoothstep(0.3, 1.0, vH);
+          float fresh = smoothstep(0.55, 0.8, gNoise(vGp * 0.21) * 0.7 + gNoise(vGp * 0.9 + 5.0) * 0.3);
+          float shimmer = smoothstep(0.7, 0.97, gNoise(vGp * 0.6 + vec2(uTime * 0.7, -uTime * 0.4)));   // light sliding over the blades
+          float glow = clamp(fresh * 0.6 + step(0.93, vVar) * 0.5 + smoothstep(0.35, 0.9, vSheen) * 0.8 + shimmer * 0.4, 0.0, 1.0) * tip;
+          glow *= smoothstep(0.0008, 0.008, lit);                                   // only where light actually falls
+          vec3 young = vec3(0.3, 0.95, 0.1) * (lit * 3.2 + 0.004);
+          outgoingLight = mix(outgoingLight, young, glow * 0.85);
+        }
+        #include <opaque_fragment>`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         diffuseColor.rgb *= mix(0.07, 1.0, vH) * (0.55 + 0.8 * vVar);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.6, 0.36) * vH, step(0.94, vVar) * 0.55);   // dry tips
@@ -695,4 +727,128 @@ function buildGrass(scene: THREE.Scene) {
   }
   grass.frustumCulled = false; grass.receiveShadow = true;
   scene.add(grass);
+}
+
+// ------------------------------------------------------------ ASCII-art flowers
+// Meadow flowers drawn as real ASCII art, character by character. Each flower is anchored in the world
+// (its root on the ground, its head on a stem that sways in the wind and leans from whoever walks by)
+// but laid out on the text grid itself: its card is built in screen space over whole cells, and every
+// cell picks one glyph (materials.ts FLOWER_GLYPHS), so the art stays crisp at any distance.
+//
+//   rose    tulip    daisy    lupin        far away each one shrinks to its head:  @  v  *  o
+//   (@)     wWw      *o*       .
+//    |/     (_)       |\       o
+//    |       |        |        o
+//           \|/                |
+//
+// Flowers grow in drifts of one kind (with the odd stray), in a few colours per drift. Text view only:
+// the 3D view keeps its modelled wildflowers.
+function buildMeadowFlowers(scene: THREE.Scene) {
+  const TILE = 84, N = 1700;
+  const g = (ch: string) => { const k = FLOWER_GLYPHS.indexOf(ch); if (k < 1) throw new Error(`flor sin glifo: ${ch}`); return k.toFixed(1); };
+  const geo = new THREE.PlaneGeometry(1, 1).translate(0.5, 0.5, 0);   // unit card, 0..1 in x and y
+  const seed = new Float32Array(N);
+  // no fog: it would wash every petal to the same grey-blue (the moonlight still shades them)
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, fog: false });
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, asciiGrid, {
+      uTime: wind.uTime, uCenter: wind.uCenter, uPush: wind.uPush, uHeight: terrainUniforms.uHeight, uMask: { value: grassMask() }
+    });
+    sh.vertexShader = WIND_GLSL + `
+      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask; uniform vec2 uCellPx, uRtPx;
+      attribute float aSeed;
+      varying vec2 vHeadCell; varying float vStem, vKind, vHue;
+      ${GRASS_KEEP}
+      vec2 toPx(vec4 c) { return (c.xy / c.w * 0.5 + 0.5) * uRtPx; }
+    ` + sh.vertexShader
+      .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')   // lit from above, like the grass round it
+      .replace('#include <project_vertex>', /* glsl */`
+        vec3 o = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        vec2 base = uCenter + mod(o.xz - uCenter + ${(TILE / 2).toFixed(1)}, ${TILE.toFixed(1)}) - ${(TILE / 2).toFixed(1)};
+        // drifts: soft patches of one kind of flower, with a few strays between them
+        float drift = wNoise(base * 0.05 + 3.7) * 0.75 + wNoise(base * 0.21 + 1.3) * 0.25;
+        float stray = step(0.992, aSeed);
+        float keep = grassKeep(base) * max(step(0.6, drift), stray);
+        float patchKind = floor(wNoise(base * 0.018 + 17.0) * 3.999 * 1.4);
+        vKind = mod(stray > 0.5 ? floor(aSeed * 997.0) : patchKind + step(0.9, fract(aSeed * 31.7)), 4.0);
+        vHue = fract(wNoise(base * 0.07 + 31.0) * 1.7 + fract(aSeed * 7.3) * 0.35);
+        float size = length(instanceMatrix[0].xyz);
+        float tall = vKind > 2.5 ? 0.7 : (vKind > 1.5 ? 0.38 : 0.5);
+        vec3 root = vec3(base.x, terrainH(base), base.y);
+        vec3 head = root + vec3(0.0, tall * size, 0.0) + windAt(root + vec3(0.0, tall * size, 0.0), 1.0, 0.45, 0.01);
+        for (int i = 0; i < 8; i++) {                                       // lean away from feet
+          vec2 d = base - uPush[i].xy;
+          float push = smoothstep(uPush[i].z * 1.3, 0.0, length(d));
+          head.xz += normalize(d + 1e-4) * push * 0.35; head.y -= push * 0.15;
+        }
+        vec4 mvPosition = viewMatrix * vec4(head, 1.0);
+        vec4 hc = projectionMatrix * mvPosition;
+        vec2 hp = toPx(hc);
+        vHeadCell = floor(hp / uCellPx);
+        // level of detail by distance: the whole drawing up close, just the head and a stem far away
+        float dist = length(mvPosition.xyz);
+        vStem = dist < 34.0 ? (vKind > 2.5 ? 2.0 : (vKind > 1.5 ? 2.0 : 2.0 + step(0.5, fract(aSeed * 5.1)))) : 1.0;
+        // the card covers the cells of the art: 3 either side of the head, the stem below, 3 rows above
+        vec2 lo = (vHeadCell + vec2(-3.0, -vStem - 1.0)) * uCellPx, hi = (vHeadCell + vec2(4.0, 4.0)) * uCellPx;
+        vec2 px = mix(lo, hi, position.xy);
+        // depth: drawn as if 1.8 m nearer, so the flower stands out of the grass round it (trees, walls and
+        // bodies in front still hide it)
+        vec4 dc = projectionMatrix * vec4(mvPosition.xyz * max(0.0, 1.0 - 1.8 / length(mvPosition.xyz)), 1.0);
+        gl_Position = vec4((px / uRtPx * 2.0 - 1.0) * hc.w, dc.z / dc.w * hc.w, hc.w);
+        if (keep < 0.5 || hc.w < 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // not growing here: off screen`)
+      .replace('#include <worldpos_vertex>', 'vec4 worldPosition = modelMatrix * vec4(head, 1.0);');
+    sh.fragmentShader = `#define PIXEL_CLS
+      float pixelCls = 0.0;
+      uniform vec2 uCellPx;
+      varying vec2 vHeadCell; varying float vStem, vKind, vHue;
+` + sh.fragmentShader.replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
+      {
+        vec2 d = floor(gl_FragCoord.xy / uCellPx) - floor(vHeadCell + 0.5);   // this cell, relative to the flower's head
+        float x = d.x, y = d.y, stem = floor(vStem + 0.5), h = vHue, kind = floor(vKind + 0.5);
+        bool near = stem > 1.5;                                          // far away a flower is just its head
+        float glyph = 0.0; vec3 col = vec3(0.0);
+        vec3 stemC = vec3(0.13, 0.3, 0.08), leafC = vec3(0.17, 0.38, 0.1);
+        if (x == 0.0 && y < 0.0 && y >= -stem) { glyph = ${g('|')}; col = stemC; }
+        if (kind < 0.5) {                                               // rose
+          vec3 petal = h < 0.5 ? vec3(0.78, 0.05, 0.09) : (h < 0.88 ? vec3(0.95, 0.42, 0.58) : vec3(0.95, 0.9, 0.84));
+          if (y == 0.0 && x == 0.0) { glyph = ${g('@')}; col = petal * 0.85; }
+          if (near && y == 0.0 && abs(x) == 1.0) { glyph = x < 0.0 ? ${g('(')} : ${g(')')}; col = petal; }
+          if (near && stem > 1.5 && y == -1.0 && x == 1.0) { glyph = ${g('/')}; col = leafC; }
+        } else if (kind < 1.5) {                                        // tulip
+          vec3 petal = h < 0.4 ? vec3(0.85, 0.1, 0.08) : (h < 0.75 ? vec3(1.0, 0.78, 0.14) : vec3(1.0, 0.48, 0.14));
+          if (!near && y == 0.0 && x == 0.0) { glyph = ${g('v')}; col = petal; }
+          if (near && y == 0.0 && abs(x) <= 1.0) { glyph = x < 0.0 ? ${g('(')} : (x > 0.0 ? ${g(')')} : ${g('_')}); col = petal * 0.85; }
+          if (near && y == 1.0 && abs(x) <= 1.0) { glyph = x == 0.0 ? ${g('W')} : ${g('w')}; col = petal; }
+          if (near && y == -stem && abs(x) == 1.0) { glyph = x < 0.0 ? ${g('\\')} : ${g('/')}; col = leafC; }
+        } else if (kind < 2.5) {                                        // daisy
+          vec3 petal = h < 0.55 ? vec3(0.9, 0.9, 0.84) : (h < 0.85 ? vec3(0.95, 0.86, 0.42) : vec3(0.74, 0.64, 0.95));
+          if (y == 0.0 && x == 0.0) { glyph = near ? ${g('o')} : ${g('*')}; col = near ? vec3(1.0, 0.7, 0.1) : petal; }
+          if (near && y == 0.0 && abs(x) == 1.0) { glyph = ${g('*')}; col = petal; }
+          if (near && y == -1.0 && x == 1.0) { glyph = ${g('\\')}; col = leafC; }
+        } else {                                                         // lupin: a spike of blossoms
+          vec3 petal = h < 0.45 ? vec3(0.52, 0.32, 0.95) : (h < 0.8 ? vec3(0.32, 0.46, 0.95) : vec3(0.9, 0.46, 0.8));
+          if (x == 0.0 && y == 0.0) { glyph = ${g('o')}; col = petal; }
+          if (near && x == 0.0 && y == 1.0) { glyph = ${g('o')}; col = petal * 1.1; }
+          if (near && x == 0.0 && y == 2.0) { glyph = ${g('.')}; col = petal * 1.2; }
+        }
+        if (glyph < 0.5) discard;
+        diffuseColor.rgb = col;
+        pixelCls = 0.9 + glyph * 0.002;
+      }`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance += diffuseColor.rgb * 0.035;          // still readable in the deepest shade`);
+  };
+  mat.customProgramCacheKey = () => 'ascii-flowers-2';
+  tagMat(mat, 0.9);
+  const flowers = new THREE.InstancedMesh(geo, mat, N);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V();
+  for (let i = 0; i < N; i++) {
+    p.set(rnd(-TILE / 2, TILE / 2), 0, rnd(-TILE / 2, TILE / 2));
+    s.setScalar(rnd(0.85, 1.25));
+    flowers.setMatrixAt(i, m4.compose(p, q, s));
+    seed[i] = R();
+  }
+  geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 1));
+  flowers.frustumCulled = false;
+  showSurfaceDetail(flowers, false);
+  scene.add(flowers);
 }

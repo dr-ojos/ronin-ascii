@@ -44,3 +44,10 @@ export function shadowTree<T extends THREE.Object3D>(obj: T): T {
   return obj;
 }
 export const box = (w: number, h: number, d: number, m: THREE.Material) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+
+/** The text view's grid, in pixels of the scene render (ascii.ts keeps it current): world-anchored ASCII
+ *  art (the meadow flowers, nature.ts) lays its characters out cell by cell on it. */
+export const asciiGrid = { uCellPx: { value: new THREE.Vector2(4, 7) }, uRtPx: { value: new THREE.Vector2(1, 1) } };
+/** glyphs of the ASCII-art flowers: two atlas rows of 12, each starting blank. A flower pixel carries
+ *  class 0.9 + code * 0.002, code = index in this string. */
+export const FLOWER_GLYPHS = " |/\\()@*oYvV" + " wW_-.,'~:%&";

@@ -2,6 +2,7 @@
 // character per cell), with a finer character grid for the actors and light-aware contours.
 import * as THREE from 'three';
 import { renderer, DPR } from './renderer';
+import { asciiGrid, FLOWER_GLYPHS } from './materials';
 
 export const bufSize = new THREE.Vector2();
 renderer.getDrawingBufferSize(bufSize);
@@ -37,12 +38,13 @@ const ACTOR_RAMPS = [
   " .,:coaeO0@Q"       // skin: round letters model the flesh
 ];
 const EDGE_CHARS = '|\\-/';  // row 8: outline strokes, picked by edge direction
-for (const s of [...CLASS_CHARS, ...ACTOR_RAMPS, EDGE_CHARS]) for (const ch of s) {
+// ASCII-art flowers (nature.ts): not a ramp, every cell of a flower names its own glyph (materials.ts FLOWER_GLYPHS)
+for (const s of [...CLASS_CHARS, ...ACTOR_RAMPS, EDGE_CHARS, FLOWER_GLYPHS]) for (const ch of s) {
   const k = ch.charCodeAt(0);
   if (k < 0x20 || k > 0x7e) throw new Error(`glyph no ASCII: ${JSON.stringify(ch)}`);
 }
-const N = 12, EDGE_ROW = CLASS_CHARS.length, ROWS = EDGE_ROW + 1 + 2;   // + metal and skin ramps for actors
-const METAL_ROW = EDGE_ROW + 1, SKIN_ROW = EDGE_ROW + 2;
+const N = 12, EDGE_ROW = CLASS_CHARS.length, ROWS = EDGE_ROW + 1 + 2 + 2;   // + metal and skin ramps for actors, + two flower rows
+const METAL_ROW = EDGE_ROW + 1, SKIN_ROW = EDGE_ROW + 2, FLOWER_ROW = EDGE_ROW + 3;
 const FONT_FAMILY = '"Courier New", Courier, monospace';
 const OVERLAP = 1.8;   // glyph size / cell size (must stay < 3: each pixel looks at the 3x3 neighbouring cells)
 
@@ -75,6 +77,7 @@ function buildAtlas(gw: number, gh: number, actor: boolean) {
   const put = (c: string, col: number, row: number) => x.fillText(c, col * gw + gw / 2, row * gh + gh / 2 + (actor ? 0 : 1));
   RAMPS.slice(0, CLASS_CHARS.length).forEach((ramp, r) => [...(actor && r === 6 ? RAMPS[CLASS_CHARS.length] : ramp)].forEach((c, i) => put(c, i, r)));
   [...EDGE_CHARS].forEach((c, i) => put(c, i, EDGE_ROW));
+  [...FLOWER_GLYPHS].forEach((c, i) => put(c, i % N, FLOWER_ROW + Math.floor(i / N)));
   if (actor) { RAMPS[CLASS_CHARS.length + 1].forEach((c, i) => put(c, i, METAL_ROW)); RAMPS[CLASS_CHARS.length + 2].forEach((c, i) => put(c, i, SKIN_ROW)); }
   const t = new THREE.CanvasTexture(a);
   t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.flipY = false;
@@ -228,6 +231,21 @@ export const cellMat = new THREE.ShaderMaterial({
         vec4 s0 = texture2D(tScene, uv);
         vec3 col = grade(cellCol(uv, cs));
         float cls = floor(s0.a * 10.0 + 0.5);
+        if (abs(cls - 9.0) < 0.5) {
+          // ---- ASCII-art flowers: the exact texel (no filtering between cells) says which glyph to draw
+          vec4 sf = texelFetch(tScene, ivec2(uv * vec2(textureSize(tScene, 0))), 0);
+          if (abs(floor(sf.a * 10.0 + 0.5) - 9.0) < 0.5) {
+            float code = clamp(floor((sf.a - 0.9) * 500.0 + 0.5), 1.0, ${(FLOWER_GLYPHS.length - 1).toFixed(1)});
+            float fl = luma(grade(sf.rgb));
+            vec3 ft = sf.rgb / max(max(max(sf.rgb.r, sf.rgb.g), sf.rgb.b), 1e-4);   // hue before the tone curve: a lantern must not bleach it white
+            ft = mix(vec3(dot(ft, vec3(0.299, 0.587, 0.114))), ft, 0.9);   // true colour, a touch muted by the night
+            c = modeCol(ft * (0.28 + 0.8 * sqrt(fl)), 0.4 + fl);              // shaded by the moon, never glowing
+            c = mix(c, hurt * max(luma(c), 0.5), uHit * 0.6);
+            float frow = floor(code / uN);
+            gl_FragColor = vec4(c, (${FLOWER_ROW.toFixed(1)} + frow) * uN + code - frow * uN);
+            return;
+          }
+        }
         row = 0.0;
         if (cls > 8.5) row = 0.0;
         else if (cls < 1.5) row = 1.0;
@@ -244,8 +262,14 @@ export const cellMat = new THREE.ShaderMaterial({
         bool grassRow = row > 0.5 && row < 1.5;
         bool foliageRow = row > 3.5 && row < 4.5;
         bool waterRow = row > 6.5;
+        float vividGrass = 0.0;
         if (waterRow) col = mix(vec3(l), col, 0.8) * vec3(0.72, 0.95, 1.3);                  // cold blue water, cyan where the moon hits
-        else if (grassRow) col = mix(vec3(l), col, 0.85) * vec3(0.8, 1.05, 0.95);          // dark teal-green woven grass
+        else if (grassRow) {                                                             // dark teal-green woven grass...
+          // ...with touches of vivid young green where the scene lit the tips (nature.ts: a saturated, blue-free green)
+          vividGrass = smoothstep(0.5, 0.25, col.b / max(col.g, 0.001)) * smoothstep(0.03, 0.1, l);
+          col = mix(vec3(l), col, 0.85) * vec3(0.8, 1.05, 0.95);
+          col = mix(col, vec3(0.5, 1.0, 0.28) * max(l, 0.2) * 1.5, vividGrass);
+        }
         else if (foliageRow) col = mix(vec3(l), col, 1.15) * vec3(0.95, 0.95, 1.05);  // canopies keep their colour: pink sakura, green pine
         else if (!light) col = mix(vec3(l), col, 0.5) * vec3(0.86, 0.9, 1.12);        // indigo stone / wood
         float gain = light ? 1.4 : (grassRow ? 0.95 : (waterRow ? 1.15 : (row < 3.5 && row > 1.5 ? 1.0 : 1.05)));
@@ -256,6 +280,7 @@ export const cellMat = new THREE.ShaderMaterial({
         idx = floor(l * uN);
         vec3 tint = col / max(max(max(col.r, col.g), col.b), 0.04);
         c = light ? mix(tint, vec3(1.0), 0.25) * (0.75 + 0.6 * l) : tint * (0.2 + 0.6 * l);
+        c = mix(c, mix(tint, vec3(0.8, 1.0, 0.55), 0.2) * (0.45 + 0.8 * l), vividGrass);   // lit blades glow
         c = modeCol(c, l);
       }
       c = mix(c, hurt * max(luma(c), 0.5), uHit * 0.6);   // damage flash tints the characters, not the background
@@ -365,6 +390,8 @@ export function applyDensity() {
   grids.env?.font.dispose();
   const E = grids.env = makeGrid(cw, ch, OVERLAP);
   envCh = ch;
+  asciiGrid.uRtPx.value.set(rt.width, rt.height);                               // the scene render's grid, for world-anchored ASCII art
+  asciiGrid.uCellPx.value.set(cw * rt.width / bufSize.x, ch * rt.height / bufSize.y);
   cellRT.setSize(E.cols, E.rows);
   cellMat.uniforms.uRes.value.copy(bufSize);
   const u = postMat.uniforms;
