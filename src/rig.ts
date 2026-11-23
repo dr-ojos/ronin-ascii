@@ -8,7 +8,7 @@ import {
 } from './samurai';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { Avatar, AvatarInput, OniWarrior } from './types';
-import { oniCostume, oniEye, oniMask, type OniLook } from './oni-costume';
+import { oniCostume, oniEye, oniMask, oniYumi, type OniLook } from './oni-costume';
 
 export type { OniLook } from './oni-costume';
 
@@ -467,7 +467,7 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
   mask.position.set(head.x, head.y + headSize * 0.45, head.z + 0.01);
   attach('Head', mask);
 
-  chest.scale.set(sw / 0.2, 1, sw / 0.2);
+  chest.scale.set(sw / 0.2, 1, Math.max(0.96, sw / 0.2));
   chest.position.set(neck.x, neck.y - 0.04, neck.z);
   attach('Spine2', chest);
   belt.scale.set(sw / 0.2, 1, sw / 0.2);
@@ -527,11 +527,9 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
     attach('RightHand', stick);
   } else {
     // yumi: a tall asymmetric bow in the left hand, and a quiver on the back
-    const lHand = P('LeftHand'), yumi = new THREE.Group();
-    const arc = mesh(new THREE.TorusGeometry(0.75, 0.014, 5, 24, Math.PI * 0.75), bowMats.wood, yumi); arc.rotation.z = Math.PI * 0.625; arc.position.x = -0.55;
-    mesh(new THREE.CylinderGeometry(0.003, 0.003, 1.38, 3), bowMats.string, yumi, -0.27, 0.05, 0);
-    yumi.rotation.y = Math.PI / 2;
-    yumi.position.set(lHand.x, lHand.y + 0.1, lHand.z + 0.05);
+    const lHand = P('LeftHand'), yumi = oniYumi();
+    yumi.rotation.y = 0.32 * side;
+    yumi.position.set(lHand.x - side * 0.014, lHand.y + 0.023, lHand.z + 0.039);
     attach('LeftHand', yumi);
     const quiver = new THREE.Group();
     mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.55, 8), oniMats.rope, quiver);
@@ -569,6 +567,7 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): OniWarrior {
   const pole = new V(), bq = new Q(), tgt = new V();
   let lift = 0;
   act.Run && (act.Run.time = Math.random() * 2);
+  mixer.update(0);  // the art takes its neutral joint anchors from the idle pose
   function update(dt: number, s: Parameters<OniWarrior['update']>[1]) {
     const run = clamp(s.moving, 0, 1);
     act.Idle?.setEffectiveWeight(1 - run);

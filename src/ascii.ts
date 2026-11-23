@@ -2,6 +2,7 @@
 // character per cell), with a finer character grid for the actors and light-aware contours.
 import * as THREE from 'three';
 import { renderer, DPR } from './renderer';
+import { actorDepth, depthMask, illustrationMaskScene, updateIllustrations } from './illustrated-actors';
 
 export const bufSize = new THREE.Vector2();
 renderer.getDrawingBufferSize(bufSize);
@@ -77,21 +78,11 @@ let densityIdx = 2;
 
 // Full-resolution, single-channel silhouettes keep thin features on the finer actor grid.
 const maskRT = new THREE.WebGLRenderTarget(bufSize.x, bufSize.y, { format: THREE.RedFormat });
-const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
-maskMat.onBeforeCompile = shader => {
-  shader.uniforms.uSceneDepth = { value: sceneDepth };
-  shader.uniforms.uMaskSize = { value: bufSize };
-  // Use the actor's local slope to allow for sampling between texels when the scene is downscaled.
-  const slopeMargin = RT_SCALE < 1 ? 0.5 / RT_SCALE : 0;
-  shader.fragmentShader = `uniform sampler2D uSceneDepth;
-uniform vec2 uMaskSize;
-` + shader.fragmentShader.replace('#include <tonemapping_fragment>', `
-    float depth = texture2D(uSceneDepth, gl_FragCoord.xy / uMaskSize).r;
-    float margin = 1e-6 + fwidth(gl_FragCoord.z) * ${slopeMargin.toFixed(4)};
-    if (gl_FragCoord.z > depth + margin) discard;
-    #include <tonemapping_fragment>
-  `);
-};
+const maskMat = depthMask(new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }));
+actorDepth.uSceneDepth.value = sceneDepth;
+actorDepth.uMaskSize.value = bufSize;
+// Tolerance for the half-texel offset when the main scene is downscaled.
+actorDepth.uDepthMargin.value = RT_SCALE < 1 ? 0.5 / RT_SCALE : 0;
 export const ACTOR_LAYER = 1;
 
 // one texel per cell: rgb = colour, a = glyph code (row * N + idx)
@@ -349,12 +340,19 @@ export function changeDensity(step: number) {
 
 /** scene -> actor mask -> character cells (environment grid + actor grid) -> screen */
 export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
+  const illustrated = updateIllustrations(scene, camera);
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
   const bg = scene.background;
   scene.background = null; scene.overrideMaterial = maskMat; camera.layers.set(ACTOR_LAYER);
   renderer.setClearColor(0x000000, 1);
   renderer.setRenderTarget(maskRT); renderer.clear(); renderer.render(scene, camera);
   scene.background = bg; scene.overrideMaterial = null; camera.layers.set(0);
+  if (illustrated) {
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.render(illustrationMaskScene, camera);
+    renderer.autoClear = autoClear;
+  }
   const cu = cellMat.uniforms;
   cu.uActor.value = 0; cu.uCell.value.set(grids.env!.cw, grids.env!.ch);
   renderer.setRenderTarget(cellRT); renderer.render(cellScene, postCam);
