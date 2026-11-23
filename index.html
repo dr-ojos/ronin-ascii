@@ -26,7 +26,13 @@
   #overlay .cbtn:hover{color:#ffd27a;border-color:#ffd27a}
   #menu{position:fixed;right:24px;top:50%;transform:translateY(-50%);width:min(440px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow-y:auto;display:none;z-index:5;
     background:rgba(5,6,10,.9);border:1px solid #2a3348;box-shadow:0 0 30px #000;padding:14px 16px;box-sizing:border-box;font-size:14px;color:#cfd6e6}
-  #menu[data-menu="shop"]{width:min(440px,41vw)}
+  #menu[data-menu="shop"]{width:min(440px,41vw);flex-direction:column;overflow:hidden}
+  #menu[data-menu="shop"] .mrows{min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#384359 #080b12;padding-right:4px}
+  #menu[data-menu="shop"] .ml{white-space:pre-wrap}
+  #menu[data-menu="shop"] .mv{margin-left:8px}
+  @media(max-width:680px){
+    #menu[data-menu="shop"]{inset:auto 10px 10px;width:auto;transform:none;max-height:49dvh;padding:10px 12px}
+  }
   body[data-menu="shop"] :is(#hud,#minimap,#zone,#hint,#prompt){visibility:hidden}
   #menu .mt{color:#ff5a4a;font-weight:bold;letter-spacing:.12em;text-align:center}
   #menu .ms{color:#9aa3b5;font-size:12px;text-align:center;margin:4px 0 10px}
@@ -35,7 +41,9 @@
   #menu .mr.on{background:#121827;border-left-color:#ffd27a}
   #menu .mr .ml{white-space:pre}
   #menu .mv{float:right}
-  #menu .mn{color:#6c7488;font-size:11px;margin:1px 0 0 18px}
+  #menu .mn{clear:both;color:#6c7488;font-size:11px;margin:1px 0 0 18px}
+  #menu .msparks{display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle}
+  #menu .msparks i{width:4px;height:4px;background:currentColor;box-shadow:0 0 5px currentColor;transform:rotate(45deg)}
   #menu .mr.on .mn{color:#9aa3b5}
   #menu .ma{color:#ffd27a;padding:0 4px}
   #menu .mi{background:#05060a;border:1px solid #2a3348;color:#ffd27a;font:inherit;width:150px;padding:1px 4px}

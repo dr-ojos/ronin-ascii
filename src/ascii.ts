@@ -2,7 +2,7 @@
 // character per cell), with a finer character grid for the actors and light-aware contours.
 import * as THREE from 'three';
 import { renderer, DPR } from './renderer';
-import { asciiGrid, FLOWER_GLYPHS } from './materials';
+import { asciiGrid, BLADE_SPARK_ALPHA, FLOWER_GLYPHS } from './materials';
 
 export const bufSize = new THREE.Vector2();
 renderer.getDrawingBufferSize(bufSize);
@@ -45,6 +45,7 @@ for (const s of [...CLASS_CHARS, ...ACTOR_RAMPS, EDGE_CHARS, FLOWER_GLYPHS]) for
 }
 const N = 12, EDGE_ROW = CLASS_CHARS.length, ROWS = EDGE_ROW + 1 + 2 + 2;   // + metal and skin ramps for actors, + two flower rows
 const METAL_ROW = EDGE_ROW + 1, SKIN_ROW = EDGE_ROW + 2, FLOWER_ROW = EDGE_ROW + 3;
+const SPARK_GLYPH = FLOWER_ROW * N + FLOWER_GLYPHS.indexOf('*');
 const FONT_FAMILY = '"Courier New", Courier, monospace';
 const OVERLAP = 1.8;   // glyph size / cell size (must stay < 3: each pixel looks at the 3x3 neighbouring cells)
 
@@ -170,6 +171,15 @@ export const cellMat = new THREE.ShaderMaterial({
       float center = Mk(uv);
       vec4 sides = vec4(Mk(uv + dx), Mk(uv - dx), Mk(uv + dy), Mk(uv - dy));
       float coverage = center * 2.0 + dot(sides, vec4(1.0));
+      vec4 surface = texelFetch(tScene, ivec2(uv * vec2(textureSize(tScene, 0))), 0);
+      if (abs(surface.a - ${BLADE_SPARK_ALPHA.toFixed(2)}) < 0.002 && (uActor > 0.5 ? coverage >= 1.0 : coverage <= 2.0)) {
+        // Keep blade sparks saturated and legible as single asterisks at the normal camera distance.
+        float peak = max(max(surface.r, surface.g), surface.b);
+        vec3 tint = sqrt(surface.rgb / max(peak, 0.01));
+        c = modeCol(tint * (0.8 + 0.55 * sqrt(min(1.0, peak))), peak);
+        gl_FragColor = vec4(c, ${SPARK_GLYPH.toFixed(1)});
+        return;
+      }
       if (uActor > 0.5) {
         if (coverage < 1.0) { gl_FragColor = vec4(0.0); return; }
         // ---- actors: silhouette drawn with | \\ - / strokes, creases too, body filled with the actor ramp

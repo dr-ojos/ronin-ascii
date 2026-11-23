@@ -49,6 +49,7 @@ canvas.addEventListener('mousedown', e => {
   if (e.button === 0) tryAttack();
 });
 addEventListener('wheel', e => {
+  if (state.menu) return;
   if (state.photo) state.photoDist = THREE.MathUtils.clamp(state.photoDist + e.deltaY * 0.01, 2, 40);
   else state.camDistUser = THREE.MathUtils.clamp(state.camDistUser + e.deltaY * 0.01, 3, 34);
 }, { passive: true });

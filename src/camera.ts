@@ -20,11 +20,19 @@ export function updateCamera(dt: number) {
   // photo mode close up (F + wheel): the camera comes down to eye level and frames the face
   const close = state.photo ? THREE.MathUtils.clamp((5 - state.photoDist) / 3, 0, 1) : 0;
   camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo || dress ? 1.3 + 0.3 * close : 1.5), player.pos.z), Math.min(1, dt * 10));
+  const narrowShop = state.menu === 'shop' && !state.photo && innerWidth <= 680;
+  const zoom = narrowShop ? Math.min(0.66, camera.aspect * 1.2) : 1;
+  if (camera.zoom !== zoom) { camera.zoom = zoom; camera.updateProjectionMatrix(); }
   if (shopStageActive() && !state.photo) {
     camera.position.copy(shopCameraPos);
+    const halfHeight = camera.position.distanceTo(shopFocus) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / zoom;
+    const halfWidth = halfHeight * camera.aspect;
     shopRight.set(shopCameraPos.z - shopFocus.z, 0, shopFocus.x - shopCameraPos.x).normalize();
+    if (narrowShop) {
+      camera.lookAt(tmp.copy(shopFocus).addScaledVector(shopRight, -halfWidth * 0.24).addScaledVector(camera.up, -halfHeight * 0.32));
+      return;
+    }
     const occupied = Math.min(440, innerWidth * 0.41) + 24;
-    const halfWidth = camera.position.distanceTo(shopFocus) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
     camera.lookAt(tmp.copy(shopFocus).addScaledVector(shopRight, halfWidth * occupied / innerWidth));
     return;
   }

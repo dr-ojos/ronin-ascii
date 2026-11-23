@@ -175,6 +175,7 @@ function shopRows(): MenuRow[] {
     rows.push({
       label: w.name, value: price(w.price, mine, on, 'equipada'),
       cls: on ? 'y' : mine ? 'b' : state.mon >= w.price ? '' : 'r',
+      sparkColors: w.fx.sparks,
       note: `${w.desc} · ${weaponStats(w)}`,
       preview() { applyWeapon(w); dressUp(); },
       act() {

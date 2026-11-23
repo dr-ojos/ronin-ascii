@@ -1,10 +1,9 @@
 // Katana effects: blade light, sparks shed by the edge, and the vapour trail of each cut.
 import * as THREE from 'three';
 import { scene } from './renderer';
-import { CLS } from './materials';
+import { BLADE_SPARK_ALPHA, CLS, tagMat } from './materials';
 import { sam, bladeMat } from './avatar';
-import { tipZ, weapon } from './weapons';
-import { tagMat } from './materials';
+import { BLADE_BASE, displayedWeapon, tipZ, type Weapon } from './weapons';
 import { player, state } from './state';
 import { rnd } from './utils';
 import { shopStageActive } from './shop-stage';
@@ -26,16 +25,100 @@ const halo = new THREE.Group();
 }
 sam.katana.add(halo);
 const C1 = new THREE.Color(), C2 = new THREE.Color(), CG = new THREE.Color();
-let fxId = '';
+let fxWeapon: Weapon | undefined;
 /** the blade's colours changed (another weapon in hand) */
-function setWeaponFx() {
-  const w = weapon(); fxId = w.id;
+function setWeaponFx(w: Weapon) {
+  fxWeapon = w;
   CG.set(w.fx.glow); C1.set(w.fx.hot); C2.set(w.fx.cool);
-  haloMat.color.copy(CG); haloCore.color.copy(CG).lerp(new THREE.Color(0xffffff), 0.35); bladeLight.color.copy(CG);
-  const len = tipZ() - 0.17, r = 0.035 * w.fx.halo;
+  haloMat.color.copy(CG); haloCore.color.copy(CG).lerp(WHITE, 0.35); bladeLight.color.copy(CG);
+  const len = tipZ(w) - BLADE_BASE, r = 0.027 * w.fx.halo;
   const outer = halo.getObjectByName('outer')!, inner = halo.getObjectByName('inner')!;
-  outer.scale.set(r, r * 0.55, len / 2); inner.scale.set(r * 0.35, r * 0.2, len / 2);
-  halo.position.set(0, 0.004, 0.17 + len / 2);
+  outer.scale.set(r, r * 0.55, len / 3); inner.scale.set(r * 0.35, r * 0.2, len / 3);
+  halo.position.set(0, 0.004, BLADE_BASE + len / 2);
+  const palette = w.fx.sparks;
+  if (palette) {
+    for (let i = 0; i < edgeColors.count; i++) {
+      edgeColor.set(palette[i % palette.length]);
+      edgeColors.setXYZ(i, edgeColor.r, edgeColor.g, edgeColor.b);
+    }
+    edgeColors.needsUpdate = true;
+  }
+}
+
+// Small flashes and drifting grains kept in blade space, so they follow the edge even on a run.
+const WHITE = new THREE.Color(0xffffff), edgeColor = new THREE.Color();
+const EDGE_SPARKS = 18;
+const edgePositions = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3).setUsage(THREE.DynamicDrawUsage);
+const edgePulses = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS), 1).setUsage(THREE.DynamicDrawUsage);
+const edgeColors = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3);
+const edgeGeo = new THREE.BufferGeometry();
+edgeGeo.setAttribute('position', edgePositions);
+edgeGeo.setAttribute('color', edgeColors);
+edgeGeo.setAttribute('aPulse', edgePulses);
+const edgeViewport = new THREE.Vector4();
+const edgeMat = new THREE.ShaderMaterial({
+  uniforms: { uViewportHeight: { value: 1 }, uRasterScale: { value: 1 } },
+  vertexColors: true, transparent: true, depthWrite: false, toneMapped: false,
+  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+  blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.ZeroFactor,
+  vertexShader: `
+    uniform float uViewportHeight, uRasterScale;
+    attribute float aPulse;
+    varying vec3 vTint;
+    varying float vPulse;
+    void main() {
+      vec4 p = modelViewMatrix * vec4(position, 1.0);
+      gl_Position = projectionMatrix * p;
+      float size = 0.065 * uViewportHeight * projectionMatrix[1][1] / max(1.0, -p.z);
+      gl_PointSize = mix(0.66, 1.0, aPulse) * clamp(size, 8.0 * uRasterScale, 17.0 * uRasterScale);
+      vPulse = aPulse;
+      vTint = color;
+    }`,
+  fragmentShader: `
+    varying vec3 vTint;
+    varying float vPulse;
+    void main() {
+      vec2 p = abs(gl_PointCoord - 0.5) * 2.0;
+      float r = length(p);
+      float bloom = 0.33 * (1.0 - smoothstep(0.10, 0.85, r));
+      float arms = (1.0 - smoothstep(0.04, 0.24, min(p.x, p.y))) * (1.0 - smoothstep(0.14, 0.86, max(p.x, p.y)));
+      float center = 1.0 - smoothstep(0.03, 0.19, r);
+      float value = vPulse * (bloom + 0.69 * arms + 0.37 * center);
+      if (value < 0.045) discard;
+      float cls = value > 0.13 ? ${BLADE_SPARK_ALPHA.toFixed(2)} : ${CLS.light.toFixed(2)};
+      gl_FragColor = vec4(mix(vTint, vec3(1.0), 0.16 * center) * value, cls);
+      #include <colorspace_fragment>
+    }`
+});
+const edgeSparks = new THREE.Points(edgeGeo, edgeMat);
+edgeSparks.name = 'blade-sparks';
+edgeSparks.frustumCulled = false;
+edgeSparks.visible = false;
+edgeSparks.renderOrder = 5;
+edgeSparks.onBeforeRender = renderer => {
+  const height = renderer.getCurrentViewport(edgeViewport).w;
+  edgeMat.uniforms.uViewportHeight.value = height;
+  edgeMat.uniforms.uRasterScale.value = height / innerHeight;
+};
+sam.katana.add(edgeSparks);
+function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
+  edgeSparks.visible = Boolean(w.fx.sparks) && !state.dead;
+  if (!edgeSparks.visible) return;
+  const length = tipZ(w) - BLADE_BASE;
+  const time = state.time;
+  for (let i = 0; i < EDGE_SPARKS; i++) {
+    const cycle = time * (1.2 + (i % 5) * 0.19) + i * 0.618;
+    const age = cycle % 1;
+    const angle = (i + Math.floor(cycle) * 0.43) * 2.4 + age * 1.5;
+    const radius = 0.018 + age * (0.27 + (i % 4) * 0.045 + heat * 0.17);
+    const along = 0.19 + ((i * 7) % EDGE_SPARKS) / EDGE_SPARKS * 0.79;
+    edgePositions.setXYZ(i, Math.cos(angle) * radius, Math.sin(angle) * radius + age * 0.075, BLADE_BASE + along * length + age * 0.09);
+    const blink = 0.77 + 0.23 * Math.sin(cycle * 28);
+    const life = Math.min(1, age * 12) * (1 - age * age);
+    edgePulses.setX(i, life * blink * (displaying ? 1 : 0.83 + 0.17 * heat));
+  }
+  edgePositions.needsUpdate = true;
+  edgePulses.needsUpdate = true;
 }
 
 const SPARKS = 900;
@@ -58,7 +141,7 @@ sparkMat.userData.cls = CLS.light;
 sparkMat.onBeforeCompile = sh => {
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <color_fragment>', `#include <color_fragment>
-      { vec2 pc = gl_PointCoord - 0.5; if (dot(pc, pc) > 0.25 || diffuseColor.r + diffuseColor.g < 0.12) discard; }`)
+      { vec2 pc = gl_PointCoord - 0.5; if (dot(pc, pc) > 0.25 || max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b) < 0.08) discard; }`)
     .replace(/}\s*$/, `  gl_FragColor.a = ${CLS.light.toFixed(2)};\n}`);
 };
 const sparkPts = new THREE.Points(spGeo, sparkMat);
@@ -178,12 +261,13 @@ export function updateSparks(dt: number, emit: boolean) {
   const staged = displaying || wasDisplaying;
   wasDisplaying = displaying;
   emit &&= !staged;
-  if (weapon().id !== fxId) setWeaponFx();
-  const w = weapon(), grav = w.fx.gravity;
+  const w = displayedWeapon(), grav = w.fx.gravity;
+  if (w !== fxWeapon) setWeaponFx(w);
+  sparkPts.visible = !displaying;
   trailK = w.fx.trail;
   sam.katana.updateMatrixWorld(true);
   bladeBase.set(0, 0, 0.24); sam.katana.localToWorld(bladeBase);
-  bladeTip.set(0, 0, tipZ()); sam.katana.localToWorld(bladeTip);
+  bladeTip.set(0, 0, tipZ(w)); sam.katana.localToWorld(bladeTip);
   tipVel.subVectors(bladeTip, prevTip).divideScalar(dt);
   if (staged) tipVel.setScalar(0);
   if (tipVel.lengthSq() > 900) tipVel.setLength(30); // teleports (reset, first frame)
@@ -200,7 +284,7 @@ export function updateSparks(dt: number, emit: boolean) {
   prevTip.copy(bladeTip); prevBase.copy(bladeBase);
   // running (and not fighting) the blade is carried low and behind: its glow would read as a white
   // trail, so it goes quiet — plain steel, no halo — and the ronin sheds a few motes of light instead
-  const running = player.moving * (1 - fight), calm = 1 - running;
+  const running = displaying ? 0 : player.moving * (1 - fight), calm = 1 - running;
   // emission: a rare crackle along the edge, a light shower while cutting
   if (emit) {
     sparkAcc += dt * (3 * calm + bladeHeat * 55 + swing * fight * 25);
@@ -248,17 +332,23 @@ export function updateSparks(dt: number, emit: boolean) {
   // the blade and its light pulse with the heat of the cut
   const fl = 0.85 + Math.random() * 0.3;
   // polished steel at rest; the edge catches light in proportion to how fast it is moving
-  bladeMat.emissiveIntensity = (0.4 * (0.2 + 0.8 * calm) + swingF * 1.8 + bladeHeat * 0.5) * (0.92 + Math.random() * 0.16);
+  const edgeGlow = w.fx.sparks ? 0.42 + 0.09 * Math.sin(state.time * 5.5) : 0;
+  bladeMat.emissiveIntensity = (edgeGlow + 0.4 * (0.2 + 0.8 * calm) + swingF * 1.8 + bladeHeat * 0.5) * (0.92 + Math.random() * 0.16);
   bladeLight.position.lerpVectors(bladeBase, bladeTip, 0.6);
   bladeLight.intensity = (0.5 * (0.3 + 0.7 * calm) + swingF * 4 + bladeHeat * 1.5) * fl * (0.8 + w.fx.halo * 0.4);
   // the halo breathes at rest and flares with the cut
   const hk = Math.min(1, swingF * 1.2 + bladeHeat * 0.5);
-  haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 * calm + hk * 0.2;
+  haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 * calm + hk * 0.2 + edgeGlow * 0.14;
   haloCore.opacity = 0.08 * calm + hk * 0.25;
   halo.scale.set(1 + hk * 0.25, 1 + hk * 0.25, 1);
-  halo.visible = sam.root.visible && !displaying && (calm > 0.03 || hk > 0.01);
+  halo.visible = sam.root.visible && (w.fx.sparks ? !state.dead : !displaying && (calm > 0.03 || hk > 0.01));
+  updateEdgeSparks(w, hk, displaying);
   // each blade's own flourish
   if (emit && w.fx.extra) flourish(w.fx.extra, dt, hk);
+  for (let i = bolts.length - 1; i >= 0; i--) {
+    const b = bolts[i]; b.life -= dt;
+    if (b.life <= 0 || displaying) { scene.remove(b.l); b.l.geometry.dispose(); bolts.splice(i, 1); }
+  }
   // sits between the samurai and the camera, chest high: lights his front, barely touches the grass
   const p = sam.root.position;
   const yaw = displaying ? sam.root.rotation.y : state.yaw;
@@ -287,9 +377,5 @@ function flourish(kind: 'bolts' | 'blood' | 'feathers' | 'stars', dt: number, hk
     } else if (kind === 'blood') spawnSpark(spTmp, rnd(-0.3, 0.3) + tipVel.x * 0.1, rnd(-0.5, 0.2), rnd(-0.3, 0.3) + tipVel.z * 0.1, rnd(0.5, 0.9));
     else if (kind === 'feathers') spawnSpark(spTmp, rnd(-0.8, 0.8), rnd(0.2, 1.2), rnd(-0.8, 0.8), rnd(0.8, 1.3));
     else spawnSpark(spTmp, rnd(-0.3, 0.3), rnd(0.3, 0.9), rnd(-0.3, 0.3), rnd(0.9, 1.5));
-  }
-  for (let i = bolts.length - 1; i >= 0; i--) {
-    const b = bolts[i]; b.life -= dt;
-    if (b.life <= 0) { scene.remove(b.l); b.l.geometry.dispose(); bolts.splice(i, 1); }
   }
 }

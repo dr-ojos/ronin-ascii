@@ -12,6 +12,7 @@ export interface MenuRow {
   note?: string;
   /** css class for the value: y (gold), r (red), d (dim), b (blue) */
   cls?: string;
+  sparkColors?: readonly number[];
   /** a text field instead of a value (the ronin's name) */
   input?: { value: string; max: number; set(v: string): void };
   act?(): void;
@@ -39,8 +40,8 @@ export function openMenu(def: MenuDef, at = 0) {
   el.dataset.menu = def.id;
   document.body.dataset.menu = def.id;
   for (const k in keys) keys[k] = false;   // nobody keeps walking while the menu is open
-  el.style.display = 'block';
-  render();
+  el.style.display = def.id === 'shop' ? 'flex' : 'block';
+  render(true);
 }
 export function closeMenu() {
   if (!cur) return;
@@ -53,25 +54,32 @@ export function closeMenu() {
 export function menuStatus(t: string) { status = t; statusT = 2.5; render(); }
 export function updateMenu(dt: number) { if (statusT > 0 && (statusT -= dt) <= 0) { status = ''; render(); } }
 
-export function render() {
+export function render(revealSelection = false) {
   if (!cur) return;
+  const scroll = el.querySelector<HTMLElement>('.mrows')?.scrollTop ?? 0;
   const rows = cur.rows();
   sel = Math.max(0, Math.min(rows.length - 1, sel));
   rows[sel]?.preview?.();
   el.innerHTML =
     `<div class="mt">${esc(cur.title)}</div>` +
     (cur.sub ? `<div class="ms">${cur.sub()}</div>` : '') +
-    rows.map((r, i) => {
+    '<div class="mrows">' + rows.map((r, i) => {
       if (r.head) return `<div class="mh">${esc(r.label)}</div>`;
       const val = r.input
         ? `<input class="mi" maxlength="${r.input.max}" value="${esc(r.input.value)}" spellcheck="false">`
         : r.value !== undefined
           ? (r.left ? `<span class="ma" data-d="-1">‹</span> ` : '') + `<span class="${r.cls || ''}">${esc(r.value)}</span>` + (r.right ? ` <span class="ma" data-d="1">›</span>` : '')
           : '';
-      return `<div class="mr${i === sel ? ' on' : ''}" data-i="${i}"><span class="ml">${i === sel ? '›' : ' '} ${esc(r.label)}</span><span class="mv">${val}</span>` +
+      const sparks = r.sparkColors ? `<span class="msparks" aria-hidden="true">${r.sparkColors.map(color => `<i style="color:#${color.toString(16).padStart(6, '0')}"></i>`).join('')}</span>` : '';
+      return `<div class="mr${i === sel ? ' on' : ''}" data-i="${i}"><span class="mv">${val}</span><span class="ml">${i === sel ? '›' : ' '} ${esc(r.label)}${sparks}</span>` +
         (r.note ? `<div class="mn">${esc(r.note)}</div>` : '') + `</div>`;
-    }).join('') +
+    }).join('') + '</div>' +
     `<div class="mst">${esc(status)}</div><div class="mf">${esc(cur.foot)}</div>`;
+  if (cur.id === 'shop') {
+    const list = el.querySelector<HTMLElement>('.mrows')!;
+    list.scrollTop = scroll;
+    if (revealSelection) list.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
+  }
   // the name field keeps focus while you type
   const input = el.querySelector<HTMLInputElement>('.mi');
   if (input) {
@@ -86,7 +94,7 @@ function move(d: number) {
   if (!cur) return;
   const rows = cur.rows(), n = rows.length;
   for (let k = 0; k < n; k++) { sel = (sel + d + n) % n; if (!rows[sel].head) break; }
-  render();
+  render(true);
 }
 function act(i = sel) { const r = cur?.rows()[i]; if (!r || r.head) return; sel = i; if (r.act) r.act(); else if (r.right) r.right(); render(); }
 function side(d: number) { const r = cur?.rows()[sel]; if (!r) return; (d < 0 ? r.left : r.right)?.(); render(); }
@@ -107,6 +115,9 @@ export function menuKey(e: KeyboardEvent) {
 }
 
 el.addEventListener('mousedown', e => e.stopPropagation());
+addEventListener('resize', () => {
+  if (cur?.id === 'shop') el.querySelector('.mr.on')?.scrollIntoView({ block: 'nearest' });
+});
 el.addEventListener('click', e => {
   e.stopPropagation();
   const t = e.target as HTMLElement;
