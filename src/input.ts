@@ -17,6 +17,7 @@ import { sfx } from './sfx';
 import { toggleRain } from './world';
 import { showMsg, overlay } from './hud';
 import { state, keys } from './state';
+import { resetMinimap, zoomBigMap } from './minimap';
 
 /** camera heading when photo mode was switched on */
 let photoYaw = 0;
@@ -44,8 +45,9 @@ addEventListener('keydown', e => {
     // photo mode orbits the camera; leaving it puts the camera (and the minimap's north) back where it was
     if (state.photo) state.yaw = photoYaw; else photoYaw = state.yaw;
     state.photo = !state.photo; showMsg(state.photo ? 'MODO FOTO · F para volver' : '', state.photo ? 2 : 0.01); }
-  if (e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd') changeDensity(-1);
-  if (e.key === '-' || e.code === 'Minus' || e.code === 'NumpadSubtract') changeDensity(1);
+  const plus = e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd', minus = e.key === '-' || e.code === 'Minus' || e.code === 'NumpadSubtract';
+  if (state.bigMap && !state.menu) { if (plus) zoomBigMap(1); if (minus) zoomBigMap(-1); }
+  else { if (plus) changeDensity(-1); if (minus) changeDensity(1); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 // camera is fixed: the mouse no longer rotates the view
@@ -54,14 +56,20 @@ canvas.addEventListener('mousedown', e => {
   if (!state.playing || state.dead || state.menu) return;
   if (e.button === 0) tryAttack();
 });
+let mapWheel = 0;
 addEventListener('wheel', e => {
   if (state.menu) return;
+  if (state.bigMap) {   // trackpads send many small steps: one zoom level per notch
+    mapWheel += e.deltaY;
+    if (Math.abs(mapWheel) > 60) { zoomBigMap(mapWheel < 0 ? 1 : -1); mapWheel = 0; }
+    return;
+  }
   if (state.photo) state.photoDist = THREE.MathUtils.clamp(state.photoDist + e.deltaY * 0.01, 2, 40);
   else state.camDistUser = THREE.MathUtils.clamp(state.camDistUser + e.deltaY * 0.01, 3, 34);
 }, { passive: true });
 overlay.addEventListener('click', () => {
   sfx.init(); overlay.style.display = 'none';
-  if (state.dead || !state.playing) { reset(); resetWeapons(); resetArmor(); dressUp(); }
+  if (state.dead || !state.playing) { reset(); resetMinimap(); resetWeapons(); resetArmor(); dressUp(); }
   state.playing = true;
 });
 
