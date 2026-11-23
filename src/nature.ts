@@ -729,22 +729,15 @@ function buildGrass(scene: THREE.Scene) {
   scene.add(grass);
 }
 
-// ------------------------------------------------------------ ASCII-art flowers
-// Meadow flowers drawn as real ASCII art, character by character. Each flower is anchored in the world
-// (its root on the ground, its head on a stem that sways in the wind and leans from whoever walks by)
-// but laid out on the text grid itself: its card is built in screen space over whole cells, and every
-// cell picks one glyph (materials.ts FLOWER_GLYPHS), so the art stays crisp at any distance.
-//
-//   rose    tulip    daisy    lupin        far away each one shrinks to its head:  @  v  *  o
-//   (@)     wWw      *o*       .
-//    |/     (_)       |\       o
-//    |       |        |        o
-//           \|/                |
-//
-// Flowers grow in drifts of one kind (with the odd stray), in a few colours per drift. Text view only:
-// the 3D view keeps its modelled wildflowers.
+// ------------------------------------------------------------ meadow flowers (text view)
+// Wild flowers as the text view draws a meadow: no stems, no little drawings, just specks of colour
+// sown through the grass, one character each (* an open flower, . a bud). They grow in drifts of one
+// tint (pink and white, buttercup, violet, poppy), feathered at the edges, and thin out with distance
+// so the far meadow doesn't turn to confetti. Each speck sits on the text grid (its card covers exactly
+// one cell, materials.ts asciiGrid), keeps its colour under any light and nods in the wind.
+// The 3D view keeps its modelled wildflowers.
 function buildMeadowFlowers(scene: THREE.Scene) {
-  const TILE = 84, N = 1700;
+  const TILE = 84, N = 5200;
   const g = (ch: string) => { const k = FLOWER_GLYPHS.indexOf(ch); if (k < 1) throw new Error(`flor sin glifo: ${ch}`); return k.toFixed(1); };
   const geo = new THREE.PlaneGeometry(1, 1).translate(0.5, 0.5, 0);   // unit card, 0..1 in x and y
   const seed = new Float32Array(N);
@@ -757,94 +750,60 @@ function buildMeadowFlowers(scene: THREE.Scene) {
     sh.vertexShader = WIND_GLSL + `
       uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask; uniform vec2 uCellPx, uRtPx;
       attribute float aSeed;
-      varying vec2 vHeadCell; varying float vStem, vKind, vHue;
+      varying vec2 vHeadCell; varying vec3 vPetal; varying float vBud;
       ${GRASS_KEEP}
-      vec2 toPx(vec4 c) { return (c.xy / c.w * 0.5 + 0.5) * uRtPx; }
     ` + sh.vertexShader
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')   // lit from above, like the grass round it
       .replace('#include <project_vertex>', /* glsl */`
         vec3 o = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
         vec2 base = uCenter + mod(o.xz - uCenter + ${(TILE / 2).toFixed(1)}, ${TILE.toFixed(1)}) - ${(TILE / 2).toFixed(1)};
-        // drifts: soft patches of one kind of flower, with a few strays between them
-        float drift = wNoise(base * 0.05 + 3.7) * 0.75 + wNoise(base * 0.21 + 1.3) * 0.25;
-        float stray = step(0.992, aSeed);
-        float keep = grassKeep(base) * max(step(0.6, drift), stray);
-        float patchKind = floor(wNoise(base * 0.018 + 17.0) * 3.999 * 1.4);
-        vKind = mod(stray > 0.5 ? floor(aSeed * 997.0) : patchKind + step(0.9, fract(aSeed * 31.7)), 4.0);
-        vHue = fract(wNoise(base * 0.07 + 31.0) * 1.7 + fract(aSeed * 7.3) * 0.35);
-        float size = length(instanceMatrix[0].xyz);
-        float tall = vKind > 2.5 ? 0.7 : (vKind > 1.5 ? 0.38 : 0.5);
+        // drifts with feathered edges: dense in the heart of a patch, a few strays round it
+        float drift = wNoise(base * 0.06 + 3.7) * 0.7 + wNoise(base * 0.23 + 1.3) * 0.3;
+        float keep = grassKeep(base) * step(0.5 + 0.14 * fract(aSeed * 7.13), drift);
+        // one tint per drift, a little variation per flower
+        float tint = floor(wNoise(base * 0.025 + 17.0) * 4.0 * 1.3);
+        tint = mod(tint + step(0.93, fract(aSeed * 31.7)), 4.0);
+        float v = fract(aSeed * 13.7);
+        vec3 c = tint < 0.5 ? mix(vec3(1.0, 0.56, 0.72), vec3(1.0, 0.88, 0.92), step(0.6, v))     // pink and white
+               : tint < 1.5 ? mix(vec3(1.0, 0.8, 0.16), vec3(1.0, 0.92, 0.5), step(0.7, v))      // buttercup
+               : tint < 2.5 ? mix(vec3(0.58, 0.42, 1.0), vec3(0.42, 0.55, 1.0), step(0.55, v))    // violet and blue
+               : mix(vec3(0.95, 0.18, 0.14), vec3(1.0, 0.45, 0.16), step(0.6, v));               // poppy
+        vPetal = c * (0.85 + 0.3 * fract(aSeed * 91.3));
+        vBud = step(0.72, fract(aSeed * 5.31));
         vec3 root = vec3(base.x, terrainH(base), base.y);
-        vec3 head = root + vec3(0.0, tall * size, 0.0) + windAt(root + vec3(0.0, tall * size, 0.0), 1.0, 0.45, 0.01);
+        vec3 head = root + vec3(0.0, 0.32 + 0.2 * fract(aSeed * 3.7), 0.0);
+        head += windAt(head, 1.0, 0.4, 0.01);
         for (int i = 0; i < 8; i++) {                                       // lean away from feet
           vec2 d = base - uPush[i].xy;
           float push = smoothstep(uPush[i].z * 1.3, 0.0, length(d));
           head.xz += normalize(d + 1e-4) * push * 0.35; head.y -= push * 0.15;
         }
         vec4 mvPosition = viewMatrix * vec4(head, 1.0);
-        vec4 hc = projectionMatrix * mvPosition;
-        vec2 hp = toPx(hc);
-        vHeadCell = floor(hp / uCellPx);
-        // level of detail by distance: the whole drawing up close, just the head and a stem far away
         float dist = length(mvPosition.xyz);
-        vStem = dist < 34.0 ? (vKind > 2.5 ? 2.0 : (vKind > 1.5 ? 2.0 : 2.0 + step(0.5, fract(aSeed * 5.1)))) : 1.0;
-        // the card covers the cells of the art: 3 either side of the head, the stem below, 3 rows above
-        vec2 lo = (vHeadCell + vec2(-3.0, -vStem - 1.0)) * uCellPx, hi = (vHeadCell + vec2(4.0, 4.0)) * uCellPx;
-        vec2 px = mix(lo, hi, position.xy);
-        // depth: drawn as if 1.8 m nearer, so the flower stands out of the grass round it (trees, walls and
-        // bodies in front still hide it)
-        vec4 dc = projectionMatrix * vec4(mvPosition.xyz * max(0.0, 1.0 - 1.8 / length(mvPosition.xyz)), 1.0);
+        keep *= step(fract(aSeed * 53.1), clamp(22.0 / dist, 0.15, 1.0));   // thinner far away: the same few specks per screen
+        vec4 hc = projectionMatrix * mvPosition;
+        vHeadCell = floor((hc.xy / hc.w * 0.5 + 0.5) * uRtPx / uCellPx);
+        vec2 px = (vHeadCell + position.xy) * uCellPx;                     // the card is exactly that one cell
+        // depth: as if 1.2 m nearer, so the speck shows over the blades round it (trees and walls still hide it)
+        vec4 dc = projectionMatrix * vec4(mvPosition.xyz * max(0.0, 1.0 - 1.2 / dist), 1.0);
         gl_Position = vec4((px / uRtPx * 2.0 - 1.0) * hc.w, dc.z / dc.w * hc.w, hc.w);
         if (keep < 0.5 || hc.w < 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // not growing here: off screen`)
       .replace('#include <worldpos_vertex>', 'vec4 worldPosition = modelMatrix * vec4(head, 1.0);');
     sh.fragmentShader = `#define PIXEL_CLS
       float pixelCls = 0.0;
-      uniform vec2 uCellPx;
-      varying vec2 vHeadCell; varying float vStem, vKind, vHue;
-` + sh.fragmentShader.replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
-      {
-        vec2 d = floor(gl_FragCoord.xy / uCellPx) - floor(vHeadCell + 0.5);   // this cell, relative to the flower's head
-        float x = d.x, y = d.y, stem = floor(vStem + 0.5), h = vHue, kind = floor(vKind + 0.5);
-        bool near = stem > 1.5;                                          // far away a flower is just its head
-        float glyph = 0.0; vec3 col = vec3(0.0);
-        vec3 stemC = vec3(0.13, 0.3, 0.08), leafC = vec3(0.17, 0.38, 0.1);
-        if (x == 0.0 && y < 0.0 && y >= -stem) { glyph = ${g('|')}; col = stemC; }
-        if (kind < 0.5) {                                               // rose
-          vec3 petal = h < 0.5 ? vec3(0.78, 0.05, 0.09) : (h < 0.88 ? vec3(0.95, 0.42, 0.58) : vec3(0.95, 0.9, 0.84));
-          if (y == 0.0 && x == 0.0) { glyph = ${g('@')}; col = petal * 0.85; }
-          if (near && y == 0.0 && abs(x) == 1.0) { glyph = x < 0.0 ? ${g('(')} : ${g(')')}; col = petal; }
-          if (near && stem > 1.5 && y == -1.0 && x == 1.0) { glyph = ${g('/')}; col = leafC; }
-        } else if (kind < 1.5) {                                        // tulip
-          vec3 petal = h < 0.4 ? vec3(0.85, 0.1, 0.08) : (h < 0.75 ? vec3(1.0, 0.78, 0.14) : vec3(1.0, 0.48, 0.14));
-          if (!near && y == 0.0 && x == 0.0) { glyph = ${g('v')}; col = petal; }
-          if (near && y == 0.0 && abs(x) <= 1.0) { glyph = x < 0.0 ? ${g('(')} : (x > 0.0 ? ${g(')')} : ${g('_')}); col = petal * 0.85; }
-          if (near && y == 1.0 && abs(x) <= 1.0) { glyph = x == 0.0 ? ${g('W')} : ${g('w')}; col = petal; }
-          if (near && y == -stem && abs(x) == 1.0) { glyph = x < 0.0 ? ${g('\\')} : ${g('/')}; col = leafC; }
-        } else if (kind < 2.5) {                                        // daisy
-          vec3 petal = h < 0.55 ? vec3(0.9, 0.9, 0.84) : (h < 0.85 ? vec3(0.95, 0.86, 0.42) : vec3(0.74, 0.64, 0.95));
-          if (y == 0.0 && x == 0.0) { glyph = near ? ${g('o')} : ${g('*')}; col = near ? vec3(1.0, 0.7, 0.1) : petal; }
-          if (near && y == 0.0 && abs(x) == 1.0) { glyph = ${g('*')}; col = petal; }
-          if (near && y == -1.0 && x == 1.0) { glyph = ${g('\\')}; col = leafC; }
-        } else {                                                         // lupin: a spike of blossoms
-          vec3 petal = h < 0.45 ? vec3(0.52, 0.32, 0.95) : (h < 0.8 ? vec3(0.32, 0.46, 0.95) : vec3(0.9, 0.46, 0.8));
-          if (x == 0.0 && y == 0.0) { glyph = ${g('o')}; col = petal; }
-          if (near && x == 0.0 && y == 1.0) { glyph = ${g('o')}; col = petal * 1.1; }
-          if (near && x == 0.0 && y == 2.0) { glyph = ${g('.')}; col = petal * 1.2; }
-        }
-        if (glyph < 0.5) discard;
-        diffuseColor.rgb = col;
-        pixelCls = 0.9 + glyph * 0.002;
-      }`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-      totalEmissiveRadiance += diffuseColor.rgb * 0.035;          // still readable in the deepest shade`);
+      varying vec2 vHeadCell; varying vec3 vPetal; varying float vBud;
+` + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      diffuseColor.rgb = vPetal;
+      pixelCls = 0.9 + (vBud > 0.5 ? ${g('.')} : ${g('*')}) * 0.002;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance += diffuseColor.rgb * 0.04;           // still readable in the deepest shade`);
   };
-  mat.customProgramCacheKey = () => 'ascii-flowers-2';
+  mat.customProgramCacheKey = () => 'meadow-specks';
   tagMat(mat, 0.9);
   const flowers = new THREE.InstancedMesh(geo, mat, N);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V();
+  const m4 = new THREE.Matrix4(), p = new V();
   for (let i = 0; i < N; i++) {
-    p.set(rnd(-TILE / 2, TILE / 2), 0, rnd(-TILE / 2, TILE / 2));
-    s.setScalar(rnd(0.85, 1.25));
-    flowers.setMatrixAt(i, m4.compose(p, q, s));
+    flowers.setMatrixAt(i, m4.makeTranslation(p.set(rnd(-TILE / 2, TILE / 2), 0, rnd(-TILE / 2, TILE / 2))));
     seed[i] = R();
   }
   geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 1));
