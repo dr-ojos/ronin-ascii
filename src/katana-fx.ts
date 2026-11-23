@@ -41,6 +41,8 @@ function setWeaponFx() {
 const SPARKS = 900;
 const spPos = new Float32Array(SPARKS * 3), spCol = new Float32Array(SPARKS * 3), spVel = new Float32Array(SPARKS * 3);
 const spLife = new Float32Array(SPARKS), spMax = new Float32Array(SPARKS).fill(1);
+// per spark: how much gravity pulls it (1 = a spark that falls, < 0 = a mote of light that floats up)
+const spGrav = new Float32Array(SPARKS).fill(1);
 spPos.fill(-999);
 const spGeo = new THREE.BufferGeometry();
 spGeo.setAttribute('position', new THREE.BufferAttribute(spPos, 3));
@@ -61,7 +63,7 @@ sparkMat.onBeforeCompile = sh => {
 };
 const sparkPts = new THREE.Points(spGeo, sparkMat);
 sparkPts.frustumCulled = false; scene.add(sparkPts);
-let spNext = 0, sparkAcc = 0, bladeHeat = 0, swingS = 0;
+let spNext = 0, sparkAcc = 0, moteAcc = 0, bladeHeat = 0, swingS = 0;
 // 0..1: how much the ronin is fighting right now. Running swings the blade too, but only a cut
 // (player.attackT >= 0) may draw the white trail, flare the halo or shower sparks.
 let fight = 0;
@@ -157,8 +159,9 @@ function updateTrail(dt: number, emit: boolean) {
     r.geo.setDrawRange(0, Math.max(0, count - 1) * 6);
   }
 }
-function spawnSpark(p: THREE.Vector3, vx: number, vy: number, vz: number, life: number) {
+function spawnSpark(p: THREE.Vector3, vx: number, vy: number, vz: number, life: number, grav = 1) {
   const i = spNext; spNext = (spNext + 1) % SPARKS;
+  spGrav[i] = grav;
   spPos[i * 3] = p.x; spPos[i * 3 + 1] = p.y; spPos[i * 3 + 2] = p.z;
   spVel[i * 3] = vx; spVel[i * 3 + 1] = vy; spVel[i * 3 + 2] = vz;
   spLife[i] = spMax[i] = life;
@@ -195,9 +198,12 @@ export function updateSparks(dt: number, emit: boolean) {
   if (displaying) trail.length = 0;
   updateTrail(dt, emit);
   prevTip.copy(bladeTip); prevBase.copy(bladeBase);
+  // running (and not fighting) the blade is carried low and behind: its glow would read as a white
+  // trail, so it goes quiet — plain steel, no halo — and the ronin sheds a few motes of light instead
+  const running = player.moving * (1 - fight), calm = 1 - running;
   // emission: a rare crackle along the edge, a light shower while cutting
   if (emit) {
-    sparkAcc += dt * (3 + bladeHeat * 55 + swing * fight * 25);
+    sparkAcc += dt * (3 * calm + bladeHeat * 55 + swing * fight * 25);
     while (sparkAcc >= 1) {
       sparkAcc -= 1;
       const s = Math.sqrt(Math.random());
@@ -209,6 +215,15 @@ export function updateSparks(dt: number, emit: boolean) {
         tipVel.z * s * fling + rnd(-1.4, 1.4),
         rnd(0.25, 0.55) + bladeHeat * 0.3);
     }
+    // motes: a few soft grains of light rising off the body and left behind as it runs
+    moteAcc += dt * 7 * running;
+    const p = sam.root.position;
+    while (moteAcc >= 1) {
+      moteAcc -= 1;
+      const a = Math.random() * Math.PI * 2, rr = 0.15 + Math.random() * 0.25;
+      spTmp.set(p.x + Math.cos(a) * rr, p.y + rnd(0.35, 1.55), p.z + Math.sin(a) * rr);
+      spawnSpark(spTmp, rnd(-0.25, 0.25), rnd(0.25, 0.7), rnd(-0.25, 0.25), rnd(0.5, 0.95), -0.08);
+    }
   }
   // physics + colour: white-hot → gold → ember red → gone
   for (let i = 0; i < SPARKS; i++) {
@@ -216,7 +231,7 @@ export function updateSparks(dt: number, emit: boolean) {
     if (spLife[i] <= 0) { spCol[j] = spCol[j + 1] = spCol[j + 2] = 0; continue; }
     spLife[i] -= dt;
     const t = Math.max(0, spLife[i] / spMax[i]);
-    spVel[j + 1] -= grav * dt;
+    spVel[j + 1] -= grav * spGrav[i] * dt;
     const drag = Math.exp(-2.2 * dt);
     spVel[j] *= drag; spVel[j + 1] *= drag; spVel[j + 2] *= drag;
     spPos[j] += spVel[j] * dt; spPos[j + 1] += spVel[j + 1] * dt; spPos[j + 2] += spVel[j + 2] * dt;
@@ -233,15 +248,15 @@ export function updateSparks(dt: number, emit: boolean) {
   // the blade and its light pulse with the heat of the cut
   const fl = 0.85 + Math.random() * 0.3;
   // polished steel at rest; the edge catches light in proportion to how fast it is moving
-  bladeMat.emissiveIntensity = (0.4 + swingF * 1.8 + bladeHeat * 0.5) * (0.92 + Math.random() * 0.16);
+  bladeMat.emissiveIntensity = (0.4 * (0.2 + 0.8 * calm) + swingF * 1.8 + bladeHeat * 0.5) * (0.92 + Math.random() * 0.16);
   bladeLight.position.lerpVectors(bladeBase, bladeTip, 0.6);
-  bladeLight.intensity = (0.5 + swingF * 4 + bladeHeat * 1.5) * fl * (0.8 + w.fx.halo * 0.4);
+  bladeLight.intensity = (0.5 * (0.3 + 0.7 * calm) + swingF * 4 + bladeHeat * 1.5) * fl * (0.8 + w.fx.halo * 0.4);
   // the halo breathes at rest and flares with the cut
   const hk = Math.min(1, swingF * 1.2 + bladeHeat * 0.5);
-  haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 + hk * 0.2;
-  haloCore.opacity = 0.08 + hk * 0.25;
+  haloMat.opacity = (0.1 + 0.05 * Math.sin(state.time * 3)) * w.fx.halo * 0.7 * calm + hk * 0.2;
+  haloCore.opacity = 0.08 * calm + hk * 0.25;
   halo.scale.set(1 + hk * 0.25, 1 + hk * 0.25, 1);
-  halo.visible = sam.root.visible && !displaying;
+  halo.visible = sam.root.visible && !displaying && (calm > 0.03 || hk > 0.01);
   // each blade's own flourish
   if (emit && w.fx.extra) flourish(w.fx.extra, dt, hk);
   // sits between the samurai and the camera, chest high: lights his front, barely touches the grass
