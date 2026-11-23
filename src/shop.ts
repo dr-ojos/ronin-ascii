@@ -15,6 +15,7 @@ import { showMsg } from './hud';
 import { openMenu, closeMenu, menuStatus, type MenuRow } from './menu';
 import { openCustom } from './custom';
 import { dressUp } from './outfit';
+import { createSmith } from './smith';
 import { WEAPONS, weapon, owns, buy, equip, weaponStats } from './weapons';
 import { ARMORS, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
@@ -105,30 +106,7 @@ shadowTree(room); hot.castShadow = false;
 scene.add(room);
 
 // ------------------------------------------------------------ Masa
-const SM = {
-  robe: M(0x34405a, { roughness: 0.9 }), apron: M(0x5a3a22, { roughness: 0.8 }), skin: M(0xc08a5a, { roughness: 0.6 }),
-  hair: M(0x1a1716, { roughness: 0.8 }), band: M(0xe8e4dc, { roughness: 0.9 }), iron: M(0x2a2a30, { metalness: 0.8, roughness: 0.4 }), wood: M(0x6a4630, { roughness: 0.8 })
-};
-const part = (p: THREE.Object3D, geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); p.add(o); return o; };
-const smith = new THREE.Group(), body = new THREE.Group(), head = new THREE.Group(), armR = new THREE.Group(), armL = new THREE.Group();
-smith.add(body); body.add(head, armR, armL);
-part(body, new THREE.CylinderGeometry(0.2, 0.34, 1.0, 10), SM.robe, 0, 0.5, 0);                       // hakama
-part(body, new THREE.CylinderGeometry(0.24, 0.22, 0.55, 10), SM.robe, 0, 1.25, 0);                    // torso
-part(body, new THREE.BoxGeometry(0.42, 0.95, 0.04), SM.apron, 0, 0.95, 0.24);                          // leather apron
-part(body, new THREE.TorusGeometry(0.23, 0.035, 6, 16), SM.apron, 0, 1.05, 0).rotation.x = Math.PI / 2;
-head.position.set(0, 1.62, 0);
-part(head, new THREE.SphereGeometry(0.15, 14, 10), SM.skin, 0, 0, 0);
-part(head, new THREE.TorusGeometry(0.15, 0.025, 6, 18), SM.band, 0, 0.04, 0).rotation.x = Math.PI / 2;   // hachimaki
-part(head, new THREE.SphereGeometry(0.145, 12, 8, 0, Math.PI * 2, 0, 1.2), SM.hair, 0, 0.03, -0.01);
-part(head, new THREE.CylinderGeometry(0.03, 0.035, 0.14, 6), SM.hair, 0, 0.17, -0.02).rotation.x = -1.2; // topknot
-part(head, new THREE.ConeGeometry(0.08, 0.18, 6), SM.hair, 0, -0.14, 0.09).rotation.x = Math.PI + 0.35;  // beard
-for (const [g, s] of [[armR, -1], [armL, 1]] as [THREE.Group, number][]) {
-  g.position.set(0.3 * s, 1.45, 0);
-  part(g, new THREE.CylinderGeometry(0.065, 0.055, 0.6, 8), SM.skin, 0, -0.3, 0);
-}
-const hammer = new THREE.Group(); hammer.position.set(0, -0.6, 0); armR.add(hammer);
-part(hammer, new THREE.CylinderGeometry(0.02, 0.02, 0.4, 6), SM.wood, 0, 0, 0.15).rotation.x = Math.PI / 2;
-part(hammer, new THREE.BoxGeometry(0.1, 0.1, 0.2), SM.iron, 0, 0, 0.36).rotation.y = Math.PI / 2;
+const { root: smith, body, head, armR, armL } = createSmith();
 smith.position.copy(smithPos);
 shadowTree(smith);
 smith.traverse(o => { if ((o as THREE.Mesh).isMesh) o.layers.enable(ACTOR_LAYER); });
@@ -214,6 +192,7 @@ function shopRows(): MenuRow[] {
   return rows;
 }
 export function openShop(at = 1) {
+  showMsg('', 0.01);
   openMenu({
     id: 'shop', title: `— TIENDA DE ${SMITH_NAME.toUpperCase()} —`,
     sub: () => `bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weapon().name}</span> · <span class="b">${armor().name}</span> · <span class="y">${threatLabel()}</span>`,

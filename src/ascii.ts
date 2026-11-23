@@ -6,7 +6,8 @@ import { renderer, DPR } from './renderer';
 export const bufSize = new THREE.Vector2();
 renderer.getDrawingBufferSize(bufSize);
 const RT_SCALE = bufSize.x * bufSize.y > 4e6 ? 0.6 : 1;
-const rt = new THREE.WebGLRenderTarget(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE, { type: THREE.HalfFloatType });
+const sceneDepth = new THREE.DepthTexture(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE, THREE.UnsignedIntType);
+const rt = new THREE.WebGLRenderTarget(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE, { type: THREE.HalfFloatType, depthTexture: sceneDepth });
 
 // Real text-mode output: the screen is a grid of small cells and every cell holds ONE printable
 // ASCII character (0x20-0x7E) in ONE colour, on black. Glyphs are drawn larger than their cell
@@ -26,8 +27,9 @@ const CLASS_CHARS = [
   " .:+*oO#@",              // 5 light
   " .:-=+szSZN#%@"          // 6 actor
 ];
+const ACTOR_CHARS = " .':;=+xzo#@"; // punctuation and short strokes stay distinct on the smallest grid
 const EDGE_CHARS = '|\\-/';  // row 7: outline strokes, picked by edge direction
-for (const s of [...CLASS_CHARS, EDGE_CHARS]) for (const ch of s) {
+for (const s of [...CLASS_CHARS, ACTOR_CHARS, EDGE_CHARS]) for (const ch of s) {
   const k = ch.charCodeAt(0);
   if (k < 0x20 || k > 0x7e) throw new Error(`glyph no ASCII: ${JSON.stringify(ch)}`);
 }
@@ -62,7 +64,7 @@ function buildAtlas(gw: number, gh: number, actor: boolean) {
   const size = Math.max(actor ? 5 : 6, Math.floor(Math.min(gh * 0.95, gw / 0.6)));   // Courier advance = 0.6em
   x.fillStyle = '#fff'; x.font = `bold ${size}px ${FONT_FAMILY}`; x.textAlign = 'center'; x.textBaseline = 'middle';
   const put = (c: string, col: number, row: number) => x.fillText(c, col * gw + gw / 2, row * gh + gh / 2 + (actor ? 0 : 1));
-  RAMPS.forEach((ramp, r) => ramp.forEach((c, i) => put(c, i, r)));
+  RAMPS.forEach((ramp, r) => [...(actor && r === 6 ? ACTOR_CHARS : ramp)].forEach((c, i) => put(c, i, r)));
   [...EDGE_CHARS].forEach((c, i) => put(c, i, EDGE_ROW));
   const t = new THREE.CanvasTexture(a);
   t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.flipY = false;
@@ -75,6 +77,20 @@ let densityIdx = 2;
 // Full-resolution, single-channel silhouettes keep thin features on the finer actor grid.
 const maskRT = new THREE.WebGLRenderTarget(bufSize.x, bufSize.y, { format: THREE.RedFormat });
 const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+maskMat.onBeforeCompile = shader => {
+  shader.uniforms.uSceneDepth = { value: sceneDepth };
+  shader.uniforms.uMaskSize = { value: bufSize };
+  // Use the actor's local slope to allow for sampling between texels when the scene is downscaled.
+  const slopeMargin = RT_SCALE < 1 ? 0.5 / RT_SCALE : 0;
+  shader.fragmentShader = `uniform sampler2D uSceneDepth;
+uniform vec2 uMaskSize;
+` + shader.fragmentShader.replace('#include <tonemapping_fragment>', `
+    float depth = texture2D(uSceneDepth, gl_FragCoord.xy / uMaskSize).r;
+    float margin = 1e-6 + fwidth(gl_FragCoord.z) * ${slopeMargin.toFixed(4)};
+    if (gl_FragCoord.z > depth + margin) discard;
+    #include <tonemapping_fragment>
+  `);
+};
 export const ACTOR_LAYER = 1;
 
 // one texel per cell: rgb = colour, a = glyph code (row * N + idx)
@@ -82,7 +98,7 @@ const cellOpts = { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, ma
 const cellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);
 const actorCellRT = new THREE.WebGLRenderTarget(1, 1, cellOpts);   // finer grid, actors only
 // Characters use a finer grid with enough overlap for narrow ASCII strokes to stay legible.
-const ACTOR_SCALE = 0.36, ACTOR_OVERLAP = 1.65;
+const ACTOR_SCALE = 0.29, ACTOR_OVERLAP = 1.65;
 interface Grid { cw: number; ch: number; gw: number; gh: number; cols: number; rows: number; font: THREE.CanvasTexture }
 const grids: { env: Grid | null; actor: Grid | null } = { env: null, actor: null };
 export const cellMat = new THREE.ShaderMaterial({
@@ -140,7 +156,7 @@ export const cellMat = new THREE.ShaderMaterial({
         vec3 ac = grade((texture2D(tScene, uv).rgb * (2.0 * center)
           + texture2D(tScene, uv + dx).rgb * sides.x + texture2D(tScene, uv - dx).rgb * sides.y
           + texture2D(tScene, uv + dy).rgb * sides.z + texture2D(tScene, uv - dy).rgb * sides.w) / coverage);
-        float al = clamp(pow(luma(ac) * 2.7, 0.72), 0.0, 0.999);
+        float al = min(pow(luma(ac), 0.58), 0.999);
         vec2 e = cs;
         float m0 = M(uv, e, -1., 1.), m1 = M(uv, e, 0., 1.), m2 = M(uv, e, 1., 1.), m3 = M(uv, e, -1., 0.);
         float m5 = M(uv, e, 1., 0.), m6 = M(uv, e, -1., -1.), m7 = M(uv, e, 0., -1.), m8 = M(uv, e, 1., -1.);
@@ -151,11 +167,11 @@ export const cellMat = new THREE.ShaderMaterial({
         bool outline = length(mg) > 1.8;
         if (outline) { row = uEdgeRow; idx = bin(mg); }
         else if (length(gl) > 0.7) { row = uEdgeRow; idx = bin(gl); }
-        else { row = 6.0; idx = max(floor(al * uN), 4.0); }   // never blank: actors always read as text
+        else { row = 6.0; idx = max(floor(al * uN), 3.0); }   // shadows keep their punctuation texture
         vec3 tint = ac / max(max(max(ac.r, ac.g), ac.b), 0.03);
         // stronger light / shadow: dim strokes in the shade (the solid backing carries the form there),
         // white-hot strokes where the light hits
-        c = mix(tint, vec3(1.0), 0.04 + 0.18 * al * al) * (0.28 + 1.05 * al);
+        c = mix(tint, vec3(1.0), 0.04 + 0.12 * al * al) * (0.29 + 0.89 * al);
         // light-aware contour: the edge of the silhouette that faces the moon (or is lit by a lantern)
         // becomes a band of bright cool characters; the edge turned away sinks into dark characters
         float rim = smoothstep(1.1, 2.6, length(mg));                      // thin: the outermost cell or so
@@ -298,7 +314,8 @@ const postScene = new THREE.Scene();
 postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat));
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 function makeGrid(cw: number, ch: number, ov: number, actor = false): Grid {
-  const gw = Math.round(cw * ov), gh = Math.round(ch * ov);
+  const gw = Math.max(actor ? 3 : 1, Math.round(cw * ov));
+  const gh = Math.max(actor ? 5 : 1, Math.round(ch * ov));
   return { cw, ch, gw, gh, cols: Math.ceil(bufSize.x / cw), rows: Math.ceil(bufSize.y / ch), font: buildAtlas(gw, gh, actor) };
 }
 export function applyDensity() {
@@ -306,7 +323,10 @@ export function applyDensity() {
   const cw = Math.max(3, Math.round(w * DPR)), ch = Math.max(5, Math.round(h * DPR));
   grids.env?.font.dispose(); grids.actor?.font.dispose();
   const E = grids.env = makeGrid(cw, ch, OVERLAP);
-  const A = grids.actor = makeGrid(Math.max(2, Math.round(cw * ACTOR_SCALE)), Math.max(3, Math.round(ch * ACTOR_SCALE)), ACTOR_OVERLAP, true);
+  // Half-pixel pitch packs in more detail at 1x without shaving pixels off the font atlas.
+  const aw = Math.max(1.5, Math.round(cw * ACTOR_SCALE * 2) / 2);
+  const ah = Math.max(2.5, Math.round(ch * ACTOR_SCALE * 2) / 2);
+  const A = grids.actor = makeGrid(aw, ah, ACTOR_OVERLAP, true);
   cellRT.setSize(E.cols, E.rows); actorCellRT.setSize(A.cols, A.rows);
   cellMat.uniforms.uRes.value.copy(bufSize);
   const u = postMat.uniforms;

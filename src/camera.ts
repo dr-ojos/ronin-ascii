@@ -5,6 +5,7 @@ import { camera } from './renderer';
 import { bufSize, cellMat } from './ascii';
 import { nearBlockers, moonDir } from './world';
 import { groundY } from './terrain';
+import { smithPos } from './shop';
 import { player, state } from './state';
 import { rnd } from './utils';
 
@@ -15,6 +16,12 @@ export function updateCamera(dt: number) {
   // the look menu (custom.ts) frames the samurai close up, like the photo mode
   const dress = state.menu === 'custom';
   camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo || dress ? 1.3 : 1.5), player.pos.z), Math.min(1, dt * 10));
+  if (state.menu === 'shop' && !state.photo) {
+    // Stay inside the doorway and leave the right side of the view for the shop menu.
+    camera.position.set(smithPos.x + 0.42, smithPos.y + 1.52, smithPos.z + 1.7);
+    camera.lookAt(smithPos.x + 0.33, smithPos.y + 1.39, smithPos.z);
+    return;
+  }
   const pt = state.photo ? 0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025) : dress ? 0.32 : state.pitch, cp = Math.cos(pt);
   // inside Masa's shop the camera comes in closer (its roof is hidden, shop.ts)
   const camDist = state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.camDistUser;
