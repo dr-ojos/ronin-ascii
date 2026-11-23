@@ -19,6 +19,11 @@ export interface BodyPaint {
   wrap: number;       // hand and foot bindings
 }
 
+export const roninRobe = {
+  uRoninOutfit: { value: 0 },
+  uRoninLinen: { value: new THREE.Color() }
+};
+
 /** mark a skinned body material for repainting (the paint is installed by mangaFinish) */
 export function paintBody(mat: THREE.MeshStandardMaterial, paint: BodyPaint) {
   mat.map = null; mat.normalMap = null; mat.emissiveMap = null;
@@ -46,7 +51,12 @@ float seigaiha(vec2 p) {
 }
 `;
 
-const RONIN_PAINT = /* glsl */`
+const RONIN_UNIFORMS = /* glsl */`
+uniform float uRoninOutfit;
+uniform vec3 uRoninLinen;
+`;
+
+const RONIN_CLOTH = /* glsl */`
 {
   vec3 b = vBind; float ax = abs(b.x), z = b.z;
   vec3 cloth = diffuseColor.rgb, col;
@@ -84,6 +94,12 @@ const RONIN_PAINT = /* glsl */`
     col = uHakama * (0.7 + 0.55 * pleat);
     col += uHakama * 0.9 * band(fract(b.x / 3.2) - 0.5, 0.06);
   } else col = uWrap;
+  bool lining = z > 22.0 && z < 159.0 && ax < 64.5 && !(z > 154.0 && ax < 12.0);
+  if (lining && (uRoninOutfit > 1.5 || (uRoninOutfit > 0.5 && z > 100.0 && ax < 27.0))) {
+    // The robe's lining covers the old uniform between the sleeves, hems and collar.
+    col = uRoninLinen * (0.47 + 0.33 * fold);
+    pixelCls = 0.0;
+  }
   // painted occlusion in the armpits and between the legs
   float ao = 1.0 - 0.35 * exp(-pow((ax - 20.0) / 5.0, 2.0) - pow((z - 130.0) / 7.0, 2.0))
                  - 0.3 * exp(-pow(ax / 6.0, 2.0) - pow((z - 92.0) / 7.0, 2.0));
@@ -175,8 +191,10 @@ function install(mat: THREE.MeshStandardMaterial) {
         uUnder: { value: c3(paint.under) }, uWrap: { value: c3(paint.wrap) }
       });
       sh.vertexShader = 'varying vec3 vBind;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position;');
-      sh.fragmentShader = BODY_COMMON + sh.fragmentShader.replace('#include <color_fragment>',
-        '#include <color_fragment>\n' + (paint.kind === 'oni' ? ONI_PAINT : RONIN_PAINT));
+      const isRonin = paint.kind === 'ronin';
+      if (isRonin) Object.assign(sh.uniforms, roninRobe);
+      sh.fragmentShader = BODY_COMMON + (isRonin ? RONIN_UNIFORMS : '') + sh.fragmentShader.replace('#include <color_fragment>',
+        '#include <color_fragment>\n' + (isRonin ? RONIN_CLOTH : ONI_PAINT));
     }
     sh.uniforms.uFormKey = formKey;
     sh.fragmentShader = 'uniform vec3 uFormKey;\n' + sh.fragmentShader

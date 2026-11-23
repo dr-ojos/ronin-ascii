@@ -14,13 +14,16 @@ import { CLS, tagMat, tagTree } from './materials';
 import { applyLook, opt } from './look';
 import { ARMORS, armor, type Armor } from './armor';
 import { state } from './state';
+import { roninRobe } from './manga-art';
 
 const V = THREE.Vector3;
 const TAU = Math.PI * 2;
 const root = sam.root;
 const bones: Record<string, THREE.Object3D> = {};
-root.traverse(o => { if (/^mixamorig/.test(o.name)) bones[o.name.replace(/^mixamorig:?/, '')] = o; });
-const rigged = !!bones.Spine1;
+root.traverse(o => {
+  if (o.userData.outfitBone) bones[o.userData.outfitBone] = o;
+  else if (/^mixamorig/.test(o.name)) bones[o.name.replace(/^mixamorig:?/, '')] = o;
+});
 root.updateMatrixWorld(true);
 /** a bone's position in the samurai's own space (+z ahead, +y up, its left on +x) */
 const P = (n: string) => root.worldToLocal(bones[n].getWorldPosition(new V()));
@@ -28,14 +31,10 @@ const P = (n: string) => root.worldToLocal(bones[n].getWorldPosition(new V()));
 const sets = new Map<string, THREE.Object3D[]>();
 const auras = new Map<string, THREE.Group>();
 
-// the robe's own cuirass and waist (rig.ts): the dō and the skirt are laid exactly over them
-let rigChest: THREE.Object3D | null = null, rigWaist: THREE.Object3D | null = null;
-root.traverse(o => {
-  const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
-  if (!m.isMesh || !m.parent) return;
-  if (!rigChest && m.geometry.type === 'LatheGeometry' && m.material.userData.role === 'lacquer') rigChest = m.parent;
-  if (!rigWaist && m.geometry.type === 'TorusGeometry' && m.material.userData.role === 'cloth') rigWaist = m.parent;
-});
+const baseLayers: THREE.Object3D[] = [];
+root.traverse(o => { if (o.userData.equipmentLayer) baseLayers.push(o); });
+const rigChest = baseLayers.find(o => o.userData.equipmentLayer === 'chest');
+const rigWaist = baseLayers.find(o => o.userData.equipmentLayer === 'waist');
 /** put `obj` beside `twin` (same bone, same place, turn and size), so it follows it exactly */
 function overlay(id: string, twin: THREE.Object3D, obj: THREE.Object3D) {
   finish(obj);
@@ -127,36 +126,40 @@ function build(a: Armor) {
 
   const hips = P('Hips');
 
-  // ---- dō: the torso's own profile (the same the robe's cuirass uses), a little larger, laid over it
+  // Armor replaces the travel outfit at the same attachment points, with a fitted waist and chest.
   if (rigChest) {
     const g = new THREE.Group(), shell = new THREE.Group(); g.add(shell);
-    const k = 1.08, prof = [[0.2, -0.27], [0.215, -0.18], [0.235, -0.05], [0.245, 0.06], [0.235, 0.15], [0.205, 0.22], [0.15, 0.25]].map(([r, y]) => new THREE.Vector2(r * k, y));
+    g.name = `cuirass-${a.id}`;
+    const prof = [[0.176, -0.25], [0.181, -0.17], [0.208, -0.055], [0.229, 0.065], [0.218, 0.147], [0.172, 0.222], [0.128, 0.251]].map(([r, y]) => new THREE.Vector2(r, y));
     shell.add(new THREE.Mesh(new THREE.LatheGeometry(prof, 40), lam(6, 1.25)));
     // muna-ita (the top plate, with a metal rim) and the waist cord
-    shell.add(new THREE.Mesh(new THREE.LatheGeometry([new THREE.Vector2(0.205 * k + 0.004, 0.22), new THREE.Vector2(0.235 * k + 0.006, 0.15)], 40), lacquer));
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.205 * k + 0.004, 0.007, 5, 40), metal); rim.rotation.x = Math.PI / 2; rim.position.y = 0.22; shell.add(rim);
-    const cord = new THREE.Mesh(new THREE.TorusGeometry(0.2 * k + 0.003, 0.011, 6, 40), lace); cord.rotation.x = Math.PI / 2; cord.position.y = -0.26; shell.add(cord);
-    shell.scale.z = 0.74 * 1.04;
+    shell.add(new THREE.Mesh(new THREE.LatheGeometry([new THREE.Vector2(0.219, 0.147), new THREE.Vector2(0.174, 0.222)], 40), lacquer));
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.174, 0.005, 5, 40), metal); rim.rotation.x = Math.PI / 2; rim.position.y = 0.222; shell.add(rim);
+    const cord = new THREE.Mesh(new THREE.TorusGeometry(0.178, 0.008, 6, 40), lace); cord.rotation.x = Math.PI / 2; cord.position.y = -0.246; shell.add(cord);
+    shell.scale.z = 0.71;
     // a crest on the chest
-    const mon = new THREE.Group(); mon.position.set(0, 0.04, 0.245 * k * 0.74 * 1.04 + 0.004); g.add(mon);
+    const mon = new THREE.Group(); mon.position.set(0, 0.048, 0.169); g.add(mon);
     mon.add(new THREE.Mesh(new THREE.CircleGeometry(0.036, 24), metal));
     const inner = new THREE.Mesh(new THREE.RingGeometry(0.015, 0.025, 24), lacquer); inner.position.z = 0.002; mon.add(inner);
     // watagami: the shoulder straps, with their metal studs
     for (const s of [-1, 1]) {
-      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.018, 0.3), lacquer); strap.position.set(0.11 * s, 0.252, -0.005); g.add(strap);
-      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), metal); stud.position.set(0.11 * s, 0.262, 0.12); g.add(stud);
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.043, 0.012, 0.243), lacquer); strap.position.set(0.104 * s, 0.243, -0.008); strap.rotation.z = -s * 0.12; g.add(strap);
+      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), metal); stud.position.set(0.104 * s, 0.25, 0.111); g.add(stud);
     }
     overlay(a.id, rigChest, g);
   }
-  // ---- kusazuri: six laced panels flaring from the waist, over the robe's own skirt
+  // ---- kusazuri: curved panels, with room for the stride beneath the hem
   if (rigWaist) {
-    const g = new THREE.Group(), R = 0.215 * 1.1, h = 0.28 + 0.035 * l.sode, n = 6, L = TAU / n * 0.94;
-    const sk = new THREE.Group(); sk.scale.z = 0.82; sk.position.y = 0.05 - h / 2; g.add(sk);
+    const g = new THREE.Group(), R = 0.205, hemR = R * 1.13, h = 0.19 + 0.026 * l.sode, n = 7, L = TAU / n * 0.89;
+    g.name = `skirt-${a.id}`;
+    const sk = new THREE.Group(); sk.scale.z = 0.76; sk.position.y = 0.034 - h / 2; g.add(sk);
+    const obi = new THREE.Mesh(new THREE.TorusGeometry(R, 0.018, 8, 40), lace);
+    obi.rotation.x = Math.PI / 2; obi.scale.y = 0.77; obi.position.y = 0.037; g.add(obi);
     for (let i = 0; i < n; i++) {
       const th = i * TAU / n - L / 2;
-      sk.add(new THREE.Mesh(new THREE.CylinderGeometry(R, R * 1.32, h, 8, 1, true, th, L), lam(1.6, 1)));
-      sk.add(arcTube(R * 1.32, -h / 2, th, L, 0.006, metal));
-      sk.add(arcTube(R * 1.01, h / 2 - 0.01, th + 0.05, L - 0.1, 0.009, lace));
+      sk.add(new THREE.Mesh(new THREE.CylinderGeometry(R, hemR, h, 8, 1, true, th, L), lam(1.6, 1)));
+      sk.add(arcTube(hemR, -h / 2, th, L, 0.004, metal));
+      sk.add(arcTube(R * 1.01, h / 2 - 0.01, th + 0.05, L - 0.1, 0.006, lace));
     }
     overlay(a.id, rigWaist, g);
   }
@@ -166,14 +169,15 @@ function build(a: Armor) {
     const out = new V(Math.sign(A.x - hips.x) || 1, 0.25, 0);
     const Z = out.addScaledVector(d, -out.dot(d)).normalize(), Y = d.clone().negate(), X = new V().crossVectors(Y, Z);
     const g = new THREE.Group(); g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
-    const Rc = 0.32, w = (0.2 + 0.05 * l.sode), th = w / Rc, h = 0.2 + 0.07 * l.sode, off = 0.095;
-    const panel = new THREE.Mesh(new THREE.CylinderGeometry(Rc, Rc * 1.12, h, 10, 1, true, -th / 2, th), lam(1.5, 1.4));
-    panel.position.set(0, 0.06 - h / 2, off - Rc); g.add(panel);
+    g.name = `shoulder-${a.id}-${side}`;
+    const Rc = 0.127, w = 0.149 + 0.029 * l.sode, th = w / Rc, h = 0.131 + 0.046 * l.sode, off = 0.063;
+    const panel = new THREE.Mesh(new THREE.CylinderGeometry(Rc, Rc * 1.04, h, 10, 1, true, -th / 2, th), lam(1.5, 1.4));
+    panel.position.set(0, 0.048 - h / 2, off - Rc); g.add(panel);
     // kanmuri-ita: the lacquered top bar with its metal rim, and the bottom edge
-    const bar = arcTube(Rc + 0.004, 0.06, -th / 2, th, 0.014, lacquer); bar.position.z = off - Rc; g.add(bar);
-    const bar2 = arcTube(Rc + 0.012, 0.072, -th / 2, th, 0.006, metal); bar2.position.z = off - Rc; g.add(bar2);
-    const hem = arcTube(Rc * 1.12, 0.06 - h, -th / 2, th, 0.006, metal); hem.position.z = off - Rc; g.add(hem);
-    g.position.copy(A).addScaledVector(Z, 0.01);
+    const bar = arcTube(Rc + 0.003, 0.048, -th / 2, th, 0.008, lacquer); bar.position.z = off - Rc; g.add(bar);
+    const bar2 = arcTube(Rc + 0.006, 0.054, -th / 2, th, 0.004, metal); bar2.position.z = off - Rc; g.add(bar2);
+    const hem = arcTube(Rc * 1.04, 0.048 - h, -th / 2, th, 0.004, metal); hem.position.z = off - Rc; g.add(hem);
+    g.position.copy(A);
     hang(a.id, side + 'Arm', g);
   }
   // ---- suneate: splinted shin guards
@@ -266,6 +270,84 @@ function build(a: Armor) {
   }
 }
 
+function buildMonk(a: Armor) {
+  const { linen, mantle, sash } = a.robe!;
+  if (!rigChest || !rigWaist) return;
+  sets.set(a.id, []);
+  const cloth = (color: number) => new THREE.MeshStandardMaterial({ color, roughness: 0.94, emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide });
+  const ochre = cloth(linen), outer = cloth(mantle), beltMat = cloth(sash), collar = cloth(0xdbbe8f), beads = cloth(0x5c3822);
+  const body = new THREE.Group(); body.name = 'monk-robe';
+  const torso = new THREE.Mesh(new THREE.LatheGeometry([
+    [0.175, -0.268], [0.181, -0.16], [0.21, -0.03], [0.218, 0.09], [0.202, 0.168], [0.146, 0.234], [0.093, 0.262]
+  ].map(([r, y]) => new THREE.Vector2(r, y)), 32), ochre);
+  torso.scale.z = 0.74;
+  body.add(torso);
+
+  function trim(q: THREE.Vector3[], radius: number, mat: THREE.Material) {
+    const path = new THREE.CatmullRomCurve3(q);
+    body.add(new THREE.Mesh(new THREE.TubeGeometry(path, 20, radius, 6), mat));
+    return path;
+  }
+  // Two cloth lapels meet in a V, with the kesa crossing over one shoulder.
+  trim([new V(-0.080, 0.258, 0.026), new V(-0.084, 0.207, 0.103), new V(-0.047, 0.139, 0.144), new V(0.039, 0.062, 0.164)], 0.013, collar);
+  trim([new V(0.078, 0.256, 0.029), new V(0.083, 0.193, 0.114), new V(0.039, 0.126, 0.160), new V(-0.068, -0.025, 0.152)], 0.014, collar);
+  const sashPath = new THREE.CatmullRomCurve3([
+    new V(0.125, 0.24, 0), new V(0.117, 0.195, 0.102), new V(0.063, 0.086, 0.154), new V(-0.057, -0.032, 0.151), new V(-0.147, -0.171, 0.095)
+  ]);
+  const strip = new THREE.PlaneGeometry(1, 1, 4, 28);
+  const vertices = strip.attributes.position;
+  for (let i = 0; i < vertices.count; i++) {
+    const side = vertices.getX(i), t = vertices.getY(i) + 0.5;
+    const p = sashPath.getPoint(t), dir = sashPath.getTangent(t);
+    const span = 0.135 - t * 0.015;
+    vertices.setXYZ(i, p.x + dir.y * side * span, p.y - dir.x * side * span, p.z - 0.027 * Math.abs(2 * side) + 0.005 * Math.cos(side * 20));
+  }
+  strip.computeVertexNormals(); body.add(new THREE.Mesh(strip, outer));
+  const cord = trim([new V(-0.071, 0.245, 0.047), new V(-0.085, 0.154, 0.146), new V(0, 0.074, 0.17), new V(0.085, 0.154, 0.146), new V(0.071, 0.245, 0.047)], 0.003, beltMat);
+  const bead = new THREE.SphereGeometry(0.009, 8, 6);
+  for (let i = 0; i < 19; i++) {
+    const b = new THREE.Mesh(bead, beads); b.position.copy(cord.getPointAt(i / 18)); body.add(b);
+  }
+  overlay(a.id, rigChest, body);
+
+  const waist = new THREE.Group(); waist.name = 'monk-sash';
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.196, 0.194, 0.073, 32, 1, true), beltMat);
+  belt.scale.z = 0.78; belt.position.y = 0.005; waist.add(belt);
+  const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.025, 0.009, 24, 6), beltMat);
+  knot.position.set(-0.102, 0.005, 0.141); waist.add(knot);
+  const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.194, 0.236, 0.23, 32, 1, true), ochre);
+  wrap.position.y = -0.134; wrap.scale.z = 0.82; waist.add(wrap);
+  overlay(a.id, rigWaist, waist);
+
+  for (const side of ['Left', 'Right']) {
+    const shoulder = P(side + 'Arm'), elbow = P(side + 'ForeArm');
+    const sleeve = new THREE.Group(); sleeve.name = `monk-sleeve-${side}`;
+    const h = shoulder.distanceTo(elbow) * 0.94;
+    sleeve.add(new THREE.Mesh(new THREE.CylinderGeometry(0.079, 0.105, h, 18, 1, true), side === 'Left' ? outer : ochre));
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.101, 0.007, 5, 20), beltMat);
+    cuff.rotation.x = Math.PI / 2; cuff.position.y = -h / 2; sleeve.add(cuff);
+    sleeve.position.copy(shoulder).lerp(elbow, 0.40);
+    sleeve.quaternion.setFromUnitVectors(new V(0, 1, 0), shoulder.clone().sub(elbow).normalize());
+    hang(a.id, side + 'Arm', sleeve);
+
+    const hip = P(side + 'UpLeg'), knee = P(side + 'Leg');
+    const lower = new THREE.Group(); lower.name = `monk-hem-${side}`;
+    const panels = new THREE.CylinderGeometry(0.156, 0.153, 0.52, 32, 8, true);
+    const p = panels.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const phase = Math.atan2(p.getX(i), p.getZ(i));
+      const fold = 1 + 0.043 * Math.sin(phase * 12 + p.getY(i) * 2) + 0.015 * Math.cos(phase * 21);
+      p.setXYZ(i, p.getX(i) * fold, p.getY(i), p.getZ(i) * fold);
+    }
+    panels.computeVertexNormals();
+    const hem = new THREE.Mesh(panels, side === 'Left' ? outer : ochre);
+    hem.position.set(0, -0.20, 0.003); lower.add(hem);
+    lower.position.copy(hip);
+    lower.quaternion.setFromUnitVectors(new V(0, 1, 0), hip.clone().sub(knee).normalize());
+    hang(a.id, side + 'UpLeg', lower);
+  }
+}
+
 // ---- auras: they ride with the samurai, not with a bone
 const fxMat = (c: number, o: number) => tagMat(new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.light);
 function buildAura(kind: 'foxfire' | 'gold') {
@@ -288,7 +370,10 @@ function buildAura(kind: 'foxfire' | 'gold') {
   return g;
 }
 
-if (rigged) for (const a of ARMORS) if (a.look) build(a);
+for (const a of ARMORS) {
+  if (a.robe) buildMonk(a);
+  else if (a.look) build(a);
+}
 for (const a of ARMORS) if (a.look?.aura) auras.set(a.id, buildAura(a.look.aura));
 
 /** show the armour you wear (and its helmet instead of the kasa), with your chosen colours */
@@ -298,9 +383,18 @@ export function dressUp(cur = armor()) {
   for (const [id, list] of sets) for (const o of list) o.visible = id === cur.id;
   for (const [id, g] of auras) g.visible = id === cur.id;
   activeAura = auras.get(cur.id);
-  const helmet = rigged && !!cur.look?.helmet;
+  const helmet = !!cur.look?.helmet;
+  const dressed = sets.has(cur.id), monk = dressed && !!cur.robe;
+  sam.fitOutfit?.(dressed);
+  roninRobe.uRoninOutfit.value = monk ? 2 : dressed ? 1 : 0;
+  if (dressed) roninRobe.uRoninLinen.value.set(cur.robe?.linen ?? cur.look!.lame);
+  for (const o of baseLayers) {
+    const layer = o.userData.equipmentLayer;
+    o.visible = layer === 'scarf' || layer === 'wrapping' ? !monk : !dressed;
+  }
   root.traverse(o => {
-    if (o.userData.part === 'hat') o.visible = !helmet && !opt('hat').hidden;
+    if (o.userData.part === 'hat') o.visible = !helmet && !monk && !opt('hat').hidden;
+    if (monk && o.userData.part === 'mask') o.visible = false;
     if (o.userData.part === 'topknot') o.visible = !helmet;   // the helmet covers the knot
   });
 }

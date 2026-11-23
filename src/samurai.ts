@@ -1,6 +1,7 @@
 // Detailed procedural samurai (o-yoroi style) with two-handed katana IK.
 import * as THREE from 'three';
-import type { Attack, Avatar, AvatarInput, Pose, Vec3 } from './types';
+import type { Attack, Avatar, AvatarInput, Vec3 } from './types';
+import { key, leftGripOffset, offhandGrip, sampleGrip, sampleKeys, weaponGrips } from './weapon-poses';
 
 // soft contact shadow: dark in the centre, fading to nothing at the rim (no hard circle edge)
 let _blobTex: THREE.CanvasTexture | null = null;
@@ -156,15 +157,24 @@ function curvedPanel(w: number, h: number, curve: number, m: THREE.Material, sx 
 const openCyl = (rt: number, rb: number, h: number, ts: number, tl: number, seg = 24) => new THREE.CylinderGeometry(rt, rb, h, seg, 1, true, ts, tl);
 
 export const BLADE_PROFILE = { base: 0.162, length: 0.72, curve: 0.022, width: 0.031, taper: 0.008 } as const;
-function bladeGeometry() {
+function bladeGeometry(shape: 'katana' | 'spear' | 'broad' = 'katana') {
   const { base, length: L, curve, width, taper } = BLADE_PROFILE;
   const sh = new THREE.Shape(), N = 24;
   const w = (s: number) => width - taper * (s / L);
   const c = (s: number) => curve * Math.pow(s / L, 2);
-  sh.moveTo(0, c(0) - w(0) / 2);
-  for (let i = 1; i <= N; i++) { const s = (i / N) * (L - 0.05); sh.lineTo(s, c(s) - w(s) / 2); }
-  sh.quadraticCurveTo(L - 0.012, c(L) - w(L) * 0.2, L, c(L) + w(L) * 0.35); // kissaki
-  for (let i = N; i >= 0; i--) { const s = (i / N) * (L - 0.04); sh.lineTo(s, c(s) + w(s) / 2); }
+  if (shape === 'spear') {
+    sh.moveTo(0, -width * 0.21);
+    sh.quadraticCurveTo(L * 0.26, -width * 0.83, L * 0.48, -width * 0.43);
+    sh.quadraticCurveTo(L * 0.73, -width * 0.29, L, 0);
+    sh.quadraticCurveTo(L * 0.73, width * 0.29, L * 0.48, width * 0.43);
+    sh.quadraticCurveTo(L * 0.26, width * 0.83, 0, width * 0.21);
+  } else {
+    const broad = shape === 'broad';
+    sh.moveTo(0, c(0) - w(0) / 2);
+    for (let i = 1; i <= N; i++) { const s = (i / N) * (L - (broad ? 0.105 : 0.05)); sh.lineTo(s, c(s) - w(s) / 2); }
+    sh.quadraticCurveTo(L - (broad ? 0.028 : 0.012), c(L) - w(L) * (broad ? 0.44 : 0.2), L, c(L) + w(L) * 0.35);
+    for (let i = N; i >= 0; i--) { const s = (i / N) * (L - (broad ? 0.13 : 0.04)); sh.lineTo(s, c(s) + w(s) / 2); }
+  }
   const depth = 0.004;
   const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: 0.0022, bevelSize: 0.0016, bevelSegments: 1, curveSegments: 6 });
   g.rotateY(-Math.PI / 2);
@@ -183,12 +193,6 @@ function hornGeometry() {
 }
 
 // ------------------------------------------------------------ katana poses
-function key(p: Vec3, d: Vec3, e: Vec3): Pose {
-  const z = new V(...d).normalize(), ed = new V(...e);
-  ed.addScaledVector(z, -ed.dot(z)).normalize();
-  const y = ed.negate(), x = new V().crossVectors(y, z);
-  return { pos: new V(...p), q: new Q().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z)) };
-}
 const mx = (a: Vec3): Vec3 => [-a[0], a[1], a[2]];
 const IDLE = key([-0.02, 1.07, 0.34], [0, 0.55, 0.84], [0, -1, 0]);
 const RUN = key([-0.06, 0.98, 0.3], [-0.05, 0.3, 0.95], [0, -1, 0]);
@@ -207,12 +211,6 @@ const ATTACKS: Attack[] = [kesa(false), kesa(true), ((): Attack => {
   const E = key([0.28, 1.2, 0.22], [0.85, 0.1, 0.5], [0.6, 0, -0.8]);
   return { keys: [[0, W], [0.2, W], [0.35, M], [0.8, M], [1, E]], twist: [[0, -0.5], [0.2, -0.55], [0.35, 0], [0.8, 0], [1, 0.45]] };
 })()];
-function sampleKeys(keys: [number, Pose][], p: number, outPos: THREE.Vector3, outQ: THREE.Quaternion) {
-  let i = 0; while (i < keys.length - 2 && p > keys[i + 1][0]) i++;
-  const [t0, a] = keys[i], [t1, b] = keys[i + 1];
-  const t = smooth(clamp((p - t0) / Math.max(1e-4, t1 - t0), 0, 1));
-  outPos.lerpVectors(a.pos, b.pos, t); outQ.slerpQuaternions(a.q, b.q, t);
-}
 function sampleScalar(keys: [number, number][], p: number) {
   let i = 0; while (i < keys.length - 2 && p > keys[i + 1][0]) i++;
   const [t0, a] = keys[i], [t1, b] = keys[i + 1];
@@ -226,14 +224,17 @@ export function createSamurai(): Avatar {
 
   // ---------- hips + legs
   const hips = grp(body, 0, 0.9, 0);
+  hips.userData.outfitBone = 'Hips';
+  const travelWaist = grp(hips);
+  travelWaist.userData.equipmentLayer = 'waist';
   mesh(new THREE.CylinderGeometry(0.19, 0.24, 0.24, 16, 1, true), MAT.hakama, hips, 0, -0.1, 0);
   // obi + agemaki
-  const obi = mesh(new THREE.TorusGeometry(0.205, 0.022, 8, 32), MAT.red, hips, 0, 0.035, 0);
+  const obi = mesh(new THREE.TorusGeometry(0.205, 0.022, 8, 32), MAT.red, travelWaist, 0, 0.035, 0);
   obi.rotation.x = Math.PI / 2; obi.scale.y = 0.78;
   // kusazuri (tassets)
   const kusa: { g: THREE.Group; th: number }[] = [];
   for (const th of [-2.55, -1.7, -0.85, 0, 0.85, 1.7, 2.55]) {
-    const g = grp(hips, Math.sin(th) * 0.215, 0.02, Math.cos(th) * 0.17);
+    const g = grp(travelWaist, Math.sin(th) * 0.205, 0.02, Math.cos(th) * 0.16);
     g.rotation.y = th;
     const p = curvedPanel(0.175, 0.3, 0.9, laceMat(0.8, 1.25)); p.position.y = -0.15; g.add(p);
     const top = mesh(new THREE.BoxGeometry(0.18, 0.025, 0.012), MAT.lacquer, g, 0, 0, 0);
@@ -242,16 +243,20 @@ export function createSamurai(): Avatar {
     kusa.push({ g, th });
   }
   function leg(side: number) {
+    const name = side < 0 ? 'Right' : 'Left';
     const thigh = grp(hips, 0.1 * side, -0.03, 0);
+    thigh.userData.outfitBone = `${name}UpLeg`;
     mesh(new THREE.CylinderGeometry(0.11, 0.16, 0.46, 14, 1, true), MAT.hakama, thigh, 0, -0.23, 0);
     const hd = curvedPanel(0.17, 0.25, 1.5, MAT.chain, 6, 3); hd.position.set(0, -0.2, 0.125); hd.rotation.x = -0.12; thigh.add(hd);
     const knee = grp(thigh, 0, -0.45, 0);
+    knee.userData.outfitBone = `${name}Leg`;
     mesh(new THREE.CylinderGeometry(0.16, 0.185, 0.22, 14, 1, true), MAT.hakama, knee, 0, -0.07, 0);
     const shin = mesh(new THREE.CylinderGeometry(0.056, 0.046, 0.3, 12), MAT.splint, knee, 0, -0.22, 0.008);
     const kc = mesh(new THREE.SphereGeometry(0.05, 10, 8, 0, TAU, 0, Math.PI / 2), MAT.lacquer, knee, 0, -0.06, 0.03); kc.rotation.x = Math.PI / 2; kc.scale.set(1, 1, 0.6);
     mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 16), MAT.cord, knee, 0, -0.12, 0.005).rotation.x = Math.PI / 2;
     mesh(new THREE.TorusGeometry(0.046, 0.008, 6, 16), MAT.cord, knee, 0, -0.33, 0.005).rotation.x = Math.PI / 2;
     const foot = grp(knee, 0, -0.38, 0);
+    foot.userData.outfitBone = `${name}Foot`;
     mesh(new THREE.BoxGeometry(0.085, 0.065, 0.22), MAT.tabi, foot, 0, -0.025, 0.045);
     mesh(new THREE.BoxGeometry(0.1, 0.018, 0.25), MAT.straw, foot, 0, -0.064, 0.05);
     mesh(new THREE.TorusGeometry(0.045, 0.006, 4, 12), MAT.white, foot, 0, -0.02, 0.06).rotation.x = Math.PI / 2;
@@ -276,56 +281,67 @@ export function createSamurai(): Avatar {
   // ---------- torso
   const spine = grp(hips, 0, 0.05, 0);
   const chest = grp(spine, 0, 0.24, 0);
+  chest.userData.outfitBone = 'Spine1';
+  const travelChest = grp(chest);
+  travelChest.userData.equipmentLayer = 'chest';
+  travelChest.scale.set(0.92, 1, 0.93);
   const doPts = [[0.2, -0.27], [0.215, -0.18], [0.235, -0.05], [0.245, 0.06], [0.235, 0.15], [0.205, 0.22], [0.15, 0.25]].map(([r, y]) => new THREE.Vector2(r, y));
-  const doM = mesh(new THREE.LatheGeometry(doPts, 40), laceMat(5.5, 1.75), chest);
+  const doM = mesh(new THREE.LatheGeometry(doPts, 40), laceMat(5.5, 1.75), travelChest);
   doM.scale.z = 0.74;
   for (const y of [-0.27, 0.22]) {
-    const r = mesh(new THREE.TorusGeometry(y > 0 ? 0.205 : 0.2, 0.008, 6, 40), MAT.gold, chest, 0, y, 0);
+    const r = mesh(new THREE.TorusGeometry(y > 0 ? 0.205 : 0.2, 0.008, 6, 40), MAT.gold, travelChest, 0, y, 0);
     r.rotation.x = Math.PI / 2; r.scale.y = 0.74;
   }
-  const muna = mesh(new THREE.BoxGeometry(0.26, 0.075, 0.03), MAT.lacquer, chest, 0, 0.2, 0.155); muna.rotation.x = -0.35;
+  const muna = mesh(new THREE.BoxGeometry(0.26, 0.075, 0.03), MAT.lacquer, travelChest, 0, 0.2, 0.155); muna.rotation.x = -0.35;
   mesh(new THREE.BoxGeometry(0.272, 0.012, 0.034), MAT.gold, muna, 0, 0.038, 0);
   for (const s of [-1, 1]) {
     const k = mesh(new THREE.SphereGeometry(0.012, 8, 6), MAT.gold, muna, 0.09 * s, 0, 0.016);
     void k;
-    mesh(new THREE.BoxGeometry(0.07, 0.03, 0.3), MAT.lacquer, chest, 0.13 * s, 0.255, -0.01);
+    mesh(new THREE.BoxGeometry(0.07, 0.03, 0.3), MAT.lacquer, travelChest, 0.13 * s, 0.255, -0.01);
   }
-  const nodowa = mesh(openCyl(0.085, 0.11, 0.06, -1.1, 2.2, 16), laceMat(0.6, 0.25), chest, 0, 0.27, 0.0);
+  const nodowa = mesh(openCyl(0.085, 0.11, 0.06, -1.1, 2.2, 16), laceMat(0.6, 0.25), travelChest, 0, 0.27, 0.0);
   void nodowa;
-  const agemaki = mesh(new THREE.TorusGeometry(0.035, 0.01, 6, 14), MAT.red, chest, 0, -0.06, -0.185); void agemaki;
-  for (const s of [-1, 1]) { const t = mesh(new THREE.ConeGeometry(0.018, 0.16, 6), MAT.red, chest, 0.025 * s, -0.15, -0.19); t.rotation.z = Math.PI + 0.15 * s; }
+  const agemaki = mesh(new THREE.TorusGeometry(0.035, 0.01, 6, 14), MAT.red, travelChest, 0, -0.06, -0.185); void agemaki;
+  for (const s of [-1, 1]) { const t = mesh(new THREE.ConeGeometry(0.018, 0.16, 6), MAT.red, travelChest, 0.025 * s, -0.15, -0.19); t.rotation.z = Math.PI + 0.15 * s; }
 
   // sashimono banner
-  const pole = mesh(new THREE.CylinderGeometry(0.01, 0.012, 1.45, 6), MAT.lacquer, chest, 0, 0.55, -0.21);
+  const banner = grp(chest);
+  banner.userData.equipmentLayer = 'scarf';
+  const pole = mesh(new THREE.CylinderGeometry(0.01, 0.012, 1.45, 6), MAT.lacquer, banner, 0, 0.55, -0.21);
   void pole;
-  mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 6), MAT.lacquer, chest, 0, 1.26, -0.36).rotation.x = Math.PI / 2;
+  mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 6), MAT.lacquer, banner, 0, 1.26, -0.36).rotation.x = Math.PI / 2;
   const flagGeo = new THREE.PlaneGeometry(0.28, 0.56, 8, 12);
   flagGeo.rotateY(Math.PI / 2);
-  const flag = mesh(flagGeo, MAT.flag, chest, 0, 0.98, -0.36);
+  const flag = mesh(flagGeo, MAT.flag, banner, 0, 0.98, -0.36);
   const flagBase = Float32Array.from(flagGeo.attributes.position.array);
 
   // ---------- head
   const headG = grp(chest, 0, 0.31, 0.02);
   mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.1, 10), MAT.skin, headG, 0, 0.0, 0);
   const head = grp(headG, 0, 0.1, 0);
+  head.userData.outfitBone = 'Head';
+  grp(head, 0, 0.18, 0).userData.outfitBone = 'HeadTop_End';
   const face = mesh(new THREE.SphereGeometry(0.1, 20, 16), MAT.skin, head); face.scale.set(0.9, 1.08, 0.98);
   for (const s of [-1, 1]) {
     mesh(new THREE.SphereGeometry(0.011, 8, 6), MAT.dark, head, 0.034 * s, 0.018, 0.085);
     const b = mesh(new THREE.BoxGeometry(0.035, 0.007, 0.01), MAT.dark, head, 0.034 * s, 0.036, 0.088); b.rotation.z = -0.25 * s;
   }
   // menpo (face mask) with nose and moustache
-  const menpo = mesh(new THREE.SphereGeometry(0.106, 24, 12, Math.PI / 2 - 1.15, 2.3, 1.62, 1.0), MAT.redLac, head);
+  const mask = grp(head);
+  mask.userData.part = 'mask';
+  const menpo = mesh(new THREE.SphereGeometry(0.106, 24, 12, Math.PI / 2 - 1.15, 2.3, 1.62, 1.0), MAT.redLac, mask);
   menpo.scale.set(0.92, 1.08, 1.02);
-  const nose = mesh(new THREE.ConeGeometry(0.016, 0.04, 6), MAT.redLac, head, 0, -0.005, 0.108); nose.rotation.x = Math.PI / 2 + 0.5;
+  const nose = mesh(new THREE.ConeGeometry(0.016, 0.04, 6), MAT.redLac, mask, 0, -0.005, 0.108); nose.rotation.x = Math.PI / 2 + 0.5;
   for (const s of [-1, 1]) {
     for (let i = 0; i < 3; i++) {
-      const h = mesh(new THREE.BoxGeometry(0.032, 0.004, 0.004), MAT.white, head, 0.022 * s, -0.03 - i * 0.004, 0.103 - i * 0.002);
+      const h = mesh(new THREE.BoxGeometry(0.032, 0.004, 0.004), MAT.white, mask, 0.022 * s, -0.03 - i * 0.004, 0.103 - i * 0.002);
       h.rotation.z = (0.35 + i * 0.12) * -s; h.rotation.y = 0.3 * s;
     }
   }
-  for (let i = 0; i < 3; i++) mesh(openCyl(0.1 + i * 0.012, 0.115 + i * 0.012, 0.035, -1.3, 2.6, 20), laceMat(0.6, 0.25), head, 0, -0.095 - i * 0.03, 0.0);
+  for (let i = 0; i < 3; i++) mesh(openCyl(0.1 + i * 0.012, 0.115 + i * 0.012, 0.035, -1.3, 2.6, 20), laceMat(0.6, 0.25), mask, 0, -0.095 - i * 0.03, 0.0);
   // kabuto
   const kab = grp(head, 0, 0.035, -0.005);
+  kab.userData.part = 'hat';
   const hachi = mesh(new THREE.SphereGeometry(0.135, 32, 16, 0, TAU, 0, Math.PI / 2), MAT.lacquer, kab); hachi.scale.y = 0.95;
   for (let i = 0; i < 16; i++) {
     const r = mesh(new THREE.TorusGeometry(0.1355, 0.0032, 4, 28, Math.PI), MAT.iron, kab);
@@ -354,10 +370,13 @@ export function createSamurai(): Avatar {
 
   // ---------- arms (IK chains)
   function arm(side: number) {
+    const name = side < 0 ? 'Right' : 'Left';
     const shoulder = grp(chest, 0.185 * side, 0.18, 0);
+    shoulder.userData.outfitBone = `${name}Arm`;
     mesh(new THREE.SphereGeometry(0.058, 10, 8), MAT.chain, shoulder);
     mesh(new THREE.CylinderGeometry(0.055, 0.047, 0.31, 12), MAT.chain, shoulder, 0, -0.155, 0);
     const elbow = grp(shoulder, 0, -0.31, 0);
+    elbow.userData.outfitBone = `${name}ForeArm`;
     mesh(new THREE.SphereGeometry(0.047, 10, 8), MAT.iron, elbow);
     mesh(new THREE.CylinderGeometry(0.046, 0.037, 0.29, 12), MAT.chain, elbow, 0, -0.145, 0);
     for (let i = -1; i <= 1; i++) {
@@ -370,7 +389,9 @@ export function createSamurai(): Avatar {
     mesh(new THREE.BoxGeometry(0.075, 0.09, 0.07), MAT.glove, wrist, 0, -0.045, 0);
     const tk = mesh(new THREE.BoxGeometry(0.008, 0.07, 0.06), MAT.lacquer, wrist, 0.04 * side, -0.035, 0); void tk;
     // sode (great shoulder guard)
-    const sode = grp(chest, 0.245 * side, 0.23, -0.01);
+    const sode = grp(chest, 0.211 * side, 0.23, -0.01);
+    sode.userData.equipmentLayer = 'shoulder';
+    sode.scale.set(0.84, 0.78, 0.83);
     const sp = curvedPanel(0.22, 0.32, 1.3, laceMat(1.1, 1.6)); sp.rotation.y = Math.PI / 2 * side; sp.position.set(0.04 * side, -0.17, 0); sode.add(sp);
     const kb = mesh(new THREE.BoxGeometry(0.028, 0.03, 0.24), MAT.lacquer, sode, 0.045 * side, -0.005, 0);
     mesh(new THREE.BoxGeometry(0.03, 0.006, 0.245), MAT.gold, kb, 0, 0.017, 0);
@@ -379,7 +400,7 @@ export function createSamurai(): Avatar {
   const armR = arm(-1), armL = arm(1);
 
   // ---------- katana
-  const katana = grp(body);
+  const katana = grp(body), offhand = grp(body);
   mesh(new THREE.CylinderGeometry(0.016, 0.017, 0.26, 10), MAT.ito, katana).rotation.x = Math.PI / 2;
   katana.children[0].scale.x = 0.85;
   mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.02, 10), MAT.gold, katana, 0, 0, -0.135).rotation.x = Math.PI / 2;
@@ -418,15 +439,18 @@ export function createSamurai(): Avatar {
   const POLE_R = new V(-0.8, -0.5, -0.3).normalize(), POLE_L = new V(0.8, -0.5, -0.3).normalize();
   const hand = new V(), tPos = new V(), tQ = new Q();
 
-  let look = 0;
+  const rightGrip = new V(), leftGrip = new V();
+  let look = 0, previousForm: AvatarInput['weaponForm'] = 'katana';
   function update(dt: number, s: AvatarInput) {
     const t = s.time, m = s.moving;
     const atk = s.attack;
+    const form = s.weaponForm;
+    const grip = form === 'katana' ? undefined : weaponGrips[form];
     const p = atk ? clamp(atk.p, 0, 1) : 0;
     const env = atk ? Math.sin(p * Math.PI) : 0;
 
     // spin (third combo hit)
-    body.rotation.y = atk && atk.combo === 2 ? smooth(clamp((p - 0.25) / 0.55, 0, 1)) * TAU : 0;
+    body.rotation.y = form === 'katana' && atk && atk.combo === 2 ? smooth(clamp((p - 0.25) / 0.55, 0, 1)) * TAU : 0;
 
     // legs: kamae stance (right foot forward) blended into a walk cycle
     const ph = s.walk, sw = Math.sin(ph);
@@ -447,7 +471,7 @@ export function createSamurai(): Avatar {
     }
 
     // spine / chest
-    const twist = atk ? sampleScalar(ATTACKS[atk.combo].twist, p) : 0;
+    const twist = atk ? sampleScalar((grip?.attacks ?? ATTACKS)[atk.combo].twist, p) : 0;
     spine.rotation.y = lerp(spine.rotation.y, twist - hips.rotation.y * 0.8, 1 - Math.exp(-dt * 25));
     spine.rotation.x = s.dash ? 0.45 : (atk ? 0.04 + env * 0.18 : 0.05 + 0.08 * m);
     chest.position.y = 0.24 + Math.sin(t * 1.9) * 0.004;
@@ -456,14 +480,25 @@ export function createSamurai(): Avatar {
     headG.rotation.y = look; headG.rotation.x = 0.06 - spine.rotation.x * 0.4;
 
     // katana pose
-    if (atk) sampleKeys(ATTACKS[atk.combo].keys, p, tPos, tQ);
+    if (grip) sampleGrip(grip, s, sw, tPos, tQ);
+    else if (atk) sampleKeys(ATTACKS[atk.combo].keys, p, tPos, tQ);
     else if (s.showWeapon) { tPos.copy(SHOW_WEAPON.pos); tQ.copy(SHOW_WEAPON.q); }
     else if (s.dash) { tPos.copy(DASH.pos); tQ.copy(DASH.q); }
     else { tPos.lerpVectors(IDLE.pos, RUN.pos, m); tQ.slerpQuaternions(IDLE.q, RUN.q, m); tPos.y += Math.sin(t * 1.9) * 0.006 + Math.abs(Math.cos(ph)) * 0.02 * m; }
     // the katana is posed in body space but should follow the hips' height and the spine twist
     tPos.y += hipY - 0.865;
     const k = 1 - Math.exp(-dt * (atk ? 32 : 12));
-    katana.position.lerp(tPos, k); katana.quaternion.slerp(tQ, k);
+    if (form === 'dual') {
+      if (previousForm !== 'dual') rightGrip.copy(tPos);
+      katana.position.copy(rightGrip.lerp(tPos, k));
+    } else katana.position.lerp(tPos, k);
+    katana.quaternion.slerp(tQ, k);
+    if (form === 'dual') {
+      sampleGrip(offhandGrip, s, -sw, tPos, tQ);
+      tPos.y += hipY - 0.865;
+      if (previousForm !== 'dual') { leftGrip.copy(tPos); offhand.quaternion.copy(tQ); }
+      offhand.position.copy(leftGrip.lerp(tPos, k)); offhand.quaternion.slerp(tQ, k);
+    }
 
     // flag cloth
     const fp = flagGeo.attributes.position;
@@ -476,12 +511,19 @@ export function createSamurai(): Avatar {
 
     // arms follow the sword
     root.updateMatrixWorld(true);
-    solveArm(armR, chest.worldToLocal(katana.localToWorld(hand.set(0, 0, 0.065))), POLE_R);
-    solveArm(armL, chest.worldToLocal(katana.localToWorld(hand.set(0, 0, -0.075))), POLE_L);
+    const leftWeapon = form === 'dual' ? offhand : katana;
+    const leftGripZ = leftGripOffset(form, katana.position.z);
+    solveArm(armR, chest.worldToLocal(katana.localToWorld(hand.set(0, 0, form === 'katana' ? 0.065 : 0))), POLE_R);
+    solveArm(armL, chest.worldToLocal(leftWeapon.localToWorld(hand.set(0, 0, leftGripZ))), POLE_L);
+    if (form === 'dual') {
+      katana.position.copy(body.worldToLocal(armR.wrist.localToWorld(hand.set(0, -0.041, 0))));
+      offhand.position.copy(body.worldToLocal(armL.wrist.localToWorld(hand.set(0, -0.041, 0))));
+    }
+    previousForm = form;
   }
 
-  return { root, update, katana };
+  return { root, update, katana, offhand };
 }
 
 // shared building blocks for the realistic (skinned) characters in rig.js
-export { MAT, laceMat, curvedPanel, openCyl, bladeGeometry, hornGeometry, mesh, grp, IDLE, RUN, DASH, ATTACKS, sampleKeys, sampleScalar, smooth, clamp, lerp, key };
+export { MAT, laceMat, curvedPanel, openCyl, bladeGeometry, hornGeometry, mesh, grp, IDLE, RUN, DASH, ATTACKS, sampleScalar, smooth, clamp, lerp };

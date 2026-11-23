@@ -5,6 +5,7 @@ import type { LightAnchor } from './lights';
 import type { EquipmentThreat } from './equipment-threat';
 
 export type Vec3 = [number, number, number];
+export type WeaponForm = 'katana' | 'spear' | 'broad' | 'dual';
 
 /** katana pose in body space */
 export interface Pose { pos: THREE.Vector3; q: THREE.Quaternion }
@@ -17,6 +18,7 @@ export interface AvatarInput {
   moving: number;          // 0 idle .. 1 walking
   walk: number;            // walk cycle phase
   dash: boolean;
+  weaponForm: WeaponForm;
   showWeapon?: boolean;
   look?: number;           // head turn towards the nearest oni (radians)
   attack: { combo: number; p: number } | null;
@@ -25,7 +27,9 @@ export interface AvatarInput {
 export interface Avatar {
   root: THREE.Object3D;
   katana: THREE.Object3D;
+  offhand: THREE.Object3D;
   update(dt: number, s: AvatarInput): void;
+  fitOutfit?(fitted: boolean): void;
   realistic?: boolean;
 }
 

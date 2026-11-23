@@ -13,6 +13,8 @@ import { player, state } from './state';
 import { angDiff } from './utils';
 import { shopRoninPos, shopRoninFacing, shopStageActive } from './shop-stage';
 import { mangaFinish } from './manga-art';
+import { createWeaponModels } from './weapon-models';
+import type { WeaponForm } from './types';
 
 export const sam = rigGltf ? createRealSamurai(rigGltf) : createSamurai();
 // luminous armour: each material glows softly with its own colour (cloned so the oni keep theirs)
@@ -34,13 +36,13 @@ export const sam = rigGltf ? createRealSamurai(rigGltf) : createSamurai();
 }
 // glowing blade (the extruded mesh inside the katana group)
 export const bladeMat = new THREE.MeshStandardMaterial({ color: 0xf4f9ff, metalness: 0.6, roughness: 0.14, emissive: 0xa6dcff, emissiveIntensity: 2.2 });
-sam.katana.traverse(obj => { const o = obj as THREE.Mesh; if (o.isMesh && o.geometry.type === 'ExtrudeGeometry') { o.material = bladeMat; } });
+export const showWeaponModel = createWeaponModels(sam, bladeMat);
 sam.root.traverse(o => { if ((o as THREE.Mesh).isMesh && o.castShadow) o.layers.enable(ACTOR_LAYER); });
 mangaFinish(sam.root);
 tagTree(sam.root, CLS.actor);
 scene.add(sam.root);
 
-export function animSamurai(dt: number) {
+export function animSamurai(dt: number, weaponForm: WeaponForm) {
   updateNature(state.time, player.pos);
   const push = natureWind.uPush.value;
   push[0].set(player.pos.x, player.pos.z, 1.5, 0);
@@ -58,7 +60,7 @@ export function animSamurai(dt: number) {
   }
   sam.update(dt, {
     time: state.time, moving: trading ? 0 : player.moving, walk: player.walk,
-    showWeapon: trading,
+    showWeapon: trading, weaponForm,
     dash: !trading && player.dashT > 0, look: !trading && Math.abs(look) < 1.6 ? look : 0,
     attack: !trading && player.attackT >= 0 ? { combo: player.combo, p: player.attackT / player.attackDur } : null
   });

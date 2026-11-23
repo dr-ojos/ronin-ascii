@@ -9,6 +9,7 @@ export interface Armor {
   hp: number; guard: number;
   /** dodge cooldown and running speed multipliers, life regained per second even while fighting */
   dash?: number; run?: number; regen?: number;
+  robe?: { linen: number; mantle: number; sash: number };
   /** how it looks on you (outfit.ts): lacquered plates (lame), the silk lacing that binds them (lace), the metal
    *  fittings, size of the shoulder guards, helmet and its crest, shin guards, aura, how much it glows */
   look?: { lame: number; lace: number; metal: number; sode: number; helmet?: 'jingasa' | 'crescent' | 'kuwagata' | 'sun'; shins?: boolean; aura?: 'foxfire' | 'gold'; glow?: number };
@@ -19,6 +20,8 @@ export const ARMORS: Armor[] = [
     look: { lame: 0x2b2724, lace: 0x3a5cb0, metal: 0xc09a5c, sode: 0.7, helmet: 'jingasa' } },
   { id: 'hayate', name: 'Armadura de Hayate', desc: 'peto ligero de explorador: corres más rápido', price: 800, tier: 1.2, hp: 20, guard: 0.08, run: 1.12,
     look: { lame: 0x385e38, lace: 0xb6c47e, metal: 0xc3a564, sode: 0.62, helmet: 'jingasa' } },
+  { id: 'monje', name: 'Túnica del monje errante', desc: 'hábito de lino con manto ocre: permite esquivar y recupera vida poco a poco', price: 1250, tier: 1.25,
+    hp: 18, guard: 0.05, dash: 0.82, regen: 0.45, robe: { linen: 0xa96935, mantle: 0xc58336, sash: 0x51372f } },
   { id: 'kitsune',  name: 'Armadura del zorro',     desc: 'ligera: esquivas mucho más a menudo',         price: 1500, tier: 1.5, hp: 30,  guard: 0.12, dash: 0.7, run: 1.05,
     look: { lame: 0xf2eee6, lace: 0xe0202e, metal: 0xd0d6e0, sode: 1, aura: 'foxfire' } },
   { id: 'garza', name: 'Armadura de la Garza', desc: 'placas claras y ligeras para correr y esquivar', price: 1850, tier: 1.75, hp: 40, guard: 0.15, dash: 0.82, run: 1.09,

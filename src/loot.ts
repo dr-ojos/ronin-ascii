@@ -297,13 +297,13 @@ export function updateLoot(dt: number) {
 let nearest: Chest | null = null;
 /** the katana hit whatever is in front (or all around, for a spin): closed chests burst open,
  *  sealed ones just ring. Returns how many chests were struck. */
-export function hitChests(px: number, pz: number, face: number, reach: number, spin: boolean) {
+export function hitChests(px: number, pz: number, face: number, reach: number, spin: boolean, arc = 1.35) {
   let n = 0;
   for (const c of chests) {
     if (!c.g || c.state === 'open') continue;
     const dx = c.x - px, dz = c.z - pz, d = Math.hypot(dx, dz);
     const ang = Math.abs(Math.atan2(Math.sin(Math.atan2(dx, dz) - face), Math.cos(Math.atan2(dx, dz) - face)));
-    if (d > reach + (c.kind === 'jefe' ? 0.9 : 0.6) || (!spin && ang > 1.35)) continue;
+    if (d > reach + (c.kind === 'jefe' ? 0.9 : 0.6) || (!spin && ang > arc)) continue;
     n++;
     if (c.state === 'closed') openChest(c);
     else {

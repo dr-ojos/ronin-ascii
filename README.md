@@ -39,7 +39,7 @@ npm run preview    # servir dist/ para probarla
 
 ## Controles
 
-WASD moverse · SHIFT correr · clic / K tajo · L giro pesado · ESPACIO esquivar · E o tajo abrir cofre · E hablar con Masa o un maestro · Q cambiar de arma · P usar técnica cargada · O cambiar de técnica · N mapa del mundo ·
+WASD moverse · SHIFT correr · clic / K combo · L golpe fuerte · ESPACIO esquivar · E o tajo abrir cofre · E hablar con Masa o un maestro · Q cambiar de arma · P usar técnica cargada · O cambiar de técnica · N mapa del mundo ·
 C paleta · T vista sin ASCII · F modo foto · R lluvia · M sonido · + / - densidad de caracteres.
 - `public/`: modelos 3D y sonidos, copiados tal cual a `dist/`.
 

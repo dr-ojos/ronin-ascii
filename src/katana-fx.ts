@@ -4,7 +4,8 @@ import { scene } from './renderer';
 import { BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, tagMat } from './materials';
 import { sam, bladeMat } from './avatar';
 import { BLADE_PROFILE } from './samurai';
-import { BLADE_BASE, displayedWeapon, tipZ, type Weapon } from './weapons';
+import { BLADE_LAYOUT } from './weapon-models';
+import { displayedWeapon, tipZ, type Weapon } from './weapons';
 import { player, state } from './state';
 import { rnd } from './utils';
 import { shopStageActive } from './shop-stage';
@@ -18,6 +19,7 @@ scene.add(samGlow, bladeLight);
 // even when the shop preview changes the length or a swing turns the katana edge-on.
 const bladeSheen = {
   uBladeStrength: { value: 0 },
+  uBladeCurve: new THREE.Uniform<number>(BLADE_PROFILE.curve),
   uBladeGlints: { value: new THREE.Vector3() },
   uBladeColors: { value: [new THREE.Color(), new THREE.Color(), new THREE.Color()] }
 };
@@ -33,6 +35,7 @@ const bladeSheen = {
     shader.fragmentShader = /* glsl */`
       varying vec2 vBlade;
       uniform float uBladeStrength;
+      uniform float uBladeCurve;
       uniform vec3 uBladeGlints;
       uniform vec3 uBladeColors[3];
     ` + shader.fragmentShader.replace('#include <emissivemap_fragment>', /* glsl */`
@@ -40,7 +43,7 @@ const bladeSheen = {
       if (uBladeStrength > 0.0) {
         float along = clamp((vBlade.y - ${BLADE_PROFILE.base.toFixed(3)}) / ${BLADE_PROFILE.length.toFixed(3)}, 0.0, 1.0);
         float width = ${BLADE_PROFILE.width.toFixed(3)} - ${BLADE_PROFILE.taper.toFixed(3)} * along;
-        float center = ${BLADE_PROFILE.curve.toFixed(3)} * along * along;
+        float center = uBladeCurve * along * along;
         float across = (vBlade.x - center) / width + 0.5;
         float bevel = 1.0 - smoothstep(0.08, 0.59, across);
         vec3 d = abs(vec3(along + across * 0.027) - uBladeGlints);
@@ -74,6 +77,9 @@ const halo = new THREE.Group();
   outer.name = 'outer'; inner.name = 'inner'; halo.add(outer, inner);
 }
 sam.katana.add(halo);
+const offhandHalo = halo.clone();
+offhandHalo.visible = false;
+sam.offhand.add(offhandHalo);
 const C1 = new THREE.Color(), C2 = new THREE.Color(), CG = new THREE.Color();
 let fxWeapon: Weapon | undefined;
 /** the blade's colours changed (another weapon in hand) */
@@ -81,10 +87,14 @@ function setWeaponFx(w: Weapon) {
   fxWeapon = w;
   CG.set(w.fx.glow); C1.set(w.fx.hot); C2.set(w.fx.cool);
   haloMat.color.copy(CG); haloCore.color.copy(CG).lerp(WHITE, 0.35); bladeLight.color.copy(CG);
-  const len = tipZ(w) - BLADE_BASE, r = 0.027 * w.fx.halo;
-  const outer = halo.getObjectByName('outer')!, inner = halo.getObjectByName('inner')!;
-  outer.scale.set(r, r * 0.55, len / 3); inner.scale.set(r * 0.35, r * 0.2, len / 3);
-  halo.position.set(0, 0.004, BLADE_BASE + len / 2);
+  const { base, width } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const len = tipZ(w) - base, r = 0.027 * w.fx.halo;
+  for (const glow of [halo, offhandHalo]) {
+    const outer = glow.getObjectByName('outer')!, inner = glow.getObjectByName('inner')!;
+    outer.scale.set(r, r * 0.55 * width, len / 3); inner.scale.set(r * 0.35, r * 0.2 * width, len / 3);
+    glow.position.set(0, 0.004 * width, base + len / 2);
+  }
+  bladeSheen.uBladeCurve.value = w.form === 'spear' ? 0 : BLADE_PROFILE.curve;
   const palette = w.fx.sparks;
   if (palette) {
     bladeSheen.uBladeColors.value.forEach((color, i) => color.set(palette[i]));
@@ -96,9 +106,9 @@ function setWeaponFx(w: Weapon) {
   }
 }
 
-// Small flashes and drifting grains kept in blade space, so they follow the edge even on a run.
+// Travelling flashes live on the cutting edge in blade space. Loose sparks are emitted on contact and on cuts.
 const WHITE = new THREE.Color(0xffffff), edgeColor = new THREE.Color();
-const BLADE_GLINTS = 3, EDGE_SPARKS = BLADE_GLINTS + 18;
+const BLADE_GLINTS = 3, EDGE_SPARKS = BLADE_GLINTS + 8;
 const edgePositions = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3).setUsage(THREE.DynamicDrawUsage);
 const edgePulses = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS), 1).setUsage(THREE.DynamicDrawUsage);
 const edgeColors = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3);
@@ -152,11 +162,23 @@ edgeSparks.onBeforeRender = renderer => {
   edgeMat.uniforms.uRasterScale.value = height / innerHeight;
 };
 sam.katana.add(edgeSparks);
+const offhandSparks = edgeSparks.clone();
+offhandSparks.name = 'offhand-sparks';
+offhandSparks.onBeforeRender = edgeSparks.onBeforeRender;
+sam.offhand.add(offhandSparks);
+function cuttingEdge(w: Weapon, t: number) {
+  const { curve, width, taper } = BLADE_PROFILE;
+  const y = w.form === 'spear' ? -width * 0.52 * Math.pow(Math.sin(Math.PI * t), 0.72) : curve * t * t - (width - taper * t) * 0.5;
+  return y * BLADE_LAYOUT[w.form ?? 'katana'].width;
+}
 function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
   edgeSparks.visible = Boolean(w.fx.sparks) && !state.dead;
+  offhandSparks.visible = edgeSparks.visible && w.form === 'dual';
   bladeSheen.uBladeStrength.value = edgeSparks.visible ? 1 + heat * 0.42 : 0;
   if (!edgeSparks.visible) return;
-  const length = tipZ(w) - BLADE_BASE;
+  const layout = BLADE_LAYOUT[w.form ?? 'katana'];
+  const base = layout.base;
+  const length = tipZ(w) - base;
   const time = state.time;
   const glints = bladeSheen.uBladeGlints.value;
   for (let i = 0; i < BLADE_GLINTS; i++) {
@@ -164,23 +186,18 @@ function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
     const travel = cycle * 1.21 - 0.10;
     glints.setComponent(i, travel);
     const along = THREE.MathUtils.clamp(travel, 0.04, 0.96);
-    const { curve, width, taper } = BLADE_PROFILE;
-    const edgeY = curve * along * along - (width - taper * along) * 0.5;
-    // The center travels just outside the cutting edge so the flash is visible from both faces.
-    edgePositions.setXYZ(i, 0, edgeY - 0.005, BLADE_BASE + along * length);
+    // Straddle the bevel so depth testing keeps the flash on the steel from either side.
+    edgePositions.setXYZ(i, 0, cuttingEdge(w, along) - 0.004, base + along * length);
     const fade = THREE.MathUtils.smoothstep(travel, 0.04, 0.16) * (1 - THREE.MathUtils.smoothstep(travel, 0.82, 0.96));
     edgePulses.setX(i, fade * (0.94 + 0.24 * Math.sin(time * 26 + i * 2)));
   }
   for (let i = 0; i < EDGE_SPARKS - BLADE_GLINTS; i++) {
-    const cycle = time * (1.2 + (i % 5) * 0.19) + i * 0.618;
-    const age = cycle % 1;
-    const angle = (i + Math.floor(cycle) * 0.43) * 2.4 + age * 1.5;
-    const radius = 0.018 + age * (0.27 + (i % 4) * 0.045 + heat * 0.17);
-    const along = 0.19 + ((i * 7) % EDGE_SPARKS) / EDGE_SPARKS * 0.79;
-    edgePositions.setXYZ(i + BLADE_GLINTS, Math.cos(angle) * radius, Math.sin(angle) * radius + age * 0.075, BLADE_BASE + along * length + age * 0.09);
-    const blink = 0.77 + 0.23 * Math.sin(cycle * 28);
-    const life = Math.min(1, age * 12) * (1 - age * age);
-    edgePulses.setX(i + BLADE_GLINTS, life * blink * (displaying ? 1 : 0.83 + 0.17 * heat));
+    const cycle = time * (0.93 + (i % 4) * 0.24) + i * 0.618;
+    const t = cycle % 1, along = 0.045 + t * 0.90;
+    const blink = 0.40 + 0.24 * Math.sin(time * 23 + i * 2.39);
+    edgePositions.setXYZ(i + BLADE_GLINTS, Math.sin(i * 2.39) * 0.008, cuttingEdge(w, along) - 0.004 - blink * 0.012, base + along * length);
+    const fade = THREE.MathUtils.smoothstep(t, 0, 0.12) * (1 - THREE.MathUtils.smoothstep(t, 0.84, 1));
+    edgePulses.setX(i + BLADE_GLINTS, fade * blink * (displaying ? 1 : 0.83 + 0.17 * heat));
   }
   edgePositions.needsUpdate = true;
   edgePulses.needsUpdate = true;
@@ -218,6 +235,7 @@ let fight = 0;
 let wasDisplaying = false;
 const bladeBase = new THREE.Vector3(), bladeTip = new THREE.Vector3(), prevTip = new THREE.Vector3(), tipVel = new THREE.Vector3(), spTmp = new THREE.Vector3();
 const prevBase = new THREE.Vector3();
+const leftBase = new THREE.Vector3(), leftTip = new THREE.Vector3(), leftPrevBase = new THREE.Vector3(), leftPrevTip = new THREE.Vector3();
 
 // ---------------------------------------------------------------- katana trail
 // Two ribbons follow the edge of every cut, in the blade's own colour:
@@ -229,7 +247,6 @@ const prevBase = new THREE.Vector3();
 const TRAIL_N = 160, STREAK_LIFE = 0.2, VAPOUR_LIFE = 0.6;
 let trailK = 1;
 interface TrailPt { b: THREE.Vector3; t: THREE.Vector3; age: number; k: number }
-const trail: TrailPt[] = [];   // newest first
 const blend = {
   vertexColors: true, side: THREE.DoubleSide, transparent: true, depthWrite: false, fog: false,
   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
@@ -260,23 +277,25 @@ function ribbon(cls: number, grains: boolean) {
   mesh.frustumCulled = false; scene.add(mesh);
   return { pos, col, geo };
 }
-const streak = ribbon(CLS.light, false), vapour = ribbon(CLS.sky, true);
+const makeTrail = () => ({ points: [] as TrailPt[], streak: ribbon(CLS.light, false), vapour: ribbon(CLS.sky, true) });
+const rightTrail = makeTrail(), leftTrail = makeTrail();
 const HOT = new THREE.Color(), tmpC = new THREE.Color();
-function pushTrail(b: THREE.Vector3, t: THREE.Vector3, age: number, k: number) {
+function pushTrail(trail: TrailPt[], b: THREE.Vector3, t: THREE.Vector3, age: number, k: number) {
   trail.unshift({ b: b.clone(), t: t.clone(), age, k });
   if (trail.length > TRAIL_N) trail.pop();
 }
-function updateTrail(dt: number, emit: boolean) {
-  trailU.uT.value += dt;
+function updateTrail(track: ReturnType<typeof makeTrail>, dt: number, emit: boolean, swing: number,
+  base: THREE.Vector3, tip: THREE.Vector3, lastBase: THREE.Vector3, lastTip: THREE.Vector3) {
+  const { points: trail, streak, vapour } = track;
   const vLife = VAPOUR_LIFE * (0.7 + 0.3 * trailK), sLife = STREAK_LIFE * (0.8 + 0.2 * trailK);
   for (const s of trail) s.age += dt;
   while (trail.length && trail[trail.length - 1].age > vLife) trail.pop();
-  if (emit && fight > 0.5 && swingS > 0.12) {
+  if (emit && fight > 0.5 && swing > 0.12) {
     // sub-steps between last frame's blade and this one, so fast cuts draw a smooth arc
-    const steps = trail.length ? Math.min(10, Math.max(1, Math.ceil(prevTip.distanceTo(bladeTip) / 0.06))) : 1;
+    const steps = trail.length ? Math.min(10, Math.max(1, Math.ceil(lastTip.distanceTo(tip) / 0.06))) : 1;
     for (let k = 1; k <= steps; k++) {
       const f = k / steps;
-      pushTrail(spTmp.lerpVectors(prevBase, bladeBase, f), new THREE.Vector3().lerpVectors(prevTip, bladeTip, f), dt * (1 - f), swingS);
+      pushTrail(trail, spTmp.lerpVectors(lastBase, base, f), new THREE.Vector3().lerpVectors(lastTip, tip, f), dt * (1 - f), swing);
     }
   }
   HOT.copy(CG).lerp(tmpC.set(0xffffff), 0.4);
@@ -326,15 +345,18 @@ export function updateSparks(dt: number, emit: boolean) {
   const staged = displaying || wasDisplaying;
   wasDisplaying = displaying;
   emit &&= !staged;
-  const w = displayedWeapon(), grav = w.fx.gravity;
-  if (w !== fxWeapon) setWeaponFx(w);
+  const w = displayedWeapon(), grav = w.fx.gravity, dual = w.form === 'dual';
+  const changed = w !== fxWeapon;
+  if (changed) setWeaponFx(w);
   sparkPts.visible = !displaying;
   trailK = w.fx.trail;
   sam.katana.updateMatrixWorld(true);
-  bladeBase.set(0, 0, 0.24); sam.katana.localToWorld(bladeBase);
-  bladeTip.set(0, 0, tipZ(w)); sam.katana.localToWorld(bladeTip);
+  const end = tipZ(w), base = BLADE_LAYOUT[w.form ?? 'katana'].base;
+  const from = base + (end - base) * 0.12;
+  sam.katana.localToWorld(bladeBase.set(0, 0, from));
+  sam.katana.localToWorld(bladeTip.set(0, 0, end));
   tipVel.subVectors(bladeTip, prevTip).divideScalar(dt);
-  if (staged) tipVel.setScalar(0);
+  if (staged || changed) tipVel.setScalar(0);
   if (tipVel.lengthSq() > 900) tipVel.setLength(30); // teleports (reset, first frame)
   const swing = Math.min(1, tipVel.length() / 12);
   // follows the blade's real speed: flares instantly with the cut, settles more slowly
@@ -344,19 +366,29 @@ export function updateSparks(dt: number, emit: boolean) {
   fight = cutting ? 1 : Math.max(0, fight - dt * 6);
   const swingF = swingS * fight;   // blade speed that counts: the cut's, never the run's
   bladeHeat += ((cutting ? 1 : swing * 0.6 * fight) - bladeHeat) * Math.min(1, dt * 10);
-  if (displaying) trail.length = 0;
-  updateTrail(dt, emit);
+  if (displaying || changed) rightTrail.points.length = 0;
+  trailU.uT.value += dt;
+  updateTrail(rightTrail, dt, emit, swingS, bladeBase, bladeTip, prevBase, prevTip);
   prevTip.copy(bladeTip); prevBase.copy(bladeBase);
+  if (displaying || changed || !dual) leftTrail.points.length = 0;
+  if (dual) {
+    sam.offhand.localToWorld(leftBase.set(0, 0, from));
+    sam.offhand.localToWorld(leftTip.set(0, 0, end));
+  }
+  const leftSwing = dual && !staged && !changed ? Math.min(1, leftTip.distanceTo(leftPrevTip) / (12 * dt)) : 0;
+  updateTrail(leftTrail, dt, emit && dual, leftSwing, leftBase, leftTip, leftPrevBase, leftPrevTip);
+  leftPrevBase.copy(leftBase); leftPrevTip.copy(leftTip);
   // running (and not fighting) the blade is carried low and behind: its glow would read as a white
   // trail, so it goes quiet — plain steel, no halo — and the ronin sheds a few motes of light instead
   const running = displaying ? 0 : player.moving * (1 - fight), calm = 1 - running;
   // emission: a rare crackle along the edge, a light shower while cutting
   if (emit) {
-    sparkAcc += dt * (3 * calm + bladeHeat * 55 + swing * fight * 25);
+    sparkAcc += dt * ((w.fx.sparks ? 0 : 3 * calm) + bladeHeat * 55 + swing * fight * 25);
     while (sparkAcc >= 1) {
       sparkAcc -= 1;
       const s = Math.sqrt(Math.random());
-      spTmp.lerpVectors(bladeBase, bladeTip, s);
+      if (dual && spNext % 2 === 0) spTmp.lerpVectors(leftBase, leftTip, s);
+      else spTmp.lerpVectors(bladeBase, bladeTip, s);
       const fling = 0.25 + bladeHeat * 0.35;
       spawnSpark(spTmp,
         tipVel.x * s * fling + rnd(-1.4, 1.4),
@@ -408,9 +440,11 @@ export function updateSparks(dt: number, emit: boolean) {
   if (w.fx.sparks) { haloMat.opacity *= 0.65; haloCore.opacity *= 0.45; }
   halo.scale.set(1 + hk * 0.25, 1 + hk * 0.25, 1);
   halo.visible = sam.root.visible && (w.fx.sparks ? !state.dead : !displaying && (calm > 0.03 || hk > 0.01));
+  offhandHalo.scale.copy(halo.scale);
+  offhandHalo.visible = dual && halo.visible;
   updateEdgeSparks(w, hk, displaying);
   // each blade's own flourish
-  if (emit && w.fx.extra) flourish(w.fx.extra, dt, hk);
+  if (emit && cutting && w.fx.extra) flourish(w.fx.extra, dt, hk);
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.life -= dt;
     if (b.life <= 0 || displaying) { scene.remove(b.l); b.l.geometry.dispose(); bolts.splice(i, 1); }
