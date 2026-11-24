@@ -215,8 +215,8 @@ function openChest(c: Chest) {
   c.state = 'open'; c.openT = 0.0001; removeLights(c);
   state.chests++;
   const lines: string[] = [];
-  const mon = Math.round((c.kind === 'jefe' ? 500 : c.kind === 'guardian' ? 360 : c.kind === 'oculto' ? 220 : 120) * (1 + c.tier * 1.5) / 10) * 10;
-  addPoints(mon, 'mon del cofre'); lines.push(`+${mon} mon`);
+  const mon = Math.round((c.kind === 'jefe' ? 300 : c.kind === 'guardian' ? 210 : c.kind === 'oculto' ? 130 : 70) * (1 + c.tier * 1.5) / 10) * 10;
+  addPoints(mon, 'mon del cofre', false, 1); lines.push(`+${mon} mon`);
   const jade = c.kind === 'jefe' ? 3 : c.kind === 'guardian' ? 2 : 1;
   state.jade += jade;
   lines.push(`+${jade} ${jade === 1 ? 'sello' : 'sellos'} de jade`);
@@ -249,8 +249,8 @@ function addPickup(kind: Pickup['kind'], value: number, x: number, z: number) {
 }
 /** what a slain oni leaves behind */
 export function dropLoot(x: number, z: number, tier: number, big: boolean) {
-  const mon = Math.round((big ? 120 : rnd(20, 50)) * (1 + tier) / 5) * 5;
-  if (big || Math.random() < 0.5) addPickup('mon', mon, x + rnd(-0.6, 0.6), z + rnd(-0.6, 0.6));
+  const mon = Math.round((big ? 70 : rnd(10, 30)) * (1 + tier) / 5) * 5;
+  if (big || Math.random() < 0.4) addPickup('mon', mon, x + rnd(-0.6, 0.6), z + rnd(-0.6, 0.6));
   if (big || Math.random() < (player.hp < player.maxHp * 0.5 ? 0.45 : 0.22)) addPickup('onigiri', big ? 30 : 14, x + rnd(-0.8, 0.8), z + rnd(-0.8, 0.8));
 }
 
@@ -288,7 +288,7 @@ export function updateLoot(dt: number) {
     m.rotation.y += dt * 2.5;
     m.visible = p.life > 5 || Math.floor(p.life * 6) % 2 === 0;
     if (d < 1.1 && !state.dead) {
-      if (p.kind === 'mon') { addPoints(p.value, 'mon'); sfx.coin(); }
+      if (p.kind === 'mon') { addPoints(p.value, 'mon', false, 1); sfx.coin(); }
       else { player.hp = Math.min(player.maxHp, player.hp + p.value); state.gain = `+${p.value} vida`; state.gainT = 1.6; sfx.coin(true); }
       scene.remove(m); pickups.splice(i, 1);
     } else if (p.life <= 0) { scene.remove(m); pickups.splice(i, 1); }

@@ -1,4 +1,4 @@
-// Points (and the mon you spend at the smith's, which grow with them): oni slain, camps cleared, places and corners discovered, mon from chests and drops.
+// Points (and the mon you spend at the smith's, which grow more slowly: MON_RATE): oni slain, camps cleared, places and corners discovered, mon from chests and drops.
 // Kills close together build a streak (x2, x3 ... up to x5); getting hit breaks it. The best score is kept in the browser.
 import { state } from './state';
 import { streakBonus } from './upgrades';
@@ -8,15 +8,17 @@ const BEST_KEY = 'ronin-ascii.best';
 try { state.best = Number(localStorage.getItem(BEST_KEY)) || 0; } catch { /* no storage: best lives only this session */ }
 
 export const POINTS = { camp: 150, bossCamp: 800, eliteCamp: 500, place: 250, corner: 75 };
+/** share of the points earned that also go to the purse (mon found in chests and drops goes in whole) */
+export const MON_RATE = 0.5;
 
-/** add points; `streak` ones are multiplied and extend the streak */
-export function addPoints(n: number, label: string, streak = false) {
+/** add points (and MON_RATE of them as mon, or `monRate`); `streak` ones are multiplied and extend the streak */
+export function addPoints(n: number, label: string, streak = false, monRate = MON_RATE) {
   if (streak) {
     n *= state.mult;
     state.mult = Math.min(5, state.mult + 1);
     state.streakT = STREAK_WINDOW + streakBonus();
   }
-  state.score += n; state.mon += n;
+  state.score += n; state.mon += Math.round(n * monRate / 5) * 5;
   state.gain = `+${n} ${label}`; state.gainT = 2.2;
   if (state.score > state.best) {
     state.best = state.score;
