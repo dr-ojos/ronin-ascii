@@ -7,7 +7,7 @@
 //    and by the fire of some camps of the wilds: their chest stays sealed while the guardian lives.
 // A group's oni only exist while you are near it; walk away and they vanish (keeping who is left),
 // clear a camp and it stays empty for a while. Also: starting a new run, and slow healing out of combat.
-import { enemies, spawnEnemy, despawn, ELITES, isBoss, isElite } from './enemies';
+import { enemies, spawnEnemy, despawn, ELITES, WILD_BOSSES, isBoss, isElite } from './enemies';
 import { clearEnemyHazards } from './enemy-ai';
 import { collide, isFree } from './physics';
 import { WORLD_R, PLACES, ROADS, TEMPLES, TEMPLE_PATHS, TORII_PATH, RIVER, place, inLake, lineDist, type P2 } from './map';
@@ -28,9 +28,16 @@ const SPAWN_R = 85;       // oni appear when you come this close to their group.
 const DESPAWN_R = 130;    // ...and vanish beyond this (if they are not fighting you)
 const RESPAWN = 240;      // seconds a cleared camp stays empty (and only while you are far away)
 const SAFE_R = 75;        // nothing attacks you around the shrine you start at
+const BOSS_CAMPS = 0.14;  // extra chance that a camp of the wilds (past tier 0.4) is led by a boss
+const BOSS_PATROLS = 0.3; // chance that a patrol far from the shrine (past tier 0.45) is led by a boss
 
 export const camps: Camp[] = [];
 
+/** a boss for a group of the wilds: the further out, the more of them can appear */
+function pickBoss(tier: number): EnemyKind {
+  const l = WILD_BOSSES.filter(([, t]) => tier >= t).map(([k]) => k);
+  return l[Math.floor(Math.random() * l.length)];
+}
 /** who lives in a camp: specialists become more frequent further from the shrine */
 function roster(size: number, tier: number, boss: boolean): EnemyKind[] {
   const pool: [EnemyKind, number][] = [
@@ -40,7 +47,7 @@ function roster(size: number, tier: number, boss: boolean): EnemyKind[] {
     ['guadanero', tier > 0.19 ? 1 + tier : 0], ['piromante', tier > 0.36 ? 0.65 + tier : 0],
     ['espectro', tier > 0.51 ? tier * 1.5 : 0]
   ];
-  const tot = pool.reduce((s, [, w]) => s + w, 0), out: EnemyKind[] = boss ? ['jefe'] : [];
+  const tot = pool.reduce((s, [, w]) => s + w, 0), out: EnemyKind[] = boss ? [pickBoss(tier)] : [];
   while (out.length < size) {
     let w = Math.random() * tot;
     for (const [k, kw] of pool) if ((w -= kw) < 0) { out.push(k); break; }
@@ -118,8 +125,8 @@ function buildCamps() {
     ['pagoda', ['tenguMayor', 'arquero', 'acechador', 'ashigaru'], [0, 13]],
     ['inari', ['raijinMayor', 'bruto', 'ashigaru'], [-2, -10]],
     ['aldea', ['oni', 'guadanero', 'ashigaru', 'escudero']],
-    ['campamento', ['ashigaru', 'acechador', 'escudero', 'arquero', 'bruto']],
-    ['torii', ['acechador', 'piromante', 'ashigaru']]
+    ['campamento', ['shuten', 'ashigaru', 'acechador', 'escudero', 'arquero', 'bruto']],
+    ['torii', ['yukiOnna', 'acechador', 'piromante', 'ashigaru']]
   ];
   for (const [id, kinds, [dx, dz] = [0, 0]] of guarded) {
     const p = place(id), r = Math.min(24, p.r * 0.5), c = makeCamp(p.x + dx, p.z + dz, kinds, r, { name: p.name });
@@ -130,20 +137,22 @@ function buildCamps() {
   // the camps of the wilds, with their chest by the fire
   // (a third of the ones further out also have a guardian by the chest)
   for (const s of CAMP_SPOTS) {
-    const kinds = roster(s.size + 1, s.tier, s.boss);   // one more oni than the camp was laid out for
-    if (!s.boss && s.tier > 0.3 && Math.hypot(s.x, s.z) > GUARD_MIN && Math.random() < 0.33) kinds.push(pickElite(s.tier));
+    const boss = s.boss || (s.tier > 0.4 && Math.random() < BOSS_CAMPS);
+    const kinds = roster(s.size + 1, s.tier, boss);   // one more oni than the camp was laid out for
+    if (!boss && s.tier > 0.3 && Math.hypot(s.x, s.z) > GUARD_MIN && Math.random() < 0.33) kinds.push(pickElite(s.tier));
     const c = makeCamp(s.x, s.z, kinds, s.r);
     c.chest = makeChest(s.chest[0], s.chest[1], s.chest[2], c.boss ? 'jefe' : c.elite ? 'guardian' : 'guarida', s.tier, true);
     camps.push(c);
   }
-  // patrols along the roads (two on the long ones)
+  // patrols of 5-6 along the roads (two on the long ones), some far ones led by a boss
   for (const road of ROADS) {
     if (road === TORII_PATH || TEMPLE_PATHS.includes(road)) continue;
     const len = routeLen(road.pts);
     for (let k = 0; k < (len > 260 ? 2 : 1); k++) {
       const t0 = Math.random() * len * 2, [x, z] = routeAt(road.pts, len, t0);
       const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
-      const c = makeCamp(x, z, roster(3 + Math.floor(Math.random() * 2), Math.max(0.3, tier), false), 6, { route: road.pts, routeT: t0 });
+      const boss = tier > 0.45 && Math.random() < BOSS_PATROLS;
+      const c = makeCamp(x, z, roster(5 + Math.floor(Math.random() * 2), Math.max(0.3, tier), boss), 9, { route: road.pts, routeT: t0 });
       lens.set(c, len); camps.push(c);
     }
   }

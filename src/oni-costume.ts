@@ -11,8 +11,12 @@ export interface OniLook {
   weapon: 'club' | 'spear' | 'bow' | 'bigclub' | 'sword' | 'staff' | 'scythe' | 'drum';
   shield?: boolean;
   plated?: boolean;
-  crest?: 'crescent' | 'feathers' | 'halo';
+  crest?: 'crescent' | 'feathers' | 'halo' | 'horns' | 'flames' | 'antlers';
   tengu?: boolean;
+  /** iron spikes on the shoulder plates (the great bosses) */
+  spikes?: boolean;
+  /** a third, glowing eye on the brow */
+  thirdEye?: boolean;
 }
 
 const TAU = Math.PI * 2;
@@ -199,6 +203,25 @@ function carveHead(look: OniLook, mask: THREE.Material, eye: THREE.Material, clo
       mesh(new THREE.OctahedronGeometry(0.029), i % 2 ? bright : eye, g, Math.sin(a) * r, 0.147 + Math.cos(a) * r, -0.147).rotation.z = -a;
     }
   }
+  if (look.crest === 'horns') for (const side of [-1, 1]) {
+    // great ox horns sweeping out and up, bound with a brass ring at the root
+    mesh(taper([[side * 0.075, 0.07, -0.01], [side * 0.2, 0.11, 0], [side * 0.3, 0.25, 0.04], [side * 0.28, 0.43, 0.09]], 0.05, 0.002), bone, g);
+    mesh(new THREE.TorusGeometry(0.045, 0.011, 6, 14), brass, g, side * 0.11, 0.085, -0.006).rotation.y = Math.PI / 2;
+  }
+  if (look.crest === 'flames') for (let i = 0; i < 9; i++) {
+    // a crown of tall tongues of fire (or ice) behind the brow, tallest in the middle
+    const a = (i - 4) * 0.32, x = Math.sin(a) * 0.13, z = Math.cos(a) * 0.05 - 0.06, h = 0.2 + 0.16 * (1 - Math.abs(i - 4) / 4);
+    mesh(taper([[x, 0.07, z], [x * 1.25, 0.07 + h * 0.45, z - 0.01], [x * 1.1 + Math.sin(i * 2.3) * 0.03, 0.07 + h, z - 0.03]], 0.03, 0.001), i % 2 ? bright : eye, g);
+  }
+  if (look.crest === 'antlers') for (const side of [-1, 1]) {
+    // branching antlers of a forest lord
+    const beam: XYZ[] = [[side * 0.07, 0.09, -0.03], [side * 0.16, 0.22, -0.05], [side * 0.22, 0.38, -0.04], [side * 0.26, 0.54, -0.07]];
+    mesh(taper(beam, 0.024, 0.004), bone, g);
+    mesh(taper([beam[1], [side * 0.13, 0.31, 0.03], [side * 0.11, 0.38, 0.05]], 0.014, 0.002), bone, g);
+    mesh(taper([beam[2], [side * 0.3, 0.45, -0.02], [side * 0.36, 0.5, -0.01]], 0.013, 0.002), bone, g);
+    mesh(taper([[side * 0.235, 0.44, -0.05], [side * 0.19, 0.52, -0.04], [side * 0.17, 0.58, -0.05]], 0.011, 0.002), bone, g);
+  }
+  if (look.thirdEye) inlay(g, eye, [[0, 0.052], [0.013, 0.073], [0, 0.094], [-0.013, 0.073]], 0.017);
   if (heavy) g.scale.set(1.16, 1.05, 1.13);
   return g;
 }
@@ -247,6 +270,11 @@ function bodyArmor(look: OniLook, cloth: THREE.Material, lacquer: THREE.Material
       part.scale.z = 0.82;
     }
     mesh(stud, brass, shoulder, 0, -0.009, 0.15);
+    if (look.spikes) for (let i = -1; i <= 1; i++) {
+      const t = i * 0.75, r = heavy ? 0.14 : 0.125;
+      const spike = mesh(new THREE.ConeGeometry(0.024, 0.14 - Math.abs(i) * 0.03, 6), iron, shoulder, Math.sin(t) * r * 0.4, 0.075, Math.cos(t) * r * 0.6 + 0.02);
+      spike.rotation.x = t * 0.5;
+    }
   }
   const sash = mesh(new THREE.TorusGeometry(0.21, 0.024, 7, 26), cord, belt); sash.rotation.x = Math.PI / 2; sash.scale.y = 0.79;
   if (bound) {

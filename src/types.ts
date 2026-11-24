@@ -61,7 +61,8 @@ export type Wildlife = 'lobos' | 'oso' | 'jabalies' | 'aranas';
 export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 'acechador' | 'hechicero'
   | 'guadanero' | 'piromante' | 'duelista' | 'tambor' | 'sombra' | 'coloso'
   | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'espectro'
-  | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianRayo' | 'kensei' | 'tengu' | 'raijin';
+  | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianRayo' | 'shuten' | 'enma' | 'senorBosque' | 'yukiOnna'
+  | 'kensei' | 'tengu' | 'raijin';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
 
 export interface EnemyModel {

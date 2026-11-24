@@ -95,6 +95,23 @@ export const KINDS: Record<EnemyKind, KindDef> = {
   guardianRayo: { name: 'Ikazuchi, guardián del rayo', scale: 1.42, hp: 22, speed: [3.3, 3.5], dmg: 20, reach: 3.6, windup: 0.72, heavy: true, points: 1000, glyph: 'Z',
                   look: { tint: 0x1a2250, mask: 0xd7e3ff, eye: 0x9fdcff, weapon: 'sword', crest: 'halo' }, robe: 0x24306e, maskC: 0xc4d6ff,
                   moves: ['blade', 'thunder', 'bladeRush', 'blade'], boss: { aura: 0x9fbbff, enraged: ['storm', 'whirlwind', 'thunder', 'bladeRush'] } },
+  // --- the great bosses of the wilds (encounters.ts WILD_BOSSES): each with its own look and attack cycle ---
+  // the oni king: a mountain of red muscle with great ox horns and a spiked iron club; shakes the earth
+  shuten: { name: 'Shuten, rey de los oni', scale: 1.8, hp: 34, speed: [2.6, 2.8], dmg: 30, reach: 3.7, windup: 0.8, heavy: true, points: 1300, glyph: 'H',
+            look: { tint: 0x4a0d0d, mask: 0xd23a24, eye: 0xffe14a, weapon: 'bigclub', crest: 'horns', spikes: true }, robe: 0x5a1010, maskC: 0xd23a24,
+            moves: ['crush', 'quake', 'slam'], boss: { aura: 0xff3a20, enraged: ['shockwave', 'quake', 'crush', 'quake'] } },
+  // the judge of the underworld: dark crimson, a crown of flames and a third eye; cuts and sets the ground alight
+  enma: { name: 'Enma, juez del infierno', scale: 1.6, hp: 32, speed: [3.4, 3.6], dmg: 27, reach: 3.6, windup: 0.7, heavy: true, points: 1250, glyph: 'N',
+          look: { tint: 0x2a0a12, mask: 0x7a0f1e, eye: 0xffb020, weapon: 'sword', crest: 'flames', thirdEye: true, spikes: true }, robe: 0x3a0a14, maskC: 0x7a0f1e,
+          moves: ['blade', 'fire', 'bladeRush'], boss: { aura: 0xff6a1a, enraged: ['whirlwind', 'fire', 'bladeRush', 'fire'] } },
+  // the lord of the dark forest: mossy green, great antlers, a scythe that hooks you in and webs of roots
+  senorBosque: { name: 'Señor del Bosque Sombrío', scale: 1.66, hp: 30, speed: [3.0, 3.3], dmg: 24, reach: 3.6, windup: 0.78, heavy: true, points: 1150, glyph: 'Y',
+                 look: { tint: 0x16301c, mask: 0x5c8a3c, eye: 0xd6ff6a, weapon: 'scythe', crest: 'antlers', spikes: true }, robe: 0x1d3a22, maskC: 0x5c8a3c,
+                 moves: ['hook', 'web', 'staffStrike'], boss: { aura: 0x9cff5a, enraged: ['curse', 'hook', 'web', 'shockwave'] } },
+  // the lady of the snow: pale, a crown of icicles, keeps her distance and throws cutting waves of frost
+  yukiOnna: { name: 'Yuki, dama de la nieve', scale: 1.42, hp: 26, speed: [3.6, 3.9], dmg: 22, reach: 12, windup: 0.85, heavy: false, points: 1100, glyph: 'I', ranged: true,
+              look: { tint: 0x8aa7c4, mask: 0xf1f6ff, eye: 0x6ad8ff, weapon: 'staff', crest: 'flames', thirdEye: true }, robe: 0xb9d4ea, maskC: 0xf1f6ff,
+              moves: ['crescent', 'curse', 'gust'], boss: { aura: 0x7fe0ff, enraged: ['crescent', 'gust', 'crescent', 'curse'] } },
   // --- the sub-bosses that guard chests (encounters.ts) ---
   // a spear master: three lunges in a row, barely a breath between them, then a long pause (your turn)
   kensei:   { name: 'kensei de la lanza', scale: 1.14, hp: 9, speed: [4.6, 4.6], dmg: 13, reach: 2.5, windup: 0.42, heavy: false, points: 450, glyph: 'K',
@@ -107,6 +124,8 @@ export const KINDS: Record<EnemyKind, KindDef> = {
               look: { tint: 0x141a2e, mask: 0x2a4aa8, eye: 0xcfe0ff, weapon: 'bigclub' }, robe: 0x1a2a5a, maskC: 0x4a6ad8, elite: { aura: 0x7fa8ff } }
 };
 export const ELITES: EnemyKind[] = ['kensei', 'tengu', 'raijin'];
+/** the bosses that can lead a camp or a patrol of the wilds, and how far out (tier) they start to appear */
+export const WILD_BOSSES: [EnemyKind, number][] = [['jefe', 0], ['senorBosque', 0.4], ['yukiOnna', 0.45], ['enma', 0.55], ['shuten', 0.65]];
 export const isElite = (k: EnemyKind) => !!KINDS[k].elite;
 export const isBoss = (k: EnemyKind) => !!KINDS[k].boss;
 
@@ -125,11 +144,13 @@ const oniGeo = {
 const hornMat = M(0xdccca2), bladeMat = M(0xdbe4ed, { metalness: 0.7 }), bootMat = M(0x2e2426);
 export const enemies: Enemy[] = [];
 
+/** bosses are tougher and hit harder than their table numbers */
+const BOSS_HP = 1.4, BOSS_DMG = 1.15;
 /** Regional danger and acquired gear scale independently. */
 function stats(camp: Camp, kind: EnemyKind, x: number, z: number) {
-  const k = KINDS[kind], t = camp.tier;
-  const hp = Math.round(k.hp * (1 + t * 0.8) * (1 + (camp.threat?.offense ?? 0) * 0.16));
-  const dmg = Math.round(k.dmg * (1 + t * 0.3) * (1 + (camp.threat?.defense ?? 0) * 0.11));
+  const k = KINDS[kind], t = camp.tier, bh = k.boss ? BOSS_HP : 1, bd = k.boss ? BOSS_DMG : 1;
+  const hp = Math.round(k.hp * bh * (1 + t * 0.8) * (1 + (camp.threat?.offense ?? 0) * 0.16));
+  const dmg = Math.round(k.dmg * bd * (1 + t * 0.3) * (1 + (camp.threat?.defense ?? 0) * 0.11));
   return {
     kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup, swings: 0, strikeT: 0, cd: 0,
     big: k.heavy || !!k.elite || !!k.boss, enraged: false, speed: rnd(k.speed[0], k.speed[1]), camp, wander: { x, z }
