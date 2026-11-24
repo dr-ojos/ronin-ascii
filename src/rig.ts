@@ -6,14 +6,16 @@ import {
   softBlobTex, MAT, laceMat, curvedPanel, openCyl, bladeGeometry, hornGeometry, mesh, grp,
   DASH, ATTACKS, SHOW_WEAPON, sampleScalar, smooth, clamp
 } from './samurai';
-import { key, leftGripOffset, offhandGrip, sampleGrip, sampleKeys, weaponGrips } from './weapon-poses';
+import { key, leftGripOffset, offhandGrip, previewGripOffsets, previewPalmAxis, sampleGrip, sampleKeys, weaponGrips } from './weapon-poses';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { Avatar, AvatarInput, EnemyModel } from './types';
 import { oniCostume, oniEye, oniMask, oniYumi, type OniLook } from './oni-costume';
-import { paintBody, mangaFinish, monTex, tabardTex, pleatTex, waveTex } from './manga-art';
+import { paintBody, mangaFinish, monTex, tabardTex, waveTex } from './manga-art';
 import { realHead, realMenpoGeometry, SCAN } from './real-head';
 import { headAsset } from './assets';
 import { fittedBody } from './fitted-body';
+import { HangingCloth, type Capsule } from './cloth';
+import { CLS, tagMat } from './materials';
 
 export type { OniLook } from './oni-costume';
 
@@ -22,12 +24,18 @@ const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const UP = new V(0, 1, 0);
 
 // ------------------------------------------------------------ bone helpers
-const _q1 = new Q(), _q2 = new Q(), _qd = new Q();
-function rotateBoneTo(bone: THREE.Object3D, from: THREE.Vector3, to: THREE.Vector3) {
-  _qd.setFromUnitVectors(from.normalize(), to.normalize());
-  bone.getWorldQuaternion(_q1).premultiply(_qd);
-  bone.parent!.getWorldQuaternion(_q2).invert();
-  bone.quaternion.copy(_q2.multiply(_q1));
+const _q1 = new Q(), _q2 = new Q(), _qd = new Q(), _parentFromSpace = new THREE.Matrix4();
+function rotateBoneTo(bone: THREE.Object3D, from: THREE.Vector3, to: THREE.Vector3, space?: THREE.Object3D) {
+  if (space) {
+    _parentFromSpace.copy(bone.parent!.matrixWorld).invert().multiply(space.matrixWorld);
+    _qd.setFromUnitVectors(from.transformDirection(_parentFromSpace), to.transformDirection(_parentFromSpace));
+    bone.quaternion.premultiply(_qd);
+  } else {
+    _qd.setFromUnitVectors(from.normalize(), to.normalize());
+    bone.getWorldQuaternion(_q1).premultiply(_qd);
+    bone.parent!.getWorldQuaternion(_q2).invert();
+    bone.quaternion.copy(_q2.multiply(_q1));
+  }
   bone.updateMatrixWorld(true);
 }
 function rotateBoneWorld(bone: THREE.Object3D, axis: THREE.Vector3, ang: number) {
@@ -38,9 +46,14 @@ function rotateBoneWorld(bone: THREE.Object3D, axis: THREE.Vector3, ang: number)
   bone.quaternion.copy(_q2.multiply(_q1));
   bone.updateMatrixWorld(true);
 }
-// analytic two-bone IK in world space; keeps each bone's twist from the animation
-function ik2(up: THREE.Object3D, lo: THREE.Object3D, end: THREE.Object3D, target: THREE.Vector3, pole: THREE.Vector3, weight = 1) {
-  const a = up.getWorldPosition(new V()), b = lo.getWorldPosition(new V()), c = end.getWorldPosition(new V());
+// Analytic two-bone IK. The shop solves in rig space, where rotating a bone preserves its length.
+function ik2(up: THREE.Object3D, lo: THREE.Object3D, end: THREE.Object3D, target: THREE.Vector3, pole: THREE.Vector3, weight = 1, space?: THREE.Object3D) {
+  const spaceFromWorld = space && new THREE.Matrix4().copy(space.matrixWorld).invert();
+  const point = (bone: THREE.Object3D) => {
+    const p = bone.getWorldPosition(new V());
+    return spaceFromWorld ? p.applyMatrix4(spaceFromWorld) : p;
+  };
+  const a = point(up), b = point(lo), c = point(end);
   const l1 = a.distanceTo(b), l2 = b.distanceTo(c);
   const toT = target.clone().sub(a);
   const d = clamp(toT.length(), 0.05, l1 + l2 - 0.002), dir = toT.normalize();
@@ -48,11 +61,11 @@ function ik2(up: THREE.Object3D, lo: THREE.Object3D, end: THREE.Object3D, target
   const axis = new V().crossVectors(dir, pole).normalize();
   const u = dir.clone().applyAxisAngle(axis, Math.acos(cosA));
   const cur = b.clone().sub(a).normalize();
-  rotateBoneTo(up, cur.clone(), cur.clone().lerp(u, weight));
-  const b2 = lo.getWorldPosition(new V()), c2 = end.getWorldPosition(new V());
+  rotateBoneTo(up, cur.clone(), cur.clone().lerp(u, weight), space);
+  const b2 = point(lo), c2 = point(end);
   const reach = a.clone().addScaledVector(dir, d);
   const curF = c2.clone().sub(b2).normalize();
-  rotateBoneTo(lo, curF.clone(), curF.clone().lerp(reach.sub(b2).normalize(), weight));
+  rotateBoneTo(lo, curF.clone(), curF.clone().lerp(reach.sub(b2).normalize(), weight), space);
 }
 function boneMap(model: THREE.Object3D) {
   const b: Record<string, THREE.Object3D> = {};
@@ -185,9 +198,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const sw = Math.abs(lArm.x - rArm.x) / 2, torsoH = neck.y - hips.y, hh = top.y - head.y;
   const H = stripeTex(false, 5), Vt = stripeTex(true, 6);
   const black = new THREE.MeshPhysicalMaterial({ color: 0x0f0e12, roughness: 0.4, clearcoat: 0.7, side: THREE.DoubleSide });
-  const pleats = pleatTex.clone(); pleats.repeat.set(3, 1); pleats.needsUpdate = true;
   const waves = waveTex.clone(); waves.repeat.set(4, 1); waves.needsUpdate = true;
-  const cloth = new THREE.MeshStandardMaterial({ color: 0x2b2a36, map: pleats, roughness: 0.95, side: THREE.DoubleSide });
   const teal = new THREE.MeshStandardMaterial({ color: RONIN.teal, map: waves, roughness: 0.85, side: THREE.DoubleSide });
   const tan = new THREE.MeshStandardMaterial({ color: RONIN.tan, roughness: 0.9 });
   const red = new THREE.MeshStandardMaterial({ color: 0xe4573d, roughness: 0.55 });
@@ -314,6 +325,70 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   waist.position.set(hips.x, hips.y + 0.04, hips.z);
   attach('Hips', waist);
 
+  // ---- long kimono robe under the kusazuri, down to the ankles: simulated cloth (cloth.ts) that
+  // swings with the stride, trails in turns and is kicked forward by each leg
+  const robeMat = teal.clone(); robeMat.userData.glyphRest = true;
+  const robeG = new THREE.Group(); robeG.userData.equipmentLayer = 'robe';
+  const ROBE_COLS = 22, ROBE_ROWS = 7, robeLen = hips.y + 0.03 - 0.11;
+  const robe = new HangingCloth({
+    cols: ROBE_COLS, rows: ROBE_ROWS, closed: true, material: robeMat,
+    rest: (i, j, out) => {
+      // snug under the kusazuri (the plates hang over it), opening out below them like a long hakama
+      const a = (i / ROBE_COLS) * TAU, k = j / ROBE_ROWS, flare = 1 + 1.15 * THREE.MathUtils.smoothstep(k, 0.25, 1);
+      return out.set(Math.sin(a) * 0.165 * cs * flare, -robeLen * k, Math.cos(a) * 0.135 * cs * flare);
+    }
+  });
+  robeG.add(robe.mesh); robe.mesh.name = 'robe';
+  robeG.position.set(hips.x, hips.y + 0.03, hips.z);
+  attach('Hips', robeG);
+
+  // ---- wide kimono sleeves hanging under the forearms
+  const sleeves: { cloth: HangingCloth; g: THREE.Group }[] = [];
+  for (const pre of ['Left', 'Right'] as const) {
+    const f = P(pre + 'ForeArm'), h = P(pre + 'Hand'), g = new THREE.Group();
+    g.userData.equipmentLayer = 'sleeves';
+    const mat = teal.clone(); mat.userData.glyphRest = true;
+    const cloth = new HangingCloth({
+      cols: 5, rows: 4, closed: false, material: mat, drape: 14, drapeMoving: 8,
+      rest: (i, j, out) => out.copy(f).lerp(h, 0.1 + 0.62 * (i / 4)).sub(f).add(new V(0, -0.03 - 0.075 * j, -0.015 * j))
+    });
+    g.add(cloth.mesh); g.position.copy(f);
+    attach(pre + 'ForeArm', g);
+    sleeves.push({ cloth, g });
+  }
+
+  // ---- neon accents: a ring round the kasa's brim, a band round the obi and the ronin's mark on the back.
+  // A solid white core (drawn as light, no letters) and an additive halo the ASCII glow pass picks up.
+  const neon = new THREE.MeshBasicMaterial({ color: 0xeef7ff });
+  const halo = tagMat(new THREE.MeshBasicMaterial({ color: 0xa9dcff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
+  const halos: THREE.Mesh[] = [];
+  const glowRing = (parent: THREE.Object3D, r: number, y: number, sy = 1) => {
+    const core = mesh(new THREE.TorusGeometry(r, 0.0055, 6, 64), neon, parent, 0, y, 0);
+    const soft = mesh(new THREE.TorusGeometry(r, 0.022, 6, 64), halo, parent, 0, y, 0);
+    for (const o of [core, soft]) { o.rotation.x = Math.PI / 2; o.scale.y = sy; }
+    halos.push(soft);
+    return [core, soft];
+  };
+  for (const o of glowRing(kasa, 0.238, -0.066)) o.userData.part = 'hat';
+  glowRing(waist, 0.214, 0.005, 0.78);
+  {
+    const draw = (blur: number) => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const x = c.getContext('2d')!;
+      x.filter = blur ? `blur(${blur}px)` : 'none';
+      x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = 'bold 92px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif';
+      x.fillText('浪', 64, 68);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    };
+    const markCore = new THREE.MeshBasicMaterial({ map: draw(0), color: 0xeef7ff, alphaTest: 0.45, side: THREE.DoubleSide });
+    const markHalo = tagMat(new THREE.MeshBasicMaterial({ map: draw(7), color: 0xa9dcff, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), CLS.fx);
+    const mark = mesh(new THREE.PlaneGeometry(0.15, 0.15), markCore, chest, 0, 0.05, -0.192);
+    const markSoft = mesh(new THREE.PlaneGeometry(0.2, 0.2), markHalo, chest, 0, 0.05, -0.196);
+    mark.rotation.y = markSoft.rotation.y = Math.PI;
+    halos.push(markSoft);
+  }
+
   // ---- big striped sode, striped forearm guards, red gloves
   for (const [nm, a, f, s, isLeft] of [['LeftArm', lArm, lFore, side, true], ['RightArm', rArm, rFore, -side, false]] as [string, THREE.Vector3, THREE.Vector3, number, boolean][]) {
     const g = new THREE.Group(), len = a.distanceTo(f);
@@ -333,18 +408,9 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     glove.position.copy(h); attach(isLeft ? 'LeftHand' : 'RightHand', glove);
   }
 
-  // ---- black hakama legs, striped shin guards, tan foot wraps
+  // ---- tan foot wraps (the long robe above covers the legs: no hakama pieces under it)
   for (const pre of ['Left', 'Right']) {
-    const u = P(pre + 'UpLeg'), l = P(pre + 'Leg'), ft = P(pre + 'Foot'), toe = P(pre + 'ToeBase');
-    const th = new THREE.Group();
-    th.userData.equipmentLayer = 'trousers';
-    mesh(new THREE.CylinderGeometry(0.12, 0.17, u.distanceTo(l) + 0.04, 14, 1, true), cloth, th);
-    th.position.copy(u).lerp(l, 0.5); attach(pre + 'UpLeg', th);
-    const sh = new THREE.Group(), sl = l.distanceTo(ft);
-    sh.userData.equipmentLayer = 'trousers';
-    mesh(new THREE.CylinderGeometry(0.17, 0.15, sl * 0.3, 14, 1, true), teal, sh, 0, sl * 0.32, 0);
-    mesh(new THREE.CylinderGeometry(0.064, 0.055, sl * 0.62, 14, 1, true), lacq(Vt, 1.6, 1), sh, 0, -sl * 0.1, 0.004);
-    sh.position.copy(l).lerp(ft, 0.5); attach(pre + 'Leg', sh);
+    const ft = P(pre + 'Foot'), toe = P(pre + 'ToeBase');
     const fw = new THREE.Group();
     mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.1, 10), tan, fw, 0, 0.02, 0);
     const foot = mesh(new THREE.BoxGeometry(0.1, 0.06, 0.2), tan, fw, 0, -0.04, 0.08); void foot;
@@ -363,6 +429,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03; root.add(blob);
   finish(rig);
   blob.castShadow = false;
+  for (const o of halos) o.castShadow = o.receiveShadow = false;   // halos stay out of the figure's mask: they glow around it
 
   const ky = ((lArm.y + rArm.y) / 2) / 1.39;
   // relaxed one-handed carry: blade low, pointing down and forward like the illustration
@@ -383,6 +450,46 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     return new Q().setFromRotationMatrix(gripMatrix.makeBasis(palmAxis, crossAxis, fistNormal)).invert();
   }
   const rightPalm = palmBasis('Right'), leftPalm = palmBasis('Left');
+  const wristTarget = new V(), gripScale = new V();
+  const rigFromWorld = new THREE.Matrix4(), rigFromBone = new THREE.Matrix4();
+  function previewHand(prefix: 'Left' | 'Right', neutral: THREE.Quaternion, elbow: THREE.Vector3) {
+    const upper = B[prefix + 'Arm'], forearm = B[prefix + 'ForeArm'], wrist = B[prefix + 'Hand'];
+    // The wrist pivot is behind the palm. Place the handle inside the curled fingers.
+    const palmCenter = wrist.worldToLocal(P(prefix + 'HandMiddle1').lerp(P(prefix + 'HandRing1'), 0.4));
+    palmCenter.x -= 2.5;
+    palmCenter.y -= 1.5;
+    const flex = new V(0, 0, 1), oppose = new V(0, prefix === 'Left' ? 1 : -1, 0);
+    const fingers = ['Index', 'Middle', 'Ring', 'Pinky'].flatMap(digit =>
+      [0.98, 1.08, 0.62].map((angle, i) => {
+        const joint = B[prefix + 'Hand' + digit + (i + 1)];
+        return { joint, closed: joint.quaternion.clone().multiply(new Q().setFromAxisAngle(flex, angle)) };
+      })
+    );
+    for (const [i, angle] of [0.68, 0.32].entries()) {
+      const joint = B[prefix + 'HandThumb' + (i + 1)];
+      fingers.push({ joint, closed: joint.quaternion.clone().multiply(new Q().setFromAxisAngle(oppose, angle)) });
+    }
+    return (weapon: THREE.Object3D, offset: number) => {
+      weapon.localToWorld(wristTarget.set(0, 0, offset));
+      wristTarget.applyMatrix4(rigFromWorld);
+      crossAxis.set(0, 0, 1).transformDirection(weapon.matrixWorld).transformDirection(rigFromWorld);
+      previewPalmAxis(palmAxis.set(0, 0, 1).transformDirection(body.matrixWorld).transformDirection(rigFromWorld), crossAxis);
+      fistNormal.crossVectors(palmAxis, crossAxis);
+      gripWorld.setFromRotationMatrix(gripMatrix.makeBasis(palmAxis, crossAxis, fistNormal)).multiply(neutral);
+
+      gripScale.setFromMatrixScale(rigFromBone.multiplyMatrices(rigFromWorld, wrist.matrixWorld));
+      wristTarget.sub(hand.copy(palmCenter).multiply(gripScale).applyQuaternion(gripWorld));
+      pole.copy(elbow).transformDirection(body.matrixWorld).transformDirection(rigFromWorld);
+      ik2(upper, forearm, wrist, wristTarget, pole, 1, rig.holder);
+      rigFromBone.multiplyMatrices(rigFromWorld, forearm.matrixWorld);
+      gripParent.setFromRotationMatrix(gripMatrix.extractRotation(rigFromBone)).invert();
+      wrist.quaternion.copy(gripParent.multiply(gripWorld));
+      for (const { joint, closed } of fingers) joint.quaternion.copy(closed);
+    };
+  }
+  const showRightHand = previewHand('Right', rightPalm, POLE_R);
+  const showLeftHand = previewHand('Left', leftPalm, POLE_L);
+
   function holdShortBlade(wrist: THREE.Object3D, forearm: THREE.Object3D, sword: THREE.Object3D, neutral: THREE.Quaternion) {
     wrist.getWorldPosition(wristPoint);
     palmAxis.subVectors(wristPoint, forearm.getWorldPosition(hand)).normalize();
@@ -398,6 +505,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     sword.position.copy(body.worldToLocal(wristPoint.addScaledVector(palmAxis, 0.04)));
   }
   let previousForm: AvatarInput['weaponForm'] = 'katana';
+  let wasShowingWeapon = false;
   let look = 0, leftW = 0;
   katana.position.copy(LOW.pos).multiply(new V(1, ky, 1)); katana.quaternion.copy(LOW.q);
 
@@ -534,10 +642,34 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     }
   }
 
+  // ---- robe and sleeves: the legs and the torso as capsules the cloth slides around
+  const caps = {
+    lThigh: { a: new V(), b: new V(), r: 0.105 }, rThigh: { a: new V(), b: new V(), r: 0.105 },
+    lShin: { a: new V(), b: new V(), r: 0.09 }, rShin: { a: new V(), b: new V(), r: 0.09 },
+    pelvis: { a: new V(), b: new V(), r: 0.12 }, torso: { a: new V(), b: new V(), r: 0.17 }
+  } satisfies Record<string, Capsule>;
+  const legCaps = [caps.lThigh, caps.rThigh, caps.lShin, caps.rShin, caps.pelvis], armCaps = [caps.torso, caps.lThigh, caps.rThigh];
+  function simulateRobe(dt: number) {
+    const wp = (n: string, out: THREE.Vector3) => B[n].getWorldPosition(out);
+    wp('LeftUpLeg', caps.lThigh.a); wp('LeftLeg', caps.lThigh.b); wp('RightUpLeg', caps.rThigh.a); wp('RightLeg', caps.rThigh.b);
+    wp('LeftLeg', caps.lShin.a); wp('LeftFoot', caps.lShin.b); wp('RightLeg', caps.rShin.a); wp('RightFoot', caps.rShin.b);
+    caps.pelvis.a.copy(caps.lThigh.a); caps.pelvis.b.copy(caps.rThigh.a);
+    wp('Hips', caps.torso.a); wp('Neck', caps.torso.b);
+    const moving = clamp(loco.spd / 4, 0, 1), ground = root.position.y + 0.03;
+    if (robeG.visible) robe.update(dt, moving, legCaps, ground);
+    for (const { cloth, g } of sleeves) if (g.visible) cloth.update(dt, moving, armCaps, ground);
+  }
+
   function update(dt: number, s: AvatarInput) {
     const atk = s.attack, p = atk ? clamp(atk.p, 0, 1) : 0, m = s.moving, t = s.time;
     const form = s.weaponForm;
+    const showingWeapon = s.showWeapon === true;
     const grip = form === 'katana' ? undefined : weaponGrips[form];
+    if (showingWeapon !== wasShowingWeapon) {
+      // Entering or leaving the shop moves the avatar directly between two positions.
+      Object.assign(loco, { init: false, lag: 0, spd: 0, acc: 0, turn: 0, lean: 0, bank: 0, step: 0 });
+      wasShowingWeapon = showingWeapon;
+    }
     // the move's body choreography: spins, leaps and leaning into the blow
     const move = atk ? (grip?.attacks ?? ATTACKS)[atk.combo] : undefined;
     const spinning = !!move?.spin;
@@ -572,7 +704,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     const gait = -Math.cos(TAU * loco.phase);
     if (grip) sampleGrip(grip, s, gait, tPos, tQ);
     else if (atk) sampleKeys(ATTACKS[atk.combo].keys, p, tPos, tQ);
-    else if (s.showWeapon) { tPos.copy(SHOW_WEAPON.pos); tQ.copy(SHOW_WEAPON.q); }
+    else if (showingWeapon) { tPos.copy(SHOW_WEAPON.pos); tQ.copy(SHOW_WEAPON.q); }
     else if (s.dash) { tPos.copy(DASH.pos); tQ.copy(DASH.q); }
     else {
       tPos.lerpVectors(LOW.pos, LOW_RUN.pos, m); tQ.slerpQuaternions(LOW.q, LOW_RUN.q, m);
@@ -585,7 +717,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
       tQ.premultiply(swQ);
     }
     tPos.y *= ky;
-    const k = 1 - Math.exp(-dt * (atk ? 32 : 18));
+    const k = showingWeapon ? 1 : 1 - Math.exp(-dt * (atk ? 32 : 18));
     if (form === 'dual') {
       if (previousForm !== 'dual') rightGrip.copy(tPos);
       katana.position.copy(rightGrip.lerp(tPos, k));
@@ -602,17 +734,25 @@ export function createRealSamurai(gltf: GLTF): Avatar {
 
     body.getWorldQuaternion(bq);
     const leftWeapon = form === 'dual' ? offhand : katana;
-    const leftGripZ = leftGripOffset(form, katana.position.z);
-    ik2(B.RightArm, B.RightForeArm, B.RightHand, katana.localToWorld(hand.set(0, 0, form === 'katana' && atk ? 0.065 : 0)), pole.copy(POLE_R).applyQuaternion(bq));
-    leftW += ((atk || s.showWeapon || grip ? 1 : 0) - leftW) * (1 - Math.exp(-dt * 18));
-    if (leftW > 0.01) ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, leftWeapon.localToWorld(hand.set(0, 0, leftGripZ)), pole.copy(POLE_L).applyQuaternion(bq), grip ? 1 : leftW);
-    if (form === 'dual') {
-      holdShortBlade(B.RightHand, B.RightForeArm, katana, rightPalm);
-      holdShortBlade(B.LeftHand, B.LeftForeArm, offhand, leftPalm);
+    if (showingWeapon) {
+      const [rightZ, leftZ] = previewGripOffsets[form];
+      rigFromWorld.copy(rig.holder.matrixWorld).invert();
+      showRightHand(katana, rightZ);
+      showLeftHand(leftWeapon, leftZ);
+    } else {
+      const leftGripZ = leftGripOffset(form, katana.position.z);
+      ik2(B.RightArm, B.RightForeArm, B.RightHand, katana.localToWorld(hand.set(0, 0, form === 'katana' && atk ? 0.065 : 0)), pole.copy(POLE_R).applyQuaternion(bq));
+      leftW += ((atk || grip ? 1 : 0) - leftW) * (1 - Math.exp(-dt * 18));
+      if (leftW > 0.01) ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, leftWeapon.localToWorld(hand.set(0, 0, leftGripZ)), pole.copy(POLE_L).applyQuaternion(bq), grip ? 1 : leftW);
+      if (form === 'dual') {
+        holdShortBlade(B.RightHand, B.RightForeArm, katana, rightPalm);
+        holdShortBlade(B.LeftHand, B.LeftForeArm, offhand, leftPalm);
+      }
     }
     previousForm = form;
 
     simulateScarf(dt, t);
+    simulateRobe(dt);
     // hair sways in the wind
     for (const g of kusa) g.rotation.x = -0.2 - Math.abs(Math.sin(t * 9)) * 0.08 * m;
     tabard.rotation.x = -0.3 - (0.12 + 0.18 * L.runW) * L.move * Math.abs(Math.sin(TAU * loco.phase)) + 0.02 * Math.sin(t * 1.7);

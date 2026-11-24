@@ -52,8 +52,13 @@ const VERT = /* glsl */`
 #ifdef USE_SKINNING
   gM = gM * mat3(skinMatrix);
 #endif
-  vGlyphP = position * (length(gM[0]) + length(gM[1]) + length(gM[2])) / 3.0;
-  vGlyphN = normal;
+  float gS = (length(gM[0]) + length(gM[1]) + length(gM[2])) / 3.0;
+#ifdef GLYPH_REST
+  // simulated cloth (cloth.ts): anchor to its rest drape, not to where it flaps now
+  vGlyphP = glyphRest * gS; vGlyphN = glyphRestN;
+#else
+  vGlyphP = position * gS; vGlyphN = normal;
+#endif
 #ifdef USE_SKINNING
   // the mocap bodies are modelled Z-up: turn them Y-up like everything else
   vGlyphP = vec3(vGlyphP.x, vGlyphP.z, -vGlyphP.y); vGlyphN = vec3(vGlyphN.x, vGlyphN.z, -vGlyphN.y);
@@ -96,9 +101,10 @@ if (uSurfGlyph > 0.5) {
 `;
 
 /** install the surface letters on a figure material (inside its onBeforeCompile) */
-export function glyphShader(sh: THREE.WebGLProgramParametersWithUniforms, sub: number) {
+export function glyphShader(sh: THREE.WebGLProgramParametersWithUniforms, sub: number, rest = false) {
   Object.assign(sh.uniforms, surfaceGlyphs);
   sh.vertexShader = 'varying vec3 vGlyphP; varying vec3 vGlyphN;\n'
+    + (rest ? '#define GLYPH_REST\nattribute vec3 glyphRest; attribute vec3 glyphRestN;\n' : '')
     + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VERT);
   sh.fragmentShader = `varying vec3 vGlyphP; varying vec3 vGlyphN;
 uniform float uSurfGlyph; uniform float uGlyphH; uniform sampler2D tGlyphs;

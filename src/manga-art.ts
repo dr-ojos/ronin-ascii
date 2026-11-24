@@ -185,7 +185,8 @@ function install(mat: THREE.MeshStandardMaterial) {
   if (mat.userData.asciiSkin) { tagMat(mat, ACTOR_SKIN); sub = 2; }
   else if (!paint && !mat.transparent && (mat.metalness >= 0.4 || (phys.isMeshPhysicalMaterial && phys.clearcoat > 0.2))) { tagMat(mat, ACTOR_METAL); sub = 1; }
   // glowing pieces (the blade, auras) stay solid light; everything else wears letters on its surface
-  const glyphs = !mat.transparent && mat.emissiveIntensity < 1 && !mat.userData.noGlyphs;
+  const e = mat.emissive, glow = Math.max(e.r, e.g, e.b) * mat.emissiveIntensity;
+  const glyphs = !mat.transparent && glow < 0.8 && !mat.userData.noGlyphs;
   const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey.bind(mat);
   mat.onBeforeCompile = (sh, r) => {
     prev.call(mat, sh, r);
@@ -204,9 +205,9 @@ function install(mat: THREE.MeshStandardMaterial) {
     sh.fragmentShader = 'uniform vec3 uFormKey;\n' + sh.fragmentShader
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + RIM)
       .replace('#include <opaque_fragment>', FORM + '#include <opaque_fragment>');
-    if (glyphs) glyphShader(sh, sub);
+    if (glyphs) glyphShader(sh, sub, !!mat.userData.glyphRest);
   };
-  mat.customProgramCacheKey = () => prevKey() + '|manga2' + (paint ? '-' + paint.kind : '') + (glyphs ? '|glyph' + sub : '');
+  mat.customProgramCacheKey = () => prevKey() + '|manga2' + (paint ? '-' + paint.kind : '') + (glyphs ? '|glyph' + sub + (mat.userData.glyphRest ? 'r' : '') : '');
   mat.needsUpdate = true;
 }
 

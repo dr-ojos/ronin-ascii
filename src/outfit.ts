@@ -14,7 +14,7 @@ import { CLS, tagMat, tagTree } from './materials';
 import { applyLook, opt } from './look';
 import { ARMORS, armor, type Armor } from './armor';
 import { state } from './state';
-import { roninRobe } from './manga-art';
+import { mangaFinish, roninRobe } from './manga-art';
 
 const V = THREE.Vector3;
 const TAU = Math.PI * 2;
@@ -35,6 +35,12 @@ const baseLayers: THREE.Object3D[] = [];
 root.traverse(o => { if (o.userData.equipmentLayer) baseLayers.push(o); });
 const rigChest = baseLayers.find(o => o.userData.equipmentLayer === 'chest');
 const rigWaist = baseLayers.find(o => o.userData.equipmentLayer === 'waist');
+// the straw kasa (rig.ts), already fitted on the scanned head: the jingasa is built in its frame
+let kasaMesh: THREE.Mesh | undefined;
+root.traverse(o => { const m = o as THREE.Mesh; if (!kasaMesh && m.isMesh && m.userData.part === 'hat' && (m.geometry as THREE.ConeGeometry).type === 'ConeGeometry' && (m.geometry as THREE.ConeGeometry).parameters.radius > 0.2) kasaMesh = m; });
+// the simulated robe (rig.ts): its colour follows the armour worn
+const robeMesh = root.getObjectByName('robe') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | undefined;
+const robeMat = robeMesh?.material, robeMap = robeMat?.map ?? null;
 /** put `obj` beside `twin` (same bone, same place, turn and size), so it follows it exactly */
 function overlay(id: string, twin: THREE.Object3D, obj: THREE.Object3D) {
   finish(obj);
@@ -51,6 +57,7 @@ function hang(id: string, boneName: string, obj: THREE.Object3D) {
 }
 function finish(o: THREE.Object3D) {
   o.traverse(m => { if ((m as THREE.Mesh).isMesh) { m.castShadow = true; m.layers.enable(ACTOR_LAYER); } });
+  mangaFinish(o);   // the same finish as the body: rim and form light, and the letters on the surface
   return tagTree(o, CLS.actor);
 }
 
@@ -195,17 +202,21 @@ function build(a: Armor) {
     // r is the bowl's radius: a little over the real head's (real-head.ts), its rim resting on the brow
     const H = P('Head'), T = P('HeadTop_End'), hh = T.distanceTo(H), jingasa = l.helmet === 'jingasa', r = hh * (jingasa ? 0.42 : 0.39);
     const g = new THREE.Group();
-    if (l.helmet === 'jingasa') {
-      // the foot soldier's lacquered iron hat, with the clan's crest
-      const hat = new THREE.Mesh(new THREE.ConeGeometry(r * 2.3, r * 0.75, 28, 1, true), lacquer); hat.position.y = r * 0.3; g.add(hat);
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(r * 2.3, r * 0.04, 5, 40), metal); rim.rotation.x = Math.PI / 2; rim.position.y = r * -0.07; g.add(rim);
+    if (l.helmet === 'jingasa' && kasaMesh) {
+      // the foot soldier's lacquered iron hat, with the clan's crest. Built in the straw kasa's own frame
+      // (rig.ts fits that one on the scanned head: crown inside the cone, brim on the brow), so it is worn,
+      // not perched: same brim height, a little wider and shallower
+      const R = 0.25, Hc = 0.088, base = -0.066;
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(R, Hc, 28, 1, true), lacquer); hat.position.y = base + Hc / 2; g.add(hat);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.006, 5, 40), metal); rim.rotation.x = Math.PI / 2; rim.position.y = base; g.add(rim);
       // the crest lies on the slope of the cone, facing up and out
-      const slope = Math.atan2(r * 0.75, r * 2.3), y0 = r * 0.25, rad = r * 2.3 * (r * 0.675 - y0) / (r * 0.75);
+      const slope = Math.atan2(Hc, R), y0 = base + Hc * 0.45, rad = R * (1 - (y0 - base) / Hc);
       const nrm = new V(0, Math.cos(slope), Math.sin(slope));
-      const mon = new THREE.Mesh(new THREE.CircleGeometry(r * 0.3, 24), metal);
-      mon.position.set(0, y0, rad).addScaledVector(nrm, r * 0.02); mon.rotation.x = -(Math.PI / 2 - slope); g.add(mon);
-      const monIn = new THREE.Mesh(new THREE.RingGeometry(r * 0.12, r * 0.2, 24), lacquer); monIn.position.copy(mon.position).addScaledVector(nrm, r * 0.01); monIn.rotation.x = mon.rotation.x; g.add(monIn);
-      g.position.set(H.x, H.y + hh * 0.8, H.z);   // sits on the crown
+      const mon = new THREE.Mesh(new THREE.CircleGeometry(0.03, 24), metal);
+      mon.position.set(0, y0, rad).addScaledVector(nrm, 0.003); mon.rotation.x = -(Math.PI / 2 - slope); g.add(mon);
+      const monIn = new THREE.Mesh(new THREE.RingGeometry(0.012, 0.02, 24), lacquer); monIn.position.copy(mon.position).addScaledVector(nrm, 0.0015); monIn.rotation.x = mon.rotation.x; g.add(monIn);
+      overlay(a.id, kasaMesh, g);
+      return;
     } else {
       // hachi: a riveted dome of 24 gores, with the ring on top and the metal band round its base
       const ht = hachiTex(l);
@@ -265,8 +276,8 @@ function build(a: Armor) {
         }
       }
       g.position.set(H.x, H.y + hh * 0.51, H.z + 0.01);   // rim on the brow line, the bowl over the crown
-    }
     hang(a.id, 'Head', g);
+    }
   }
 }
 
@@ -315,8 +326,7 @@ function buildMonk(a: Armor) {
   belt.scale.z = 0.78; belt.position.y = 0.005; waist.add(belt);
   const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.025, 0.009, 24, 6), beltMat);
   knot.position.set(-0.102, 0.005, 0.141); waist.add(knot);
-  const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.194, 0.236, 0.23, 32, 1, true), ochre);
-  wrap.position.y = -0.134; wrap.scale.z = 0.82; waist.add(wrap);
+  // (the habit's long skirt is the ronin's simulated robe, dyed linen by dressUp)
   overlay(a.id, rigWaist, waist);
 
   for (const side of ['Left', 'Right']) {
@@ -330,21 +340,7 @@ function buildMonk(a: Armor) {
     sleeve.quaternion.setFromUnitVectors(new V(0, 1, 0), shoulder.clone().sub(elbow).normalize());
     hang(a.id, side + 'Arm', sleeve);
 
-    const hip = P(side + 'UpLeg'), knee = P(side + 'Leg');
-    const lower = new THREE.Group(); lower.name = `monk-hem-${side}`;
-    const panels = new THREE.CylinderGeometry(0.156, 0.153, 0.52, 32, 8, true);
-    const p = panels.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const phase = Math.atan2(p.getX(i), p.getZ(i));
-      const fold = 1 + 0.043 * Math.sin(phase * 12 + p.getY(i) * 2) + 0.015 * Math.cos(phase * 21);
-      p.setXYZ(i, p.getX(i) * fold, p.getY(i), p.getZ(i) * fold);
-    }
-    panels.computeVertexNormals();
-    const hem = new THREE.Mesh(panels, side === 'Left' ? outer : ochre);
-    hem.position.set(0, -0.20, 0.003); lower.add(hem);
-    lower.position.copy(hip);
-    lower.quaternion.setFromUnitVectors(new V(0, 1, 0), hip.clone().sub(knee).normalize());
-    hang(a.id, side + 'UpLeg', lower);
+    // (the rigid hem tubes round each thigh are gone: the simulated linen robe hangs there now)
   }
 }
 
@@ -390,8 +386,16 @@ export function dressUp(cur = armor()) {
   if (dressed) roninRobe.uRoninLinen.value.set(cur.robe?.linen ?? cur.look!.lame);
   for (const o of baseLayers) {
     const layer = o.userData.equipmentLayer;
-    o.visible = layer === 'scarf' || layer === 'wrapping' ? !monk : !dressed;
+    // the long cloth robe stays under every set (a long hakama under the armour, the monk's habit);
+    // the hanging kimono sleeves only show without plates on the arms
+    o.visible = layer === 'robe' ? true : layer === 'sleeves' ? !dressed || monk
+      : layer === 'scarf' || layer === 'wrapping' ? !monk : !dressed;
   }
+  if (dressed && robeMat) {
+    if (monk) robeMat.color.set(cur.robe!.linen);
+    else robeMat.color.set(cur.look!.lame).multiplyScalar(0.42).lerp(new THREE.Color(cur.look!.lace), 0.22);
+    robeMat.map = null; robeMat.needsUpdate = true;
+  } else if (robeMat && robeMap) { robeMat.map = robeMap; robeMat.needsUpdate = true; }
   root.traverse(o => {
     if (o.userData.part === 'hat') o.visible = !helmet && !monk && !opt('hat').hidden;
     if (monk && o.userData.part === 'mask') o.visible = false;
