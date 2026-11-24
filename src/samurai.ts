@@ -1,7 +1,7 @@
 // Detailed procedural samurai (o-yoroi style) with two-handed katana IK.
 import * as THREE from 'three';
 import type { Attack, Avatar, AvatarInput, Vec3 } from './types';
-import { key, leftGripOffset, offhandGrip, sampleGrip, sampleKeys, weaponGrips } from './weapon-poses';
+import { key, leftGripOffset, offhandGrip, previewGripOffsets, previewPalmAxis, sampleGrip, sampleKeys, weaponGrips } from './weapon-poses';
 
 // soft contact shadow: dark in the centre, fading to nothing at the rim (no hard circle edge)
 let _blobTex: THREE.CanvasTexture | null = null;
@@ -197,7 +197,7 @@ const mx = (a: Vec3): Vec3 => [-a[0], a[1], a[2]];
 const IDLE = key([-0.02, 1.07, 0.34], [0, 0.55, 0.84], [0, -1, 0]);
 const RUN = key([-0.06, 0.98, 0.3], [-0.05, 0.3, 0.95], [0, -1, 0]);
 const DASH = key([-0.22, 0.98, 0.04], [-0.25, -0.3, -0.92], [0, -1, 0]);
-export const SHOW_WEAPON = key([-0.22, 1.07, 0.27], [0.77, 0.62, 0.16], [0, -0.12, 1]);
+export const SHOW_WEAPON = key([-0.06, 1.13, 0.32], [0.77, 0.62, 0.16], [0, -0.12, 1]);
 // K1 kesa-giri: from high over the right shoulder down through the left hip
 function kesa(m: boolean): Attack {
   const f = m ? mx : (a: Vec3) => a;
@@ -431,7 +431,7 @@ export function createSamurai(): Avatar {
     const sp = curvedPanel(0.22, 0.32, 1.3, laceMat(1.1, 1.6)); sp.rotation.y = Math.PI / 2 * side; sp.position.set(0.04 * side, -0.17, 0); sode.add(sp);
     const kb = mesh(new THREE.BoxGeometry(0.028, 0.03, 0.24), MAT.lacquer, sode, 0.045 * side, -0.005, 0);
     mesh(new THREE.BoxGeometry(0.03, 0.006, 0.245), MAT.gold, kb, 0, 0.017, 0);
-    return { shoulder, elbow, wrist, sode, side, l1: 0.31, l2: 0.31 };
+    return { shoulder, elbow, wrist, sode, side, l1: 0.31, l2: 0.29 };
   }
   const armR = arm(-1), armL = arm(1);
 
@@ -474,6 +474,20 @@ export function createSamurai(): Avatar {
   }
   const POLE_R = new V(-0.8, -0.5, -0.3).normalize(), POLE_L = new V(0.8, -0.5, -0.3).normalize();
   const hand = new V(), tPos = new V(), tQ = new Q();
+  const palm = new V(), shaft = new V(), normal = new V();
+  const wristBasis = new THREE.Matrix4(), wristRotation = new Q(), parentRotation = new Q(), bodyFacing = new Q();
+  function showHand(a: ReturnType<typeof arm>, weapon: THREE.Object3D, offset: number, pole: THREE.Vector3) {
+    weapon.getWorldQuaternion(wristRotation);
+    shaft.set(0, 0, 1).applyQuaternion(wristRotation);
+    previewPalmAxis(palm.set(0, 0, 1).applyQuaternion(bodyFacing), shaft);
+    weapon.localToWorld(hand.set(0, 0, offset)).addScaledVector(palm, -0.045);
+    solveArm(a, chest.worldToLocal(hand), pole);
+    palm.negate();
+    normal.crossVectors(palm, shaft);
+    wristRotation.setFromRotationMatrix(wristBasis.makeBasis(normal, palm, shaft));
+    a.elbow.getWorldQuaternion(parentRotation).invert();
+    a.wrist.quaternion.copy(parentRotation.multiply(wristRotation));
+  }
 
   const rightGrip = new V(), leftGrip = new V();
   let look = 0, previousForm: AvatarInput['weaponForm'] = 'katana';
@@ -528,7 +542,7 @@ export function createSamurai(): Avatar {
     else { tPos.lerpVectors(IDLE.pos, RUN.pos, m); tQ.slerpQuaternions(IDLE.q, RUN.q, m); tPos.y += Math.sin(t * 1.9) * 0.006 + Math.abs(Math.cos(ph)) * 0.02 * m; }
     // the katana is posed in body space but should follow the hips' height and the spine twist
     tPos.y += hipY - 0.865;
-    const k = 1 - Math.exp(-dt * (atk ? 32 : 12));
+    const k = s.showWeapon ? 1 : 1 - Math.exp(-dt * (atk ? 32 : 12));
     if (form === 'dual') {
       if (previousForm !== 'dual') rightGrip.copy(tPos);
       katana.position.copy(rightGrip.lerp(tPos, k));
@@ -553,12 +567,21 @@ export function createSamurai(): Avatar {
     // arms follow the sword
     root.updateMatrixWorld(true);
     const leftWeapon = form === 'dual' ? offhand : katana;
-    const leftGripZ = leftGripOffset(form, katana.position.z);
-    solveArm(armR, chest.worldToLocal(katana.localToWorld(hand.set(0, 0, form === 'katana' ? 0.065 : 0))), POLE_R);
-    solveArm(armL, chest.worldToLocal(leftWeapon.localToWorld(hand.set(0, 0, leftGripZ))), POLE_L);
-    if (form === 'dual') {
-      katana.position.copy(body.worldToLocal(armR.wrist.localToWorld(hand.set(0, -0.041, 0))));
-      offhand.position.copy(body.worldToLocal(armL.wrist.localToWorld(hand.set(0, -0.041, 0))));
+    if (s.showWeapon) {
+      body.getWorldQuaternion(bodyFacing);
+      const [rightZ, leftZ] = previewGripOffsets[form];
+      showHand(armR, katana, rightZ, POLE_R);
+      showHand(armL, leftWeapon, leftZ, POLE_L);
+    } else {
+      armR.wrist.quaternion.identity();
+      armL.wrist.quaternion.identity();
+      const leftGripZ = leftGripOffset(form, katana.position.z);
+      solveArm(armR, chest.worldToLocal(katana.localToWorld(hand.set(0, 0, form === 'katana' ? 0.065 : 0))), POLE_R);
+      solveArm(armL, chest.worldToLocal(leftWeapon.localToWorld(hand.set(0, 0, leftGripZ))), POLE_L);
+      if (form === 'dual') {
+        katana.position.copy(body.worldToLocal(armR.wrist.localToWorld(hand.set(0, -0.041, 0))));
+        offhand.position.copy(body.worldToLocal(armL.wrist.localToWorld(hand.set(0, -0.041, 0))));
+      }
     }
     previousForm = form;
   }

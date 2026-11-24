@@ -33,7 +33,7 @@ const TAU = Math.PI * 2;
 // L the dragon's coil: the spear whirls once around the body, then a lunging thrust
 const spearIdle = key([-0.27, 1.02, 0.17], [0.62, 0.28, 0.74], [0, -1, 0]);
 const spearRun = key([-0.26, 0.99, 0.13], [0.55, 0.10, 0.83], [0, -1, 0]);
-const spearShow = key([-0.11, 0.91, 0.22], [0.45, 0.61, 0.60], [0, -0.2, 1]);
+const spearShow = key([-0.14, 1.03, 0.28], [0.59, 0.68, 0.43], [0, -0.2, 1]);
 const spearDash = key([-0.28, 0.97, 0.17], [0.55, 0.23, 0.80], [0, -1, 0]);
 const spearPull = (lift: number) => key([-0.32, 1.07 + lift, 0.03], [0.58, 0.06, 0.82], [0, -1, 0]);
 const spearStrike = (lift: number) => key([-0.17, 1.10 + lift, 0.35], [0.18, 0.04, 1], [0, -1, 0]);
@@ -86,7 +86,7 @@ const broadCleave = key([-0.02, 0.95, 0.6], [0, -0.55, 0.84], [0, -1, 0.2]);
 const broad: Grip = {
   idle: broadIdle,
   run: key([-0.20, 0.98, 0.27], [0.64, 0.24, 0.63], [0, -1, 0]),
-  show: key([-0.20, 1.08, 0.32], [0.69, 0.66, 0.25], [0, -0.42, 1]),
+  show: key([-0.06, 1.14, 0.33], [0.69, 0.66, 0.25], [0, -0.42, 1]),
   dash: key([-0.20, 1.01, 0.16], [0.76, 0.1, 0.63], [0, -1, 0]),
   attacks: [broadCut(-1), broadCut(1), {
     keys: [[0, broadIdle], [0.22, broadSpinBack], [0.36, broadSpinOut], [0.78, broadSpinOut], [1, broadIdle]],
@@ -152,6 +152,19 @@ export function leftGripOffset(form: WeaponForm, extension: number) {
   if (form === 'broad') return -0.105;
   return form === 'dual' ? 0 : -0.075;
 }
+
+// Positions along the wrapped handles in the shop pose. The twin blades each have their own handle.
+export const previewGripOffsets: Record<WeaponForm, readonly [right: number, left: number]> = {
+  katana: [0.06, -0.065],
+  spear: [-0.025, 0.265],
+  broad: [0.065, -0.10],
+  dual: [0, 0]
+};
+
+export function previewPalmAxis(forward: THREE.Vector3, shaft: THREE.Vector3) {
+  return forward.addScaledVector(shaft, -forward.dot(shaft)).normalize();
+}
+
 export const weaponGrips: Record<Exclude<WeaponForm, 'katana'>, Grip> = { spear, broad, dual: dualGrip(-1) };
 export const offhandGrip = dualGrip(1);
 
