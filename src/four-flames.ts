@@ -11,6 +11,7 @@ import { TECHNIQUES } from './techniques';
 import type { Enemy } from './types';
 import { dmgMult } from './upgrades';
 import { specialDamage } from './special-damage';
+import { flare } from './flare';
 
 const RANGE = 14;
 const WINDUP = 0.32, FADE = 0.31;
@@ -73,6 +74,14 @@ export function startFourFlames() {
     const trail = new THREE.Mesh(blade, outer); trail.scale.set(1.4, 1, 1.2); visual.add(trail);
     const edge = new THREE.Mesh(blade, core); edge.scale.set(0.56, 1, 0.95); edge.position.y = 0.025; visual.add(edge);
     cast.flames.push({ target, point, angle: player.face + (i + 0.5) * Math.PI / 2, visual });
+  }
+  // one star per point struck (several flames can share an oni): aviso while the flames fly in, then the burst.
+  // `point` follows its oni during the windup (updateFourFlames), and the flare reads it live.
+  const starred = new Set<Enemy | undefined>();
+  for (const { target, point } of cast.flames) {
+    if (starred.has(target)) continue;
+    starred.add(target);
+    flare(point, FIRE, { pre: WINDUP, life: 0.55, size: 0.95, follow: true });
   }
   if (nearest.length) {
     const aim = nearest[0].enemy.g.position;

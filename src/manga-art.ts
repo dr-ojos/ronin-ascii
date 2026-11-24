@@ -5,6 +5,7 @@
 // on the finished tree, just before the materials are tagged for the ASCII pass.
 import * as THREE from 'three';
 import { tagMat } from './materials';
+import { glyphShader } from './surface-glyphs';
 
 // ASCII sub-classes of the actor class (ascii.ts picks a character ramp from them)
 export const ACTOR_CLOTH = 0.6, ACTOR_METAL = 0.62, ACTOR_SKIN = 0.64;
@@ -180,8 +181,11 @@ function install(mat: THREE.MeshStandardMaterial) {
   const paint = mat.userData.bodyPaint as BodyPaint | undefined;
   // which character ramp the material draws with: skin (flagged), metal / lacquer, or cloth
   const phys = mat as THREE.MeshPhysicalMaterial;
-  if (mat.userData.asciiSkin) tagMat(mat, ACTOR_SKIN);
-  else if (!paint && !mat.transparent && (mat.metalness >= 0.4 || (phys.isMeshPhysicalMaterial && phys.clearcoat > 0.2))) tagMat(mat, ACTOR_METAL);
+  let sub = 0;   // surface-glyph set: 0 cloth, 1 metal, 2 skin
+  if (mat.userData.asciiSkin) { tagMat(mat, ACTOR_SKIN); sub = 2; }
+  else if (!paint && !mat.transparent && (mat.metalness >= 0.4 || (phys.isMeshPhysicalMaterial && phys.clearcoat > 0.2))) { tagMat(mat, ACTOR_METAL); sub = 1; }
+  // glowing pieces (the blade, auras) stay solid light; everything else wears letters on its surface
+  const glyphs = !mat.transparent && mat.emissiveIntensity < 1 && !mat.userData.noGlyphs;
   const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey.bind(mat);
   mat.onBeforeCompile = (sh, r) => {
     prev.call(mat, sh, r);
@@ -200,8 +204,9 @@ function install(mat: THREE.MeshStandardMaterial) {
     sh.fragmentShader = 'uniform vec3 uFormKey;\n' + sh.fragmentShader
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + RIM)
       .replace('#include <opaque_fragment>', FORM + '#include <opaque_fragment>');
+    if (glyphs) glyphShader(sh, sub);
   };
-  mat.customProgramCacheKey = () => prevKey() + '|manga2' + (paint ? '-' + paint.kind : '');
+  mat.customProgramCacheKey = () => prevKey() + '|manga2' + (paint ? '-' + paint.kind : '') + (glyphs ? '|glyph' + sub : '');
   mat.needsUpdate = true;
 }
 

@@ -16,6 +16,7 @@ import { clearFourFlames, startFourFlames, updateFourFlames } from './four-flame
 import { clearTechniqueWaves, startTechniqueWave, updateTechniqueWaves } from './technique-waves';
 import { TECHNIQUES } from './techniques';
 import { rnd } from './utils';
+import { clearFlares, flare, updateFlares } from './flare';
 
 const CHARGE_TIME = 45;     // seconds to fill the charge from empty
 const KILL_BONUS = 0.04;    // each kill fills this much more
@@ -46,8 +47,9 @@ function segment(g: THREE.Group, a: THREE.Vector3, b: THREE.Vector3, r: number, 
     const s = new THREE.Mesh(SEG, m); s.position.copy(mid); s.quaternion.copy(q); s.scale.set(k, len, k); g.add(s);
   }
 }
-/** a jagged bolt from the sky to `to`, with a couple of forks (also the thunder oni's, enemy-ai.ts) */
-export function bolt(to: THREE.Vector3) {
+/** a jagged bolt from the sky to `to`, with a couple of forks (also the thunder oni's, enemy-ai.ts).
+ *  `star`: Raijin's own bolts open a character flare where they land. */
+export function bolt(to: THREE.Vector3, star = 0) {
   const g = new THREE.Group(), core = coreMat.clone(), glow = glowMat.clone();
   const top = new THREE.Vector3(to.x + rnd(-4, 4), to.y + 30, to.z + rnd(-4, 4));
   const n = 12, pts: THREE.Vector3[] = [];
@@ -65,6 +67,7 @@ export function bolt(to: THREE.Vector3) {
   bolts.push({ g, life: 0.45, max: 0.45, core, glow });
   burst(to.clone(), 0xcfe0ff, 50, 8, 0.14);
   burst(to.clone(), 0xffffff, 20, 4, 0.2);
+  if (star) flare(to, TECHNIQUES.rayo.color, { size: star, life: 0.5 });
 }
 
 // a light that lights up the whole scene for an instant (always in the scene: no shader recompiles)
@@ -103,20 +106,25 @@ function castLightning() {
   const targets = enemies
     .map(e => ({ e, d: Math.hypot(e.g.position.x - player.pos.x, e.g.position.z - player.pos.z) }))
     .filter(t => t.d < RANGE).sort((a, b) => a.d - b.d).slice(0, MAX_BOLTS);
-  targets.forEach(({ e }, i) => pending.push({ t: 0.08 + i * 0.07, fn: () => {
-    if (!enemies.includes(e)) return;
-    const p = e.g.position;
-    bolt(new THREE.Vector3(p.x, p.y + 1.1 * e.scale, p.z));
-    specialDamage(e, 6 * dmgMult()); e.flash = 1; provoke(e);
-    e.knock.set(p.x - player.pos.x, 0, p.z - player.pos.z).normalize().multiplyScalar(e.big ? 5 : 12);
-    if (e.state !== 'return') staggerEnemy(e, 1.4);
-    sfx.thunder(panOf(p.x, p.z), i === 0);
-    flashT = Math.max(flashT, 0.25);
-  } }));
+  targets.forEach(({ e }, i) => {
+    // aviso: a thin beam drops onto each oni about to be struck (long enough to be seen), then the bolt
+    const t = 0.2 + i * 0.07;
+    flare(e.g.position, TECHNIQUES.rayo.color, { pre: t, life: 0, lift: 1.1 * e.scale, follow: true });
+    pending.push({ t, fn: () => {
+      if (!enemies.includes(e)) return;
+      const p = e.g.position;
+      bolt(new THREE.Vector3(p.x, p.y + 1.1 * e.scale, p.z), 1.1);
+      specialDamage(e, 6 * dmgMult()); e.flash = 1; provoke(e);
+      e.knock.set(p.x - player.pos.x, 0, p.z - player.pos.z).normalize().multiplyScalar(e.big ? 5 : 12);
+      if (e.state !== 'return') staggerEnemy(e, 1.4);
+      sfx.thunder(panOf(p.x, p.z), i === 0);
+      flashT = Math.max(flashT, 0.25);
+    } });
+  });
   // a few more bolts crash around you for show (all of them if nobody is near)
   for (let i = 0; i < Math.max(3, 6 - targets.length); i++) pending.push({ t: rnd(0, 0.5), fn: () => {
     const a = rnd(0, Math.PI * 2), r = rnd(3, 10), x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
-    bolt(new THREE.Vector3(x, player.pos.y, z));
+    bolt(new THREE.Vector3(x, player.pos.y, z), i === 0 && !targets.length ? 0.9 : 0);
     if (!targets.length && i === 0) sfx.thunder(0, true);
   } });
   if (!targets.length) showMsg('el rayo cae sobre la tierra vacía', 1.2);
@@ -127,6 +135,7 @@ export function updateSpecial(dt: number) {
   updateBladeDance(dt);
   updateTechniqueWaves(dt);
   updateFourFlames(dt);
+  updateFlares(dt);
   for (let i = pending.length - 1; i >= 0; i--) { const p = pending[i]; if ((p.t -= dt) <= 0) { pending.splice(i, 1); p.fn(); } }
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.life -= dt;
@@ -146,6 +155,7 @@ export function resetSpecial() {
   clearBladeDance();
   clearTechniqueWaves();
   clearFourFlames();
+  clearFlares();
   for (const b of bolts) removeBolt(b);
   bolts.length = pending.length = 0;
   flashT = flash.intensity = 0;

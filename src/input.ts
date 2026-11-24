@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { canvas } from './renderer';
 import { changeDensity } from './ascii';
+import { toggleSurfaceGlyphs } from './surface-glyphs';
 import { tryAttack, tryDash } from './player';
 import { reset } from './encounters';
 import { tryOpen } from './loot';
@@ -45,6 +46,7 @@ addEventListener('keydown', e => {
     else showMsg('Aprende técnicas en los templos ◆ del mapa (N).\nLos cofres contienen sellos de jade.', 2.6);
   }
   if (e.code === 'KeyT') state.asciiOn = !state.asciiOn;
+  if (e.code === 'KeyG') toggleSurfaceGlyphs();   // letters on the figures' surface <-> screen-grid characters
   if (e.code === 'KeyM') sfx.setMuted(!sfx.muted);
   if (e.code === 'KeyR') toggleRain();
   if (e.code === 'KeyN') state.bigMap = !state.bigMap;

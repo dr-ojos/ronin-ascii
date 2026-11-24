@@ -16,6 +16,7 @@ import { updateInventoryButton } from './inventory';
 import { update } from './game';
 import { state, player } from './state';
 import { setDetailedSurfaces } from './surfaces';
+import { fitGlyphs } from './surface-glyphs';
 import './input';
 
 const clock = new THREE.Clock();
@@ -44,7 +45,8 @@ function frame() {
     // how tall the ronin stands on screen sizes the characters' letters (ascii.ts)
     const fr = sam.root.position;
     _a.set(fr.x, fr.y, fr.z).project(camera); _b.set(fr.x, fr.y + 1.8, fr.z).project(camera);
-    fitActorGrid(Math.abs(_b.y - _a.y) * 0.5 * renderer.domElement.height);
+    const tall = Math.abs(_b.y - _a.y) * 0.5 * renderer.domElement.height;
+    fitActorGrid(tall); fitGlyphs(tall);
     renderAscii(scene, camera);
   }
   else { renderer.setRenderTarget(null); renderer.render(scene, camera); }

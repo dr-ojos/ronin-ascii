@@ -16,6 +16,7 @@ import { TECHNIQUES } from './techniques';
 import type { Enemy } from './types';
 import { dmgMult } from './upgrades';
 import { specialDamage } from './special-damage';
+import { flare } from './flare';
 import { weapon } from './weapons';
 
 const RANGE = 13;          // metres: who the dance can reach
@@ -134,6 +135,7 @@ function finishingBlow(d: Dance) {
     e.flash = 1;
     burst(at, 0xffffff, doomed.has(e) ? 40 : 26, 6, 0.14);
     burst(at, COLOR, 22, 4, 0.18);
+    flare(at, COLOR, { size: doomed.has(e) ? 1 : 0.8, life: 0.5 });
     hits++;
   }
   if (hits) {

@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 import { renderer, DPR } from './renderer';
 import { asciiGrid, BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, FLOWER_GLYPHS } from './materials';
+import { flareUniforms, MAX_FLARES, projectFlares } from './flare';
+import { surfaceGlyphs } from './surface-glyphs';
 
 export const bufSize = new THREE.Vector2();
 renderer.getDrawingBufferSize(bufSize);
@@ -46,6 +48,9 @@ for (const s of [...CLASS_CHARS, ...ACTOR_RAMPS, EDGE_CHARS, FLOWER_GLYPHS]) for
 const N = 12, EDGE_ROW = CLASS_CHARS.length, ROWS = EDGE_ROW + 1 + 2 + 2;   // + metal and skin ramps for actors, + two flower rows
 const METAL_ROW = EDGE_ROW + 1, SKIN_ROW = EDGE_ROW + 2, FLOWER_ROW = EDGE_ROW + 3;
 const SPARK_GLYPH = FLOWER_ROW * N + FLOWER_GLYPHS.indexOf('*');
+// a cell's alpha = glyph code + glow level * GLOW_STEP (codes stay below it; half floats hold whole numbers exactly up to 2048)
+const GLOW_STEP = 512;
+if (ROWS * N >= GLOW_STEP) throw new Error('glyph codes overflow GLOW_STEP');
 const FONT_FAMILY = '"Courier New", Courier, monospace';
 const OVERLAP = 1.8;   // glyph size / cell size (must stay < 3: each pixel looks at the 3x3 neighbouring cells)
 
@@ -132,7 +137,8 @@ export const cellMat = new THREE.ShaderMaterial({
     tDepth: { value: sceneDepth }, uProjInv: { value: new THREE.Matrix4() }, uProjScale: { value: new THREE.Vector2(1, 1) },
     uViewRot: { value: new THREE.Matrix3() },    // view -> world rotation (for the sky term)
     uMoonW: { value: new THREE.Vector3(0, 1, 0) }, uMoonV: { value: new THREE.Vector3(0, 0, 1) },   // moon direction, world / view
-    uExposure: { value: 2.25 }                     // environment exposure (the figures keep their own)
+    uExposure: { value: 2.25 },                    // environment exposure (the figures keep their own)
+    uFlareA: flareUniforms.uFlareA, uFlareB: flareUniforms.uFlareB   // technique flares (flare.ts)
   },
   vertexShader: `void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */`
@@ -140,6 +146,8 @@ export const cellMat = new THREE.ShaderMaterial({
     uniform vec2 uRes; uniform vec2 uCell; uniform float uN; uniform float uEdgeRow; uniform float uMode; uniform float uHit; uniform float uActor;
     uniform vec2 uLight;
     uniform mat4 uProjInv; uniform vec2 uProjScale; uniform mat3 uViewRot; uniform vec3 uMoonV; uniform float uExposure;
+    #define MAXF ${MAX_FLARES}
+    uniform vec4 uFlareA[MAXF]; uniform vec4 uFlareB[MAXF];
     // view-space position of the surface seen at uv (z < 0 in front of the camera)
     vec3 vpos(vec2 uv){
       float d = texture2D(tDepth, uv).r;
@@ -179,6 +187,9 @@ export const cellMat = new THREE.ShaderMaterial({
       vec2 cs = uCell / uRes;
       vec3 hurt = vec3(1.0, 0.12, 0.08);
       float row, idx; vec3 c;
+      // how much this cell glows (the glow pass): 0 none, 1 soft (lanterns), 2 strong (technique fx,
+      // sparks, flares). Stored in the cell's alpha as glyph code + level * GLOW_STEP.
+      float glowLvl = 0.0;
       vec2 dx = vec2(cs.x * 0.3, 0.0), dy = vec2(0.0, cs.y * 0.3);
       float center = Mk(uv);
       vec4 sides = vec4(Mk(uv + dx), Mk(uv - dx), Mk(uv + dy), Mk(uv - dy));
@@ -189,7 +200,7 @@ export const cellMat = new THREE.ShaderMaterial({
         float peak = max(max(surface.r, surface.g), surface.b);
         vec3 tint = sqrt(surface.rgb / max(peak, 0.01));
         c = modeCol(tint * (0.8 + 0.55 * sqrt(min(1.0, peak))), peak);
-        gl_FragColor = vec4(c, ${SPARK_GLYPH.toFixed(1)});
+        gl_FragColor = vec4(c, ${(SPARK_GLYPH + 2 * GLOW_STEP).toFixed(1)});
         return;
       }
       if (uActor > 0.5) {
@@ -285,6 +296,7 @@ export const cellMat = new THREE.ShaderMaterial({
         else if (cls < 7.5) row = 5.0;
         else row = 7.0;
         bool light = abs(row - 5.0) < 0.1;
+        if (light) glowLvl = abs(cls - 7.0) < 0.5 ? 2.0 : 1.0;   // CLS.fx (techniques) glows hard, CLS.light softly
         float l = luma(col);
         // muted night palette: desaturate and push towards indigo; lights stay warm and saturated
         bool grassRow = row > 0.5 && row < 1.5;
@@ -384,11 +396,94 @@ export const cellMat = new THREE.ShaderMaterial({
         c = modeCol(c, l);
       }
       c = mix(c, hurt * max(luma(c), 0.5), uHit * 0.6);   // damage flash tints the characters, not the background
-      gl_FragColor = vec4(c, row * uN + idx);
+      float code = row * uN + idx;
+      if (uActor < 0.5) {
+        // ---- technique flares (flare.ts): a star of strokes,  --- across, | up and down, \ / diagonals, * at the core
+        vec2 pc = (cell + 0.5) * uCell;
+        float best = 0.0, fcode = 0.0; vec3 fcol = vec3(0.0);
+        for (int i = 0; i < MAXF; i++) {
+          vec4 A = uFlareA[i], B = uFlareB[i];
+          if (B.w <= 0.0) continue;
+          vec2 d = pc - A.xy, ad = abs(d);
+          float vLen = abs(A.w), s = 0.0, g = 0.0, v;
+          if (length(d / uCell) < 0.75) { s = 1.0; g = ${SPARK_GLYPH.toFixed(1)}; }
+          else {
+            if (ad.y < uCell.y * 0.5 && ad.x < A.z) { v = pow(1.0 - ad.x / A.z, 1.6); if (v > s) { s = v; g = uEdgeRow * uN + 2.0; } }
+            if (ad.x < uCell.x * 0.5 && ad.y < vLen && (A.w > 0.0 || d.y > 0.0)) {
+              // the full beam fades along its length; the aviso's beam from the sky stays even
+              v = A.w > 0.0 ? pow(1.0 - ad.y / vLen, 1.2) : 0.6 + 0.4 * (1.0 - ad.y / vLen);
+              if (v > s) { s = v; g = uEdgeRow * uN; }
+            }
+            float dl = min(A.z, vLen) * 0.22;
+            if (A.w > 0.0 && ad.x < dl && abs(ad.x - ad.y) < uCell.x * 0.7) {
+              v = 0.8 * pow(1.0 - ad.x / dl, 1.4);
+              if (v > s) { s = v; g = uEdgeRow * uN + (d.x * d.y > 0.0 ? 3.0 : 1.0); }
+            }
+          }
+          s *= B.w;
+          if (s > best) { best = s; fcode = g; fcol = B.rgb; }
+        }
+        if (best > 0.05) {
+          c = modeCol(mix(fcol, vec3(1.0), 0.15 + 0.6 * best * best) * (0.45 + 1.15 * best), best);
+          code = fcode; glowLvl = 2.0;
+        }
+      }
+      gl_FragColor = vec4(c, code + glowLvl * ${GLOW_STEP.toFixed(1)});
     }`
 });
 const cellScene = new THREE.Scene();
 cellScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), cellMat));
+
+// ---- glow: the light the characters themselves give off. Glowing cells (lanterns softly, technique
+// fx / sparks / flares hard) are picked out of the environment's cell grid and blurred twice, a
+// tight halo at one texel per cell and a wide one at half that; the final pass adds them over the
+// glyphs (strongly on their ink, faintly between them), so the light comes from the letters.
+const glowOpts = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
+const glowA = new THREE.WebGLRenderTarget(1, 1, glowOpts), glowB = new THREE.WebGLRenderTarget(1, 1, glowOpts);
+const wideA = new THREE.WebGLRenderTarget(1, 1, glowOpts), wideB = new THREE.WebGLRenderTarget(1, 1, glowOpts);
+const fullVert = `void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const extractMat = new THREE.ShaderMaterial({
+  uniforms: { tCells: { value: cellRT.texture }, uN: { value: N } },
+  vertexShader: fullVert,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tCells; uniform float uN;
+    void main(){
+      vec4 cd = texelFetch(tCells, ivec2(gl_FragCoord.xy), 0);
+      float raw = floor(cd.a + 0.5), lvl = floor(raw / ${GLOW_STEP.toFixed(1)}), code = raw - lvl * ${GLOW_STEP.toFixed(1)};
+      float row = floor(code / uN), idx = code - row * uN;
+      float dens = abs(row - 5.0) < 0.5 ? idx / (uN - 1.0) : 1.0;   // a lamp's densest letters shine most
+      gl_FragColor = vec4(cd.rgb * dens * (lvl > 1.5 ? 1.0 : lvl > 0.5 ? 0.4 : 0.0), 1.0);
+    }`
+});
+// 9-tap gaussian in 5 linear fetches
+const blurMat = new THREE.ShaderMaterial({
+  uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() }, uSize: { value: new THREE.Vector2() } },
+  vertexShader: fullVert,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tSrc; uniform vec2 uDir; uniform vec2 uSize;
+    void main(){
+      vec2 uv = gl_FragCoord.xy / uSize;
+      vec3 s = texture2D(tSrc, uv).rgb * 0.2270270270;
+      s += (texture2D(tSrc, uv + uDir * 1.3846153846).rgb + texture2D(tSrc, uv - uDir * 1.3846153846).rgb) * 0.3162162162;
+      s += (texture2D(tSrc, uv + uDir * 3.2307692308).rgb + texture2D(tSrc, uv - uDir * 3.2307692308).rgb) * 0.0702702703;
+      gl_FragColor = vec4(s, 1.0);
+    }`
+});
+const passQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), extractMat);
+const passScene = new THREE.Scene(); passScene.add(passQuad);
+function blur(src: THREE.WebGLRenderTarget, dst: THREE.WebGLRenderTarget, dx: number, dy: number) {
+  const u = blurMat.uniforms;
+  u.tSrc.value = src.texture; u.uDir.value.set(dx / src.width, dy / src.height); u.uSize.value.set(dst.width, dst.height);
+  passQuad.material = blurMat;
+  renderer.setRenderTarget(dst); renderer.render(passScene, postCam);
+}
+function renderGlow() {
+  passQuad.material = extractMat;
+  renderer.setRenderTarget(glowA); renderer.render(passScene, postCam);
+  // the cells are about twice as tall as wide: spread less vertically so the halo stays round on screen
+  blur(glowA, glowB, 1, 0); blur(glowB, glowA, 0, 0.55);
+  blur(glowA, wideB, 1.6, 0); blur(wideB, wideA, 0, 0.9);
+}
 
 const postMat = new THREE.ShaderMaterial({
   uniforms: {
@@ -396,7 +491,9 @@ const postMat = new THREE.ShaderMaterial({
     tMask: { value: maskRT.texture }, uRes: { value: bufSize.clone() }, uN: { value: N },
     tScene: { value: rt.texture }, uMode: cellMat.uniforms.uMode, uHit: cellMat.uniforms.uHit, uRim: { value: 1.15 * DPR }, uLight: cellMat.uniforms.uLight,
     uCell: { value: new THREE.Vector2() }, uGlyph: { value: new THREE.Vector2() }, uGrid: { value: new THREE.Vector2() },
-    uCellA: { value: new THREE.Vector2() }, uGlyphA: { value: new THREE.Vector2() }, uGridA: { value: new THREE.Vector2() }
+    uCellA: { value: new THREE.Vector2() }, uGlyphA: { value: new THREE.Vector2() }, uGridA: { value: new THREE.Vector2() },
+    tGlow: { value: glowA.texture }, tGlowW: { value: wideA.texture }, uGlow: flareUniforms.uGlow,
+    uSurf: surfaceGlyphs.uSurfGlyph   // 1: the figures carry their letters on their own surface (surface-glyphs.ts)
   },
   vertexShader: `void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */`
@@ -404,6 +501,7 @@ const postMat = new THREE.ShaderMaterial({
     uniform vec2 uRes; uniform float uN;
     uniform vec2 uCell; uniform vec2 uGlyph; uniform vec2 uGrid; uniform vec2 uCellA; uniform vec2 uGlyphA; uniform vec2 uGridA;
     uniform sampler2D tScene; uniform float uMode; uniform float uHit; uniform float uRim; uniform vec2 uLight;
+    uniform sampler2D tGlow; uniform sampler2D tGlowW; uniform float uGlow; uniform float uSurf;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
     vec3 grade(vec3 c){ return pow(aces(c * 1.9), vec3(1.0 / 2.2)); }
@@ -423,6 +521,15 @@ const postMat = new THREE.ShaderMaterial({
       else if (uMode > 0.5) b = vec3(0.25, 1.0, 0.45) * band;
       return mix(b, vec3(1.0, 0.12, 0.08) * max(band, 0.3), uHit * 0.5) * 0.4;   // under the characters: the figure reads as one coloured mass
     }
+    // surface letters: the figure as rendered (its material already drew the letters on it), graded like the grid's
+    vec3 actorSurface(vec2 fc){
+      vec3 c = grade(1.8 * texture2D(tScene, fc / uRes).rgb);
+      float l = luma(c);
+      if (uMode > 2.5) c = vec3(0.93) * l;
+      else if (uMode > 1.5) c = vec3(1.0, 0.68, 0.22) * l * 1.3;
+      else if (uMode > 0.5) c = vec3(0.25, 1.0, 0.45) * l * 1.3;
+      return mix(c, vec3(1.0, 0.12, 0.08) * max(l, 0.3), uHit * 0.5);
+    }
     // all glyphs of the 3x3 neighbouring cells that cover this pixel; returns (strongest, sum)
     void layer(sampler2D cells, sampler2D font, vec2 C, vec2 Gs, vec2 grid, vec2 fc, bool scatter, out vec3 top, out vec3 sum){
       vec2 cell = floor(fc / C);
@@ -433,6 +540,7 @@ const postMat = new THREE.ShaderMaterial({
         if (nc.x < 0.0 || nc.y < 0.0 || nc.x >= grid.x || nc.y >= grid.y) continue;
         vec4 cd = texelFetch(cells, ivec2(nc), 0);
         float code = floor(cd.a + 0.5);
+        code -= floor(code / ${GLOW_STEP.toFixed(1)}) * ${GLOW_STEP.toFixed(1)};   // drop the glow level
         float row = floor(code / uN), idx = code - row * uN;
         if (idx < 0.5 && abs(row - ${EDGE_ROW.toFixed(1)}) > 0.5) continue;   // blank cell (the edge row has no blank)
         // grass / foliage glyphs get a small fixed scatter so the weave doesn't look like a grid
@@ -447,14 +555,13 @@ const postMat = new THREE.ShaderMaterial({
     }
     void main(){
       vec2 fc = gl_FragCoord.xy;
-      vec3 et, es, at, as;
-      layer(tCellsA, tFontA, uCellA, uGlyphA, uGridA, fc, false, at, as);
+      vec3 et, es, at = vec3(0.0), as = vec3(0.0);
+      if (uSurf < 0.5) layer(tCellsA, tFontA, uCellA, uGlyphA, uGridA, fc, false, at, as);
       vec3 actor = mix(at, as, 0.2);
       vec3 col;
       if (mask(fc) > 0.5) {
-        // inside a silhouette: small actor characters over a solid cel-shaded backing
-        vec3 back = actorBacking(fc);
-        col = max(actor, back);
+        // inside a silhouette: the surface letters, or small grid characters over a solid cel-shaded backing
+        col = uSurf > 0.5 ? actorSurface(fc) : max(actor, actorBacking(fc));
       } else {
         layer(tCells, tFont, uCell, uGlyph, uGrid, fc, true, et, es);
         col = max(mix(et, es, 0.25), actor);
@@ -471,6 +578,11 @@ const postMat = new THREE.ShaderMaterial({
         // deep dark halo on the shadow side, a lighter one where the moon hits (so the bright rim pops)
         col *= 1.0 - near * mix(0.95, 0.6, litSide);
       }
+      // glow: the cell grid overhangs the screen a little, so map through its own extent
+      vec2 guv = fc / (uGrid * uCell);
+      vec3 glow = (texture2D(tGlow, guv).rgb * 0.8 + texture2D(tGlowW, guv).rgb * 1.3) * uGlow;
+      float ink = smoothstep(0.02, 0.3, max(col.r, max(col.g, col.b)));
+      col += glow * (0.3 + 1.1 * ink);
       vec2 q = fc / uRes - 0.5;
       float vig = 1.0 - dot(q, q) * 0.6;
       gl_FragColor = vec4(col * vig, 1.0);
@@ -493,6 +605,9 @@ export function applyDensity() {
   asciiGrid.uRtPx.value.set(rt.width, rt.height);                               // the scene render's grid, for world-anchored ASCII art
   asciiGrid.uCellPx.value.set(cw * rt.width / bufSize.x, ch * rt.height / bufSize.y);
   cellRT.setSize(E.cols, E.rows);
+  glowA.setSize(E.cols, E.rows); glowB.setSize(E.cols, E.rows);
+  const wc = Math.max(1, Math.ceil(E.cols / 2)), wr = Math.max(1, Math.ceil(E.rows / 2));
+  wideA.setSize(wc, wr); wideB.setSize(wc, wr);
   cellMat.uniforms.uRes.value.copy(bufSize);
   const u = postMat.uniforms;
   u.uRes.value.copy(bufSize);
@@ -528,6 +643,7 @@ export function changeDensity(step: number) {
 
 /** scene -> actor mask -> character cells (environment grid + actor grid) -> screen */
 export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
+  projectFlares();
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
   // the relief engine's camera: rebuild view-space positions from depth, light them with the moon
   const cu0 = cellMat.uniforms, pc = camera as THREE.PerspectiveCamera;
@@ -543,8 +659,11 @@ export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
   const cu = cellMat.uniforms;
   cu.uActor.value = 0; cu.uCell.value.set(grids.env!.cw, grids.env!.ch);
   renderer.setRenderTarget(cellRT); renderer.render(cellScene, postCam);
-  cu.uActor.value = 1; cu.uCell.value.set(grids.actor!.cw, grids.actor!.ch);
-  renderer.setRenderTarget(actorCellRT); renderer.render(cellScene, postCam);
+  if (surfaceGlyphs.uSurfGlyph.value < 0.5) {   // the figures' screen grid (not needed when they wear their letters)
+    cu.uActor.value = 1; cu.uCell.value.set(grids.actor!.cw, grids.actor!.ch);
+    renderer.setRenderTarget(actorCellRT); renderer.render(cellScene, postCam);
+  }
+  renderGlow();
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 

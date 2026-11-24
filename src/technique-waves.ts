@@ -11,6 +11,7 @@ import { TECHNIQUES, type WaveTechniqueId } from './techniques';
 import type { Enemy } from './types';
 import { dmgMult } from './upgrades';
 import { specialDamage } from './special-damage';
+import { flare } from './flare';
 
 const WAVES = {
   viento: { range: 24, time: 0.62, damage: 7.5, stagger: 0.75, knock: 5, halfArc: 0 },
@@ -82,8 +83,9 @@ export function startTechniqueWave(id: WaveTechniqueId) {
   const wave: Wave = { id, origin, forward, mesh, time: 0, hits: new Set(), healed: 0 };
   drawWave(wave, 0);
   waves.push(wave); scene.add(mesh);
-  burst(origin.clone().addScaledVector(forward, id === 'fuego' ? 0 : 1.2).add(new THREE.Vector3(0, 0.8, 0)),
-    TECHNIQUES[id].color, id === 'fuego' ? 75 : 42, 6, 0.17);
+  const at = origin.clone().addScaledVector(forward, id === 'fuego' ? 0 : 1.2).add(new THREE.Vector3(0, 0.8, 0));
+  burst(at, TECHNIQUES[id].color, id === 'fuego' ? 75 : 42, 6, 0.17);
+  flare(at, TECHNIQUES[id].color, { size: id === 'fuego' ? 1.25 : 1, life: id === 'fuego' ? 0.6 : 0.5 });
   sfx.swing({ power: id === 'fuego' ? 1.6 : 1.1, pan: 0 });
 }
 
