@@ -168,36 +168,88 @@ export function bambooBlade() {
   return blade;
 }
 
-export const GRASS_SHAPE = /* glsl */`
-  vPlant = vec3(uv.x, 0.5, 0.0);
-  if (uDetailedSurfaces > 0.5) {
-    float meadow = wNoise(base * 0.26 + vec2(11.7, 6.3));
-    float kind = fract(vVar * 13.37);
-    float stalk = step(0.976, vVar) * smoothstep(0.42, 0.62, meadow);
-    float height = mix(0.41, 1.10, smoothstep(0.11, 0.91, meadow * 0.64 + kind * 0.36));
-    float seedHead = smoothstep(0.61, 0.79, vH) * (1.0 - smoothstep(0.90, 1.0, vH));
-    lp.y *= mix(height, 1.56, stalk);
-    lp.x *= mix(0.58 + 0.52 * kind, 0.17 + 2.0 * seedHead, stalk);
-    lp.x += sin(vH * 2.8) * (vVar - 0.52) * 0.073;
-    lp.z += lp.x * (vH - 0.16) * (kind - 0.5);
-    vPlant.yz = vec2(meadow, stalk);
+/** A low woody crown with spreading shoots, paired oval leaves and lighter new growth. */
+export function lowShrubGeometry() {
+  const random = seeded(5237);
+  const positions: number[] = [], colors: number[] = [], indices: number[] = [];
+  const leafOutline = [[0, 0], [0.30, 0.84], [0.70, 0.72], [1, 0], [0.70, -0.72], [0.30, -0.84]];
+  const vertex = (x: number, y: number, z: number, light: number) => {
+    positions.push(x, y, z);
+    colors.push(light, light, light);
+    return positions.length / 3 - 1;
+  };
+  function addLeaf(root: THREE.Vector3, angle: number, length: number, rise: number, light: number) {
+    const dx = Math.cos(angle), dz = Math.sin(angle), width = length * (0.28 + 0.10 * random());
+    // Two pairs of shoulders round out the leaf. Its lifted midrib catches a strip of light.
+    const ridge = vertex(root.x + dx * length * 0.47, root.y + rise * 0.47 + width * 0.34, root.z + dz * length * 0.47, light);
+    for (const [t, side] of leafOutline) {
+      vertex(root.x + dx * length * t - dz * width * side, root.y + rise * t,
+        root.z + dz * length * t + dx * width * side, light * (0.66 + 0.28 * t + 0.08 * side));
+    }
+    for (let j = 0; j < leafOutline.length; j++) indices.push(ridge, ridge + 1 + j, ridge + 1 + (j + 1) % leafOutline.length);
   }
-`;
+  for (let i = 0; i < 11; i++) {
+    const angle = i * 2.40 + random() * 0.40, dx = Math.cos(angle), dz = Math.sin(angle);
+    const reach = 0.18 + random() * 0.46, height = 0.70 - reach * 0.49 + random() * 0.09;
+    const shoot = (t: number) => new THREE.Vector3(dx * reach * t * t, (height + 0.14) * t - 0.23, dz * reach * t * t);
+    const start = positions.length / 3;
+    for (const t of [0, 0.48, 1]) {
+      const p = shoot(t), radius = 0.019 - 0.014 * t;
+      for (let j = 0; j < 3; j++) {
+        const a = angle + j * TAU / 3;
+        vertex(p.x + Math.cos(a) * radius, p.y, p.z + Math.sin(a) * radius, 0.16 + t * 0.16);
+      }
+    }
+    for (const ring of [start, start + 3]) {
+      for (let side = 0; side < 3; side++) {
+        const a = ring + side, b = ring + (side + 1) % 3;
+        indices.push(a, a + 3, b, b, a + 3, b + 3);
+      }
+    }
+    for (let j = 0; j < 7; j++) {
+      const t = 0.38 + j * 0.095;
+      const direction = angle + (j % 2 ? 1 : -1) * (0.64 + random() * 0.52);
+      addLeaf(shoot(t), direction, 0.14 + random() * 0.12, 0.027 + random() * 0.08, 0.46 + t * 0.49 + random() * 0.15);
+    }
+    addLeaf(shoot(0.99), angle, 0.14, 0.045, 1.10);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.name = 'Low shrub';
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
 
-export const GRASS_COLOUR = /* glsl */`
-  float across = vPlant.x;
-  float lush = smoothstep(0.15, 0.76, vPlant.y);
-  float sunDry = smoothstep(0.62, 0.94, vVar * 0.58 + (1.0 - vPlant.y) * 0.42);
-  vec3 green = mix(vec3(0.074, 0.132, 0.038), vec3(0.115, 0.244, 0.085), lush);
-  vec3 blade = mix(green, vec3(0.261, 0.211, 0.071), sunDry * (0.44 + 0.56 * vH));
-  float pixel = fwidth(across);
-  float midrib = 1.0 - smoothstep(0.02, 0.085 + pixel, abs(across - 0.5));
-  float veins = 0.5 + 0.5 * sin((abs(across - 0.49) * 13.5 + vH * 3.1 + vVar) * 6.2832);
-  float fibres = mix(veins, 0.5, smoothstep(0.030, 0.12, pixel));
-  float margin = smoothstep(0.8, 0.99, abs(across * 2.0 - 1.0));
-  blade *= 0.63 + 0.56 * smoothstep(0.0, 0.86, vH) + 0.095 * fibres;
-  blade += vec3(0.031, 0.039, 0.014) * (midrib * 0.75 + margin * 0.28) * vH;
-  float husk = 0.5 + 0.5 * sin(vH * 133.0 + abs(across - 0.5) * 6.0);
-  blade = mix(blade, vec3(0.31, 0.197, 0.081) * (0.81 + husk * 0.38), vPlant.z * smoothstep(0.62, 0.78, vH));
-  diffuseColor.rgb = blade * (0.51 + 0.49 * smoothstep(0.0, 0.52, vH) + vSheen * vH * 0.056);
-`;
+/** Eight narrow ribbons share one instance. Each root is sampled separately on slopes and path edges. */
+export function grassTuft() {
+  const random = seeded(9284);
+  const parts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 8; i++) {
+    const turn = i * 2.4 + random() * 0.6;
+    const radius = Math.sqrt((i + 0.5) / 8) * 0.30;
+    const dirX = Math.cos(turn), dirZ = Math.sin(turn);
+    const width = 0.033 + random() * 0.019, height = 0.46 + random() * 0.30;
+    const lean = height * (0.12 + 0.31 * random());
+    const face = turn + (random() - 0.5) * 1.6;
+    const blade = new THREE.PlaneGeometry(1, 1, 1, 2);
+    const { position, normal, uv } = blade.attributes;
+    // xy is the root offset; zw is the ribbon's half-width vector, for the broad pale leaves.
+    const offsets = new Float32Array(position.count * 4);
+    for (let j = 0; j < position.count; j++) {
+      const t = uv.getY(j), side = uv.getX(j) - 0.5;
+      const edge = side * width * (1 - 0.80 * t * t);
+      const bend = lean * t * (0.62 + 0.38 * t);
+      const edgeX = -Math.sin(face) * edge, edgeZ = Math.cos(face) * edge;
+      position.setXYZ(j, dirX * bend + edgeX, height * t + edge * t, dirZ * bend + edgeZ);
+      normal.setXYZ(j, 0, 1, 0);
+      offsets.set([dirX * radius, dirZ * radius, edgeX, edgeZ], j * 4);
+    }
+    blade.setAttribute('aGrassOffsets', new THREE.BufferAttribute(offsets, 4));
+    parts.push(blade);
+  }
+  const geometry = mergeGeometries(parts)!;
+  parts.forEach(part => part.dispose());
+  return geometry;
+}
