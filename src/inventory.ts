@@ -9,6 +9,7 @@ import { WEAPONS, equip, owns, weaponStats } from './weapons';
 
 export const inventoryButton = document.querySelector<HTMLButtonElement>('#inventory-btn')!;
 const ownedWeapons = () => WEAPONS.filter(w => owns(w.id));
+const itemImage = (group: string, id: string) => `${import.meta.env.BASE_URL}inventory/${group}/${id}.webp`;
 
 function inventoryRows(): MenuRow[] {
   const rows: MenuRow[] = [{ label: 'ARMAS', head: true }];
@@ -16,7 +17,8 @@ function inventoryRows(): MenuRow[] {
     const equipped = state.weapon === w.id;
     rows.push({
       label: w.name, value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
-      note: `${w.desc} · ${weaponStats(w)}`, sparkColors: w.fx.sparks,
+      image: itemImage('armas', w.id),
+      note: `${w.desc} · ${weaponStats(w)}`,
       act() {
         if (equipped) return menuStatus('Ya llevas esta arma.');
         equip(w.id);
@@ -30,6 +32,7 @@ function inventoryRows(): MenuRow[] {
     const equipped = state.armor === a.id;
     rows.push({
       label: a.name, value: equipped ? 'puesta' : 'ponerse', cls: equipped ? 'y' : 'b',
+      image: itemImage('armaduras', a.id),
       note: `${a.desc} · ${armorStats(a)}`,
       act() {
         if (equipped) return menuStatus('Ya llevas esta prenda.');
@@ -45,6 +48,7 @@ function inventoryRows(): MenuRow[] {
     const move = TECHNIQUES[id], equipped = state.technique === id;
     rows.push({
       label: move.name, value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
+      image: itemImage('tecnicas', id),
       note: move.description,
       act() {
         if (!equipped) {
@@ -59,7 +63,7 @@ function inventoryRows(): MenuRow[] {
   if (upgrades.length) rows.push({ label: 'MEJORAS PASIVAS', head: true });
   for (const id of upgrades) {
     const { name, desc } = UPGRADES[id];
-    rows.push({ label: name, value: `Nivel ${roman(lvl(id))}`, cls: 'y', note: desc });
+    rows.push({ label: name, value: `Nivel ${roman(lvl(id))}`, cls: 'y', note: desc, image: itemImage('mejoras', id) });
   }
   return rows;
 }

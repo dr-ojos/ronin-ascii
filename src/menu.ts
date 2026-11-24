@@ -10,6 +10,8 @@ export interface MenuRow {
   value?: string;
   /** a second, dimmer line under the row */
   note?: string;
+  /** inventory thumbnail; the row's label already names the item */
+  image?: string;
   /** css class for the value: y (gold), r (red), d (dim), b (blue) */
   cls?: string;
   sparkColors?: readonly number[];
@@ -89,11 +91,12 @@ export function render(revealSelection = false) {
       const rowClass = `mr${i === sel ? ' on' : ''}`;
       const value = `<span class="mv">${val}</span>`;
       if (inventory) {
+        const image = r.image ? `<img class="mthumb" src="${esc(r.image)}" alt="" width="144" height="144" loading="lazy" decoding="async">` : '';
         const label = `<span class="ml">${esc(r.label)}${sparks}</span>`;
-        const note = r.note ? `<span class="mn">${esc(r.note)}</span>` : '';
+        const content = `${image}${label}${value}${r.note ? `<span class="mn">${esc(r.note)}</span>` : ''}`;
         return r.act
-          ? `<button class="${rowClass}" data-i="${i}" type="button">${label}${value}${note}</button>`
-          : `<div class="${rowClass}">${label}${value}${note}</div>`;
+          ? `<button class="${rowClass}" data-i="${i}" type="button">${content}</button>`
+          : `<div class="${rowClass}">${content}</div>`;
       }
       return `<div class="${rowClass}" data-i="${i}">${value}<span class="ml">${i === sel ? '›' : ' '} ${esc(r.label)}${sparks}</span>` +
         (r.note ? `<div class="mn">${esc(r.note)}</div>` : '') + `</div>`;
