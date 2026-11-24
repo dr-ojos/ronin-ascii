@@ -7,10 +7,15 @@ import { player, state } from './state';
 import { canWield, cls } from './classes';
 import { BLADE_LAYOUT } from './weapon-models';
 import type { WeaponForm } from './types';
+import type { BladeLook } from './blade-looks';
+import type { ClassId } from './classes';
 
 export interface Weapon {
   id: string; name: string; desc: string; price: number; tier: number;
   form?: WeaponForm;
+  /** a sword from across the sea in the katana's slot (blade-looks.ts), and the class it was forged for:
+   *  the xiákè's and the hwarang's weapons are theirs alone (classes.ts canWield) */
+  look?: BladeLook; cls?: ClassId;
   /** damage multiplier, extra reach (m), attack duration multiplier (<1 = faster) */
   dmg: number; reach: number; speed: number;
   /** blade length multiplier, glow and steel colours */
@@ -73,6 +78,24 @@ export const WEAPONS: Weapon[] = [
     fx: { glow: 0xb0dcff, hot: 0xffffff, cool: 0x4a6bff, gravity: 3, halo: 2.1, trail: 2.5, sparks: [0xbfe6ff, 0x6f8bff, 0xfff3a0], extra: 'bolts' } },
   { id: 'mugen', name: 'Mugen, filo del vacío', desc: 'la hoja de la leyenda: corta la nada, cura, carga y alcanza lejos', price: 32000, tier: 3, dmg: 3.6, reach: 1, speed: 0.76, len: 1.32, glow: 0xffffff, steel: 0x1a1424, heal: 3, charge: 0.03,
     fx: { glow: 0xf4eaff, hot: 0xffffff, cool: 0xb06aff, gravity: 0.5, halo: 2.4, trail: 2.8, sparks: [0xffffff, 0xd6a8ff, 0xffd98a], extra: 'stars' } },
+  // ---- the xiákè's arms: the straight jian he starts with, a tiger dao, butterfly swords and a guandao
+  { id: 'jian', name: 'Jian de jade', desc: 'espada recta de doble filo con borla roja: rápida y precisa', look: 'jian', cls: 'xia', price: 0, tier: 0, dmg: 1, reach: 0.05, speed: 0.92, len: 1, glow: 0x7dffc0, steel: 0xe6fff3,
+    fx: { glow: 0x8affc8, hot: 0xeafff4, cool: 0x2fd08a, gravity: 4, halo: 1.1, trail: 1.25 } },
+  { id: 'dao-tigre', name: 'Dao del tigre', desc: 'sable que se ensancha hacia la punta: tajos más pesados', look: 'dao', cls: 'xia', price: 2000, tier: 1.25, dmg: 1.32, reach: 0.1, speed: 1.02, len: 1.02, glow: 0xff9a3a, steel: 0xd8c8b0,
+    fx: { glow: 0xffa64a, hot: 0xffe2b0, cool: 0xe0541c, gravity: 9, halo: 1.35, trail: 1.5, sparks: [0xff8a3a, 0xffc85a, 0xff5a3a] } },
+  { id: 'mariposa', name: 'Espadas mariposa', desc: 'dos hojas cortas del sur: una lluvia de tajos', form: 'dual', cls: 'xia', price: 4400, tier: 1.85, dmg: 1.5, reach: -0.4, speed: 0.8, len: 0.62, glow: 0xffd060, steel: 0xc8c0a8,
+    fx: { glow: 0xffd870, hot: 0xfff4c8, cool: 0xff9a2a, gravity: 2, halo: 1.4, trail: 1.8, sparks: [0xffd060, 0xff9a4a, 0x8affc8] } },
+  { id: 'guandao', name: 'Guandao del dragón verde', desc: 'la alabarda de Guan Yu: alcance enorme, y cada golpe carga la técnica', form: 'spear', cls: 'xia', price: 11000, tier: 2.8, dmg: 2.1, reach: 2, speed: 1.08, len: 0.72, glow: 0x5dffb0, steel: 0xb8e6d0, charge: 0.02,
+    fx: { glow: 0x6affb8, hot: 0xeafff4, cool: 0x1fa86a, gravity: 3, halo: 1.8, trail: 2.2, sparks: [0x5dffb0, 0xb8ff6a, 0xfff0a0], extra: 'stars' } },
+  // ---- the hwarang's arms: the ring-pommel sword he starts with, a woldo, twin swords and the four-tiger sword
+  { id: 'hwandu', name: 'Hwandudaedo del hwarang', desc: 'espada recta con pomo de anilla: firme y equilibrada', look: 'hwandu', cls: 'hwarang', price: 0, tier: 0, dmg: 1.05, reach: 0, speed: 0.98, len: 1, glow: 0xff8ab8, steel: 0xf2e6ee,
+    fx: { glow: 0xff9ac4, hot: 0xffe6f0, cool: 0xd8447a, gravity: 3, halo: 1.1, trail: 1.25 } },
+  { id: 'woldo', name: 'Woldo de la luna', desc: 'alabarda de hoja de media luna: barre lejos', form: 'spear', cls: 'hwarang', price: 2000, tier: 1.25, dmg: 1.25, reach: 1.7, speed: 1.02, len: 0.6, glow: 0xb4a0ff, steel: 0xd0d4f0,
+    fx: { glow: 0xbcaaff, hot: 0xf0eaff, cool: 0x6a5aff, gravity: 3, halo: 1.35, trail: 1.5, sparks: [0xb4a0ff, 0xff9ac4, 0x9ad8ff] } },
+  { id: 'ssanggeom', name: 'Ssanggeom', desc: 'las espadas gemelas de la danza: rápidas y en cruz', form: 'dual', cls: 'hwarang', price: 4400, tier: 1.85, dmg: 1.55, reach: -0.45, speed: 0.82, len: 0.64, glow: 0xff6a9a, steel: 0xe0c8d4,
+    fx: { glow: 0xff7aa8, hot: 0xffe0ec, cool: 0xc8306a, gravity: 2, halo: 1.45, trail: 1.85, sparks: [0xff6a9a, 0xffb0d0, 0xffe08a] } },
+  { id: 'sainggeom', name: 'Sainggeom', desc: 'la espada de los cuatro tigres, grabada con estrellas: cura 2 por golpe y carga la técnica', look: 'hwandu', cls: 'hwarang', price: 11000, tier: 2.8, dmg: 2.1, reach: 0.4, speed: 0.88, len: 1.15, glow: 0xffe0a0, steel: 0xfff6e6, heal: 2, charge: 0.02,
+    fx: { glow: 0xffe8b0, hot: 0xffffff, cool: 0xff8ab8, gravity: 1, halo: 1.9, trail: 2.3, sparks: [0xffe0a0, 0xff9ac4, 0xb4c8ff], extra: 'stars' } },
   // ---- the sōhei's staves: held in the middle with both hands; every blow dazes (player.ts)
   { id: 'bo', name: 'Bō del peregrino', desc: 'bastón de roble con regatones de bronce: golpes amplios que aturden', form: 'staff', price: 0, tier: 0, dmg: 1, reach: 0.3, speed: 1, len: 0.9, glow: 0xffc46b, steel: 0xc9a979,
     fx: { glow: 0xffcf7a, hot: 0xfff1c4, cool: 0xff8a2a, gravity: 6, halo: 1.1, trail: 1.2 } },
@@ -92,8 +115,8 @@ export const WEAPONS: Weapon[] = [
 ];
 const byId = new Map(WEAPONS.map(w => [w.id, w]));
 export const weapon = () => byId.get(state.weapon) || byId.get(cls().weapon)!;
-/** what Masa can sell you: the forms your class wields */
-export const forSale = () => WEAPONS.filter(w => canWield(w.form));
+/** what Masa can sell you: your class's weapons */
+export const forSale = () => WEAPONS.filter(w => canWield(w));
 export const owns = (id: string) => state.owned.includes(id);
 
 /** a line of numbers for the shop: compared with the plain katana */
@@ -133,7 +156,7 @@ export const displayedWeapon = () => displayed;
 export const tipZ = (w: Weapon) => BLADE_LAYOUT[w.form ?? 'katana'].base + BLADE_PROFILE.length * w.len;
 export function applyWeapon(w = weapon()) {
   displayed = w;
-  showWeaponModel(w.form ?? 'katana', w.len);
+  showWeaponModel(w.form ?? 'katana', w.len, w.look);
   bladeMat.color.set(w.steel); bladeMat.emissive.set(w.glow);
 }
 applyWeapon();

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BLADE_PROFILE, DUAL_PROFILE, MAT, bladeGeometry, grp, mesh, type BladeProfile } from './samurai';
 import type { Avatar, WeaponForm } from './types';
+import { createBladeLooks, type BladeLook } from './blade-looks';
 
 export const BLADE_LAYOUT: Record<WeaponForm, { base: number; width: number; profile: BladeProfile }> = {
   katana: { base: BLADE_PROFILE.base, width: 1, profile: BLADE_PROFILE },
@@ -94,8 +95,11 @@ export function createWeaponModels(sam: Avatar, steel: THREE.MeshStandardMateria
   for (const model of [spear, broad, shortR.group, shortL.group, staff]) model.traverse(o => {
     if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
-  return (form: WeaponForm, length: number) => {
-    for (const key of Object.keys(models) as WeaponForm[]) models[key].visible = key === form;
+  // the jian, the dao and the hwandu ride in the katana's slot (blade-looks.ts)
+  const showLook = createBladeLooks(sam.katana, steel);
+  return (form: WeaponForm, length: number, look?: BladeLook) => {
+    for (const key of Object.keys(models) as WeaponForm[]) models[key].visible = key === form && !(form === 'katana' && look);
+    showLook(form === 'katana' ? look : undefined, length);
     // a longer staff: the shaft and its head stretch with the weapon's length
     if (form === 'staff') staff.scale.set(1, 1, length / 0.9);
     sam.offhand.visible = form === 'dual';

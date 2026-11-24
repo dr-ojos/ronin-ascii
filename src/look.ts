@@ -1,6 +1,7 @@
 // The ronin's look, chosen by the player (custom.ts): name, lacquer of the armour bands, kimono and sash,
 // scarf, hat and mask. Saved in the browser, one look per class (classes.ts): the sōhei reuses the same
-// palettes for his habit (cloth), his kesa (lacquer) and his hood (scarf). Applied to the avatar through
+// palettes for his habit (cloth), his kesa (lacquer) and his hood (scarf); the xiákè and the hwarang for their
+// robe (cloth), its trims or cord (lacquer) and the veil of the douli or the beads of the gat (scarf). Applied to the avatar through
 // the roles its materials and parts carry (rig.ts / samurai.ts tag them: userData.role on materials, userData.part on meshes).
 import * as THREE from 'three';
 import { state } from './state';
@@ -25,7 +26,9 @@ export type LookPart = keyof typeof LOOK_OPTIONS;
 /** the parts each class can restyle, in menu order, and what they are called on it */
 export const LOOK_PARTS: Record<ClassId, Partial<Record<LookPart, string>>> = {
   ronin: { lacquer: 'Lacado', cloth: 'Kimono y faja', scarf: 'Bufanda', hat: 'Sombrero', mask: 'Máscara' },
-  sohei: { cloth: 'Hábito', lacquer: 'Kesa', scarf: 'Capucha' }
+  sohei: { cloth: 'Hábito', lacquer: 'Kesa', scarf: 'Capucha' },
+  xia: { cloth: 'Hanfu', lacquer: 'Ribetes y faja', scarf: 'Velo' },
+  hwarang: { cloth: 'Dopo', lacquer: 'Cordón', scarf: 'Cuentas del gat' }
 };
 
 export type Look = { name: string } & Record<LookPart, number>;
@@ -34,7 +37,10 @@ const keyOf = (c: ClassId) => c === 'ronin' ? KEY : `${KEY}.${c}`;
 // the sōhei starts in an ink-black habit, a golden kesa and a white hood
 const DEFAULTS: Record<ClassId, Look> = {
   ronin: { name: 'Ronin', lacquer: 0, cloth: 0, scarf: 0, hat: 0, mask: 0 },
-  sohei: { name: 'Benkei', lacquer: 3, cloth: 2, scarf: 2, hat: 3, mask: 0 }
+  sohei: { name: 'Benkei', lacquer: 3, cloth: 2, scarf: 2, hat: 3, mask: 0 },
+  // a moss-green hanfu with gilt hems and a white veil; a white dopo with a vermilion cord and amber gat beads
+  xia: { name: 'Li Mu', lacquer: 3, cloth: 5, scarf: 2, hat: 3, mask: 0 },
+  hwarang: { name: 'Gwanchang', lacquer: 0, cloth: 3, scarf: 4, hat: 3, mask: 0 }
 };
 export const look: Look = { ...DEFAULTS.ronin };
 /** the look saved for a class (or its default) */

@@ -18,6 +18,7 @@ import { TECHNIQUES } from './techniques';
 import { rnd } from './utils';
 import { clearFlares, flare, updateFlares } from './flare';
 import { clearSutras, startSutras, updateSutras } from './sutra-shield';
+import { clearFlyingSwords, startFlyingSwords, updateFlyingSwords } from './flying-swords';
 import { cls } from './classes';
 import { chargeMult } from './progression';
 
@@ -99,6 +100,12 @@ export function trySpecial() {
     startSutras();
     return;
   }
+  if (id === 'feijian') {
+    state.hitStop = 0.06;
+    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
+    startFlyingSwords();
+    return;
+  }
   if (id !== 'rayo') {
     state.hitStop = 0.07;
     showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
@@ -145,6 +152,7 @@ export function updateSpecial(dt: number) {
   updateFourFlames(dt);
   updateFlares(dt);
   updateSutras(dt);
+  updateFlyingSwords(dt);
   for (let i = pending.length - 1; i >= 0; i--) { const p = pending[i]; if ((p.t -= dt) <= 0) { pending.splice(i, 1); p.fn(); } }
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.life -= dt;
@@ -163,6 +171,7 @@ export function resetSpecial() {
   const start = cls().technique;
   Object.assign(state, { special: 0, jade: 0, technique: start, learnedTechniques: [start] });
   clearSutras();
+  clearFlyingSwords();
   clearBladeDance();
   clearTechniqueWaves();
   clearFourFlames();

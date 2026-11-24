@@ -19,7 +19,7 @@ export const roman = (n: number) => ['', 'I', 'II', 'III', 'IV'][n] || String(n)
 
 export const dmgMult = () => (1 + 0.4 * lvl('filo')) * statDmg();
 export const hurtMult = () => (1 - 0.15 * lvl('ofuda')) * armorGuard() * (1 - cls().guard) * statHurt();
-export const dashCdMult = () => Math.pow(0.8, lvl('viento')) * armorDash() * statDash();
+export const dashCdMult = () => Math.pow(0.8, lvl('viento')) * armorDash() * statDash() * (cls().dash ?? 1);
 export const runMult = () => (1 + 0.07 * lvl('viento')) * armorRun() * cls().run * statRun();
 export const lifesteal = () => 3 * lvl('sangre') + perkHeal();
 export const streakBonus = () => 2 * lvl('kitsune') + perkStreakTime();

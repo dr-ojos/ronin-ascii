@@ -309,6 +309,65 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     hoodTail.mesh.name = 'hood-tail';
     hood.add(hoodTail.mesh);
   }
+
+  // ---- the xiákè's douli: a broad, shallow bamboo hat with a gauze veil all round it (simulated cloth that
+  // lifts and trails as he runs), parted at the front so the face shows. The veil is the look's "scarf".
+  const DOULI_R = 0.27, DOULI_BRIM = 0.046;
+  const douli = grp(hg, 0, 0, -0.008);
+  douli.userData.part = 'douli';
+  douli.visible = false;
+  let douliVeil: HangingCloth;
+  {
+    const bamboo = new THREE.MeshStandardMaterial({ map: hatTex(), color: 0xe6cf98, roughness: 0.9, side: THREE.DoubleSide });
+    const cone = mesh(new THREE.ConeGeometry(DOULI_R, 0.1, 44, 1, true), bamboo, douli, 0, DOULI_BRIM + 0.05, 0);
+    cone.rotation.x = 0.05;
+    mesh(new THREE.ConeGeometry(0.03, 0.035, 10), bamboo, douli, 0, DOULI_BRIM + 0.112, 0.005);
+    const rim = mesh(new THREE.TorusGeometry(DOULI_R, 0.006, 5, 56), black, douli, 0, DOULI_BRIM, 0.002);
+    rim.rotation.x = Math.PI / 2;
+    const ring = mesh(new THREE.TorusGeometry(0.068, 0.008, 6, 32), black, douli, 0, DOULI_BRIM + 0.012, 0.004);
+    ring.rotation.x = Math.PI / 2; ring.scale.y = 1.14;
+    const veilMat = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.9, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
+    veilMat.userData.role = 'scarf'; veilMat.userData.glyphRest = true;
+    const COLS = 20, GAP = 0.68;   // the veil parts at the front: a slit wide enough to show the face
+    douliVeil = new HangingCloth({
+      cols: COLS, rows: 5, closed: false, material: veilMat, drape: 9, drapeMoving: 3,
+      rest: (i, j, out) => {
+        const a = GAP + (i / (COLS - 1)) * (TAU - 2 * GAP), r = DOULI_R * (0.97 + 0.03 * j);
+        return out.set(Math.sin(a) * r, DOULI_BRIM - 0.003 - 0.062 * j, Math.cos(a) * r + 0.002);
+      }
+    });
+    douliVeil.mesh.name = 'douli-veil';
+    douli.add(douliVeil.mesh);
+  }
+
+  // ---- the hwarang's gat: a black horsehair hat, a tall crown over the topknot and a wide flat brim, tied
+  // under the chin with a long string of beads (the look's "scarf")
+  const GAT_BRIM = 0.06, GAT_R = 0.235;
+  const gat = grp(hg, 0, 0, -0.004);
+  gat.userData.part = 'gat';
+  gat.visible = false;
+  {
+    const hair = new THREE.MeshStandardMaterial({ color: 0x141418, roughness: 0.45, transparent: true, opacity: 0.84, side: THREE.DoubleSide });
+    const brim = mesh(new THREE.RingGeometry(0.066, GAT_R, 56, 2), hair, gat, 0, GAT_BRIM, 0);
+    brim.rotation.x = -Math.PI / 2;
+    // the brim droops very slightly at its edge
+    const lip = mesh(new THREE.CylinderGeometry(GAT_R, GAT_R + 0.004, 0.008, 56, 1, true), hair, gat, 0, GAT_BRIM - 0.004, 0);
+    void lip;
+    mesh(new THREE.CylinderGeometry(0.058, 0.067, 0.118, 36, 1, true), hair, gat, 0, GAT_BRIM + 0.059, 0);
+    const top = mesh(new THREE.CircleGeometry(0.058, 36), hair, gat, 0, GAT_BRIM + 0.118, 0);
+    top.rotation.x = -Math.PI / 2;
+    mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.018, 36, 1, true), black, gat, 0, GAT_BRIM + 0.01, 0);   // the hat band
+    const beadMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.2 });
+    beadMat.userData.role = 'scarf';
+    const strand = new THREE.CatmullRomCurve3([
+      new V(-0.1, GAT_BRIM, 0.01), new V(-0.088, -0.03, 0.05), new V(-0.05, -0.12, 0.1), new V(-0.02, -0.2, 0.13), new V(0, -0.24, 0.14),
+      new V(0.02, -0.2, 0.13), new V(0.05, -0.12, 0.1), new V(0.088, -0.03, 0.05), new V(0.1, GAT_BRIM, 0.01)
+    ]);
+    const bead = new THREE.SphereGeometry(0.0085, 8, 6);
+    for (let i = 0; i <= 30; i++) mesh(bead, beadMat, gat).position.copy(strand.getPointAt(i / 30));
+    const tassel = mesh(new THREE.ConeGeometry(0.012, 0.05, 8, 1, true), new THREE.MeshStandardMaterial({ color: 0xb3241c, roughness: 0.7, side: THREE.DoubleSide }), gat, 0, -0.27, 0.14);
+    void tassel;
+  }
   hg.scale.setScalar(hh / 0.215);
   hg.position.set(head.x, head.y + hh * 0.45, head.z + 0.01);
   attach('Head', hg);
@@ -430,9 +489,13 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   // the sōhei's accents burn warm, like the bronze of his staff and his bell
   const neonWarm = new THREE.MeshBasicMaterial({ color: 0xfff1d6 });
   const haloWarm = tagMat(new THREE.MeshBasicMaterial({ color: 0xffb54a, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
-  const glowRing = (parent: THREE.Object3D, r: number, y: number, sy = 1, warm = false) => {
-    const core = mesh(new THREE.TorusGeometry(r, 0.0055, 6, 64), warm ? neonWarm : neon, parent, 0, y, 0);
-    const soft = mesh(new THREE.TorusGeometry(r, 0.022, 6, 64), warm ? haloWarm : halo, parent, 0, y, 0);
+  // the xiákè's burn jade green, the hwarang's the pink of plum blossom
+  const neonTint = (core: number, soft: number) => [new THREE.MeshBasicMaterial({ color: core }),
+    tagMat(new THREE.MeshBasicMaterial({ color: soft, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx)] as const;
+  const JADE = neonTint(0xe6fff2, 0x4dffa6), BLOSSOM = neonTint(0xffeef5, 0xff6aa8);
+  const glowRing = (parent: THREE.Object3D, r: number, y: number, sy = 1, tint?: readonly [THREE.Material, THREE.Material]) => {
+    const core = mesh(new THREE.TorusGeometry(r, 0.0055, 6, 64), tint ? tint[0] : neon, parent, 0, y, 0);
+    const soft = mesh(new THREE.TorusGeometry(r, 0.022, 6, 64), tint ? tint[1] : halo, parent, 0, y, 0);
     for (const o of [core, soft]) { o.rotation.x = Math.PI / 2; o.scale.y = sy; }
     halos.push(soft);
     return [core, soft];
@@ -440,7 +503,10 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   for (const o of glowRing(kasa, 0.238, -0.066)) o.userData.part = 'hat';
   glowRing(waist, 0.214, 0.005, 0.78);
   // a ring of light round the hood's brow, just above the eye slit
-  glowRing(hood, HOOD.x * Math.sin(hoodTh(slitTop + 0.011)) * 1.04, slitTop + 0.011, HOOD.z / HOOD.x, true);
+  glowRing(hood, HOOD.x * Math.sin(hoodTh(slitTop + 0.011)) * 1.04, slitTop + 0.011, HOOD.z / HOOD.x, [neonWarm, haloWarm]);
+  // round the brims of the douli and the gat
+  glowRing(douli, DOULI_R + 0.003, DOULI_BRIM + 0.002, 1, JADE);
+  glowRing(gat, GAT_R, GAT_BRIM + 0.002, 1, BLOSSOM);
   {
     const draw = (blur: number) => {
       const c = document.createElement('canvas'); c.width = c.height = 128;
@@ -730,6 +796,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     if (robeG.visible) robe.update(dt, moving, legCaps, ground);
     for (const { cloth, g } of sleeves) if (g.visible) cloth.update(dt, moving, armCaps, ground);
     if (hood.visible) hoodTail.update(dt, moving, hoodCaps, ground);
+    if (douli.visible) douliVeil.update(dt, moving, hoodCaps, ground);
   }
 
   function update(dt: number, s: AvatarInput) {

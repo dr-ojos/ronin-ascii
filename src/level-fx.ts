@@ -11,6 +11,7 @@ import { skyFlash } from './special';
 import { sfx } from './sfx';
 import { player, state } from './state';
 import { WEAPONS } from './weapons';
+import { canWield } from './classes';
 import { ARMORS } from './armor';
 import { hasPerk, isMilestone, MAX_LEVEL, onLevelUp, type LevelUp } from './progression';
 
@@ -109,8 +110,8 @@ let hideT = 0;
 
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
 const gearName = (id: string) => WEAPONS.find(w => w.id === id)?.name ?? ARMORS.find(a => a.id === id)?.name ?? id;
-/** gear for the class you play (staves for the sōhei, blades for the ronin; armour for both) */
-const forYou = (id: string) => { const w = WEAPONS.find(x => x.id === id); return !w || (state.cls === 'sohei' ? w.form === 'staff' : w.form !== 'staff'); };
+/** gear for the class you play (its own weapons, classes.ts canWield; armour for every class) */
+const forYou = (id: string) => { const w = WEAPONS.find(x => x.id === id); return !w || canWield(w); };
 
 function show(e: LevelUp, milestone: boolean, top: boolean) {
   const kind = top ? 'legend' : milestone ? 'milestone' : 'normal';

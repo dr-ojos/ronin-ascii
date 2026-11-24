@@ -1,4 +1,5 @@
 // Katana effects: blade light, sparks shed by the edge, and the vapour trail of each cut.
+import { LOOK_PROFILE } from './blade-looks';
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, tagMat } from './materials';
@@ -94,7 +95,8 @@ function setWeaponFx(w: Weapon) {
   fxWeapon = w;
   CG.set(w.fx.glow); C1.set(w.fx.hot); C2.set(w.fx.cool);
   haloMat.color.copy(CG); haloCore.color.copy(CG).lerp(WHITE, 0.35); bladeLight.color.copy(CG);
-  const { base, width: scale, profile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const { base, width: scale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const profile = w.look ? LOOK_PROFILE[w.look] : formProfile;   // a jian, dao or hwandu (blade-looks.ts)
   const len = tipZ(w) - base, r = 0.027 * w.fx.halo;
   // the halo is a straight sleeve laid along the chord from the blade's root to its point;
   // the broad-bellied twin blades get a fatter one
@@ -182,7 +184,8 @@ offhandSparks.name = 'offhand-sparks';
 offhandSparks.onBeforeRender = edgeSparks.onBeforeRender;
 sam.offhand.add(offhandSparks);
 function cuttingEdge(w: Weapon, t: number) {
-  const { width: scale, profile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const { width: scale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const profile = w.look ? LOOK_PROFILE[w.look] : formProfile;
   if (w.form === 'spear') return -BLADE_PROFILE.width * 0.52 * Math.pow(Math.sin(Math.PI * t), 0.72) * scale;
   const { center, width } = bladeSection(profile, t);
   return (center - width * 0.5) * scale;

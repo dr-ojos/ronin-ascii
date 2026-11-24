@@ -18,7 +18,7 @@ function rows(): MenuRow[] {
     const step = (d: number) => () => { cycleLook(k, d); dressUp(); };
     r.push({ label: parts[k]!, value: opt(k).name, cls: 'y', left: step(-1), right: step(1), act: step(1) });
   }
-  r.push({ label: 'Al azar', note: state.cls === 'sohei' ? 'un monje cualquiera de las montañas' : 'un ronin cualquiera de los caminos',
+  r.push({ label: 'Al azar', note: cls().wanderer,
     act() { randomLook(); dressUp(); menuStatus('¿ así ?'); } });
   r.push({ label: 'Listo', act: closeMenu });
   return r;

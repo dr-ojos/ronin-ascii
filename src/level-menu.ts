@@ -48,7 +48,7 @@ function rows(): MenuRow[] {
   r.push({ label: 'ARSENAL DE LEYENDA · TIENDA DE MASA', head: true });
   const gear = Object.entries(LEVEL_REQ)
     .map(([id, lv]) => ({ id, lv, w: WEAPONS.find(w => w.id === id), a: ARMORS.find(a => a.id === id) }))
-    .filter(g => g.a || (g.w && canWield(g.w.form)))
+    .filter(g => g.a || (g.w && canWield(g.w)))
     .sort((a, b) => a.lv - b.lv);
   for (const g of gear) {
     const open = level() >= g.lv, item = (g.w ?? g.a)!;

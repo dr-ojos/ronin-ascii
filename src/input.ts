@@ -12,7 +12,7 @@ import { tryTalkTemple } from './temples';
 import { tryTalk } from './shop';
 import { menuKey } from './menu';
 import { inventoryButton, toggleInventory } from './inventory';
-import { cycleWeapon, resetWeapons } from './weapons';
+import { cycleWeapon, resetWeapons, weapon } from './weapons';
 import { resetArmor } from './armor';
 import { dressUp } from './outfit';
 import { sfx } from './sfx';
@@ -45,8 +45,7 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyE' && !tryTalk() && !tryTalkTemple()) tryOpen();
   if (!e.repeat && e.code === 'KeyQ' && state.playing && !state.dead) {
     const w = cycleWeapon();
-    const only = state.cls === 'sohei' ? 'solo tienes este bastón' : 'solo tienes esta katana';
-    showMsg(w ? `— ${w.name} —` : `${only} · Masa vende más en la casa del santuario`, w ? 1.2 : 2.2);
+    showMsg(w ? `— ${w.name} —` : `solo tienes ${weapon().name} · Masa vende más en la casa del santuario`, w ? 1.2 : 2.2);
   }
   if (!e.repeat && e.code === 'KeyP') trySpecial();
   if (!e.repeat && e.code === 'KeyO' && state.playing && !state.dead && !state.photo) {

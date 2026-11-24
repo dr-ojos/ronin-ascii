@@ -19,9 +19,11 @@ const WAVES = {
   agua: { range: 12, time: 0.62, damage: 5, stagger: 1.3, knock: 6, halfArc: Math.PI / 3 },
   // the temple bell: a ring of sound all round you that dazes longer than anything else
   campana: { range: 11, time: 0.7, damage: 4.5, stagger: 2.4, knock: 9, halfArc: Math.PI },
+  // the hwarang's storm of petals: a whirling ring that wounds, dazes and heals him for every oni it touches
+  petalos: { range: 10, time: 0.75, damage: 6, stagger: 1.1, knock: 7, halfArc: Math.PI },
 } as const;
 /** waves that run out all round you, not ahead */
-const ROUND = (id: WaveTechniqueId) => id === 'fuego' || id === 'campana';
+const ROUND = (id: WaveTechniqueId) => id === 'fuego' || id === 'campana' || id === 'petalos';
 const WIND_WIDTH = 3.1;
 const SEGMENTS = 48;
 const FADE = 0.25;
@@ -76,7 +78,8 @@ function drawWave(wave: Wave, radius: number) {
       const falloff = Math.max(0, 1 - t * t), peak = row === 1 ? 1 : row === 2 ? 0.52 : 0;
       const crest = id === 'agua' ? falloff * (1.1 + Math.sin(a * 9 - time * 15) * 0.3)
         : id === 'fuego' ? 0.45 + Math.sin(a * 13 + time * 21) ** 4 * 0.7
-        : id === 'campana' ? 0.5 + 0.18 * Math.sin(a * 8 - time * 12) : 0.8 * falloff;
+        : id === 'campana' ? 0.5 + 0.18 * Math.sin(a * 8 - time * 12)
+        : id === 'petalos' ? 0.55 + 0.35 * Math.sin(a * 11 + time * 18) ** 2 : 0.8 * falloff;
       p.setXYZ(i * 3 + row, x, surfaceY(x, z) + (id === 'viento' ? 0.95 : 0.12) + crest * peak, z);
     }
   }
@@ -111,6 +114,12 @@ export function startTechniqueWave(id: WaveTechniqueId) {
     sfx.taiko(0.9);
     return;
   }
+  if (id === 'petalos') {
+    burst(origin.clone().setY(origin.y + 1), 0xffb0d0, 90, 7, 0.2);
+    burst(origin.clone().setY(origin.y + 0.6), 0xffffff, 30, 5, 0.12);
+    player.invuln = Math.max(player.invuln, 1);
+    sfx.chime(false);
+  }
   sfx.swing({ power: id === 'fuego' ? 1.6 : 1.1, pan: 0 });
 }
 
@@ -136,8 +145,8 @@ function hitEnemies(wave: Wave, before: number, radius: number) {
     enemy.knock.multiplyScalar(effect.knock / (enemy.big ? 2.6 : 1));
     strike.set(p.x, p.y + 1.1 * enemy.scale, p.z);
     burst(strike, TECHNIQUES[id].color, 25, 5, 0.14);
-    if (id === 'agua') {
-      const heal = Math.min(8, 24 - wave.healed, player.maxHp - player.hp);
+    if (id === 'agua' || id === 'petalos') {
+      const heal = id === 'agua' ? Math.min(8, 24 - wave.healed, player.maxHp - player.hp) : Math.min(4, player.maxHp - player.hp);
       wave.healed += heal; player.hp += heal;
       if (heal > 0) burst(player.pos.clone().setY(player.pos.y + 0.8), 0xa3ffd7, 12, 3, 0.12);
     }
@@ -165,6 +174,11 @@ export function updateTechniqueWaves(dt: number) {
     if (wave.time >= time + FADE) { removeWave(wave); waves.splice(i, 1); continue; }
     wave.mesh.material.opacity = (wave.echo ? 0.45 : 0.92) * (1 - Math.max(0, wave.time - time) / FADE);
     drawWave(wave, radius);
+    // petals whirl off the ring as it spreads
+    if (wave.id === 'petalos' && wave.time < time) for (let k = 0; k < 3; k++) {
+      const a = Math.random() * Math.PI * 2, x = wave.origin.x + Math.sin(a) * radius, z = wave.origin.z + Math.cos(a) * radius;
+      burst(new THREE.Vector3(x, surfaceY(x, z) + 0.4 + Math.random(), z), k ? 0xff9ac4 : 0xffffff, 4, 2, 0.12);
+    }
   }
 }
 
