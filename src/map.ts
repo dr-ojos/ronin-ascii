@@ -271,17 +271,6 @@ export function rockyGround(x: number, z: number) {
   const rz = rockZone(x, z);
   return rz > 0.5 && fbm(x * 0.035 + 3, z * 0.035, 2) > 0.64 - (rz - 0.5) * 0.12;
 }
-/** small hills all over the world: gentle knolls, and steep rocky ones with crags on top */
-export interface Hill { x: number; z: number; R: number; H: number; rocky: boolean }
-export const HILLS: Hill[] = [];
-{
-  const R = seeded(5151);
-  for (let t = 0; HILLS.length < 360 && t < 9000; t++) {
-    const a = R() * Math.PI * 2, d = Math.sqrt(R()) * (WORLD_R - 70), x = Math.cos(a) * d, z = Math.sin(a) * d;
-    const rz = rockZone(x, z), rocky = rz > 0.35 || R() < 0.18;
-    const r = rocky ? 16 + R() * 20 : 24 + R() * 34, H = rocky ? 9 + R() * 14 : 5 + R() * 9;
-    if (d < 90 || PLACES.some(p => p.flat > 0 && Math.hypot(x - p.x, z - p.z) < p.flat + p.blend + r)) continue;
-    if (HILLS.some(h => Math.hypot(h.x - x, h.z - z) < (h.R + r) * 0.85)) continue;
 /** plateaus with cliffs all round (a mesa): some have a stone ramp up to the top (and the big ones a
  *  second level with its own ramp), the rest can only be walked round. ramp: angle the ramp leaves at */
 export interface Mesa { x: number; z: number; R: number; H: number; ph: number; ph2: number; ramp: number | null; L: number; W: number; base: number }
@@ -366,6 +355,18 @@ export function onMesaCliff(x: number, z: number) {
   return false;
 }
 
+/** small hills all over the world: gentle knolls, and steep rocky ones with crags on top */
+export interface Hill { x: number; z: number; R: number; H: number; rocky: boolean }
+export const HILLS: Hill[] = [];
+{
+  const R = seeded(5151);
+  for (let t = 0; HILLS.length < 360 && t < 9000; t++) {
+    const a = R() * Math.PI * 2, d = Math.sqrt(R()) * (WORLD_R - 70), x = Math.cos(a) * d, z = Math.sin(a) * d;
+    const rz = rockZone(x, z), rocky = rz > 0.35 || R() < 0.18;
+    const r = rocky ? 16 + R() * 20 : 24 + R() * 34, H = rocky ? 9 + R() * 14 : 5 + R() * 9;
+    if (d < 90 || PLACES.some(p => p.flat > 0 && Math.hypot(x - p.x, z - p.z) < p.flat + p.blend + r)) continue;
+    if (HILLS.some(h => Math.hypot(h.x - x, h.z - z) < (h.R + r) * 0.85)) continue;
+    if (MESAS.some(m => Math.hypot(m.x - x, m.z - z) < m.R * 1.3 + m.L + r + 6)) continue;
     if (inLake(x, z, r * 1.4 + 10) || lineDist(x, z, RIVER) < r * 1.4 + 10 || ROADS.some(rd => lineDist(x, z, rd) < r * 1.35 + 6)) continue;
     HILLS.push({ x, z, R: r, H, rocky });
   }
@@ -377,7 +378,6 @@ for (const h of HILLS) for (let i = Math.floor((h.x - h.R * 2) / HB); i <= Math.
   }
 /** hills whose slopes reach this point */
 export const hillsAt = (x: number, z: number) => hillBuckets.get((Math.floor(x / HB) + 64) * 128 + Math.floor(z / HB) + 64) ?? [];
-    if (MESAS.some(m => Math.hypot(m.x - x, m.z - z) < m.R * 1.3 + m.L + r + 6)) continue;
 
 // ------------------------------------------------------------ masks
 // ground mask (3072², ~0.9 m / px): R = road, G = water, B = built (plazas, floors). No grass on any of them.
