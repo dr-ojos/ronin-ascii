@@ -9,6 +9,7 @@ import { sfx, panOf } from './sfx';
 import { showMsg } from './hud';
 import { collide } from './physics';
 import { surfaceY, wadeDepth } from './structures';
+import { navTarget } from './navigation';
 import { wader, splash, WADE_SINK } from './water';
 import { addPoints, POINTS } from './score';
 import { dropLoot, unseal } from './loot';
@@ -22,6 +23,7 @@ import { player, state } from './state';
 import { angDiff, rnd } from './utils';
 import type { Camp, Enemy, Wildlife } from './types';
 
+const nav = { x: 0, z: 0 };
 const WILDLIFE_NAMES: Record<Wildlife, string> = {
   lobos: 'JAURÍA DE LOBOS', oso: 'OSO PARDO', jabalies: 'JABALÍES', aranas: 'ARAÑAS DE SEDA'
 };
@@ -320,6 +322,15 @@ function advanceCharge(en: Enemy, attack: EnemyAttack) {
 
 // ------------------------------------------------------------ every frame
 const tmp = new THREE.Vector3(), step = new THREE.Vector3();
+/** does this chaser have to go the long way round (nav holds where to)? Archers in range just shoot. */
+function detour(en: Enemy, d: number, shootRange: number) {
+  const g = en.g;
+  navTarget(g.position.x, g.position.z, player.pos.x, player.pos.z, nav);
+  const roundabout = Math.abs(nav.x - player.pos.x) > 0.01 || Math.abs(nav.z - player.pos.z) > 0.01;
+  if (shootRange > 0 && d < shootRange + 1) return false;
+  return roundabout;
+}
+
 export function updateEnemies(dt: number) {
   updateProjectiles(dt);
   updateMarks(dt);
@@ -350,7 +361,9 @@ export function updateEnemies(dt: number) {
 
     if (en.state === 'idle' || en.state === 'return') {
       const home = en.state === 'return';
-      const tx = home ? camp.x : en.wander.x, tz = home ? camp.z : en.wander.z;
+      // going home finds its way round the plateaus (and down from them) like a chase does
+      if (home) navTarget(g.position.x, g.position.z, camp.x, camp.z, nav);
+      const tx = home ? nav.x : en.wander.x, tz = home ? nav.z : en.wander.z;
       step.set(tx - g.position.x, 0, tz - g.position.z);
       const left = step.length();
       if (home) en.hp = Math.min(en.maxHp, en.hp + en.maxHp * 0.4 * dt);
@@ -370,6 +383,12 @@ export function updateEnemies(dt: number) {
     } else if (leaving) {
       clearEnemyAttack(en);
       en.state = 'return';
+    } else if (en.state === 'chase' && detour(en, d, ranged ? en.reach : 0)) {
+      // a cliff is in the way (or you are up where it can't reach yet): walk the way round, don't strike
+      step.set(nav.x - g.position.x, 0, nav.z - g.position.z);
+      const left = step.length();
+      walk = speed;
+      if (left > 0.3) { g.position.addScaledVector(step.multiplyScalar(1 / left), Math.min(left, speed * dt)); heading = Math.atan2(step.x, step.z); }
     } else if (en.state === 'chase') {
       const cycle = en.enraged ? def.boss?.enraged : def.moves;
       if (en.kind === 'sombra' && d > 5 && d < 12 && en.cd <= 0) blink(en, true);

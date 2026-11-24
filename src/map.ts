@@ -304,8 +304,14 @@ export const mesaRadius = (m: Mesa, a: number) => m.R * (1 + 0.16 * Math.sin(3 *
     MESAS.push(m);
     // a second level on the big ones you can climb, with its own ramp starting on the first
     if (big && Rr > 28 && R() < 0.7) {
-      const H2 = 3 + R() * 2.5, R2 = Rr * 0.32;
-      MESAS.push({ x, z, R: R2, H: H2, ph: R() * 6.28, ph2: R() * 6.28, ramp: R() * 6.28, L: H2 * 3.2, W: 5.5, base: H });
+      const H2 = 3 + R() * 2.5, R2 = Rr * 0.32, L2 = H2 * 3.2, kid: Mesa = { x, z, R: R2, H: H2, ph: R() * 6.28, ph2: R() * 6.28, ramp: 0, L: L2, W: 5.5, base: H };
+      // its ramp must come down onto the first level, well inside that level's rim
+      let best = -1, room = -Infinity;
+      for (let k = 0; k < 16; k++) {
+        const ang = (k / 16) * Math.PI * 2 + R() * 0.2, free = mesaRadius(m, ang) - (mesaRadius(kid, ang) + L2 + 5);
+        if (free > room) { room = free; best = ang; }
+      }
+      if (room > 2) { kid.ramp = best; MESAS.push(kid); }
     }
     return true;
   };
