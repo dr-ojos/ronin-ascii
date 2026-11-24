@@ -8,10 +8,11 @@ import { M, CLS, tagMat } from './materials';
 import { addCollider, isFree } from './physics';
 import { addLight } from './lights';
 import { campfire } from './campfire';
+import { tent } from './tents';
 import { banner, bannerMat } from './banner';
 import { groundY } from './terrain';
 import { WORLD_R, PLACES, ROADS, RIVER, FOOTPRINTS, inLake, lineDist, place, seeded, type P2 } from './map';
-import { MT, G, TENT, add, box, post, pyr, stoneLantern, site, solidBox, disc } from './structures';
+import { MT, G, add, box, post, pyr, stoneLantern, site, solidBox, disc } from './structures';
 import type { Wildlife } from './types';
 
 export interface CampSpot { x: number; z: number; size: number; r: number; tier: number; boss: boolean; chest: [number, number, number] }
@@ -74,9 +75,7 @@ function campDecor(s: CampSpot) {
   const tents = Math.min(3, 1 + Math.floor(s.size / 2)), a0 = rnd(0, Math.PI * 2);
   for (let i = 0; i < tents; i++) {
     const a = a0 + (i / tents) * Math.PI * 2, r = 6.5, tx = Math.cos(a) * r, tz = Math.sin(a) * r, ry = Math.atan2(-tx, -tz);
-    const t = new THREE.Group(); t.position.set(tx, local(x, z, tx, tz), tz); t.rotation.y = ry; t.scale.setScalar(0.8); g.add(t);
-    add(t, TENT, MAT.hide, 0, 0, 0, 1, 1, 1);
-    post(t, 0.06, 2.4, MT.wood, 0, 0, -2.2); post(t, 0.06, 2.4, MT.wood, 0, 0, 2.2);
+    tent(g, 'hide', tx, local(x, z, tx, tz), tz, ry, 0.8);
     solidBox(x + tx, z + tz, 2.6, 3.5, ry, false);
   }
   const ca = a0 + Math.PI / tents, cr = 3.4;

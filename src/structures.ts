@@ -9,6 +9,7 @@ import { addRoundedSurface, surfaceMaterial } from './surfaces';
 import { addCollider } from './physics';
 import { addLight } from './lights';
 import { campfire } from './campfire';
+import { tent } from './tents';
 import { banner, bannerMat } from './banner';
 import { groundY, lakeLevel } from './terrain';
 import { riverDepth, lakeWater, ribbonWater, RIVER_FLOW, WATER_GLSL, rippleUniforms, weatherUniforms } from './water';
@@ -160,8 +161,6 @@ const thatchedHip = (() => {
   geometry.computeVertexNormals();
   return geometry;
 })();
-// a ridge tent: triangular prism along local z, apex up
-export const TENT = new THREE.CylinderGeometry(1.8, 1.8, 4.2, 3, 1, true).rotateX(-Math.PI / 2).translate(0, 0.9, 0);
 export type Obj = THREE.Object3D;
 export function add(parent: Obj, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number, ry = 0) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.y = ry; parent.add(m); return m;
@@ -587,9 +586,7 @@ function buildCamp() {
   // tents around the fire
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * TAU + 0.4, r = 11, x = Math.cos(a) * r, z = Math.sin(a) * r, ry = Math.atan2(-x, -z);
-    const t = new THREE.Group(); t.position.set(x, groundY(pl.x + x, pl.z + z) - y, z); t.rotation.y = ry; g.add(t);
-    add(t, TENT, MT.cloth, 0, 0, 0, 1, 1, 1);
-    post(t, 0.06, 2.6, MT.wood, 0, 0, -2.2); post(t, 0.06, 2.6, MT.wood, 0, 0, 2.2);
+    tent(g, 'canvas', x, groundY(pl.x + x, pl.z + z) - y, z, ry);
     solidBox(pl.x + x, pl.z + z, 3.2, 4.4, ry);
   }
   // banners and a palisade of sharpened logs, open towards the river and the roads
