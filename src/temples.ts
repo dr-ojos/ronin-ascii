@@ -59,7 +59,8 @@ export function tryTalkTemple() {
     id: 'temple', title: temple.name,
     sub: () => `${temple.master} · <span class="y">${jadeLabel(state.jade)}</span>`,
     foot: '↑ ↓ elegir · E / ENTER confirmar · ESC salir',
-    rows: () => [lessonRow(temple.technique, temple), ...(temple.lesson ? [lessonRow(temple.lesson, temple)] : []), {
+    rows: () => [lessonRow(temple.technique, temple), ...(temple.lesson ? [lessonRow(temple.lesson, temple)] : []),
+      ...(temple.monkLesson && state.cls === 'sohei' ? [lessonRow(temple.monkLesson, temple)] : []), {
         label: 'Despedirse',
         note: temple.guardian ? 'Esta técnica no se enseña: se gana en combate.' : 'Los sellos de jade se encuentran en cofres del mundo.',
         act: closeMenu,

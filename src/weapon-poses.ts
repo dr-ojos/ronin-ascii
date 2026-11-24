@@ -146,10 +146,54 @@ function dualGrip(side: -1 | 1): Grip {
   };
 }
 
+// ------------------------------------------------------------ bō (the sōhei's staff)
+// Held in the middle with both hands, the left a third of a metre up the shaft. `staffKey` places the
+// point between the hands, so a staff swung out to one side keeps both hands in reach.
+// K1 a flat swing from the right at head height · K2 the backhand return from the left, lower
+// K3 an overhead blow straight down · L the wheel: a full turn with the staff held out, then a leap
+// and a slam into the ground that dazes everything around (player.ts)
+const STAFF_HANDS = 0.33;
+function staffKey(mid: Vec3, d: Vec3, e: Vec3 = [0, -1, 0]) {
+  const n = new THREE.Vector3(...d).normalize().multiplyScalar(STAFF_HANDS / 2);
+  return key([mid[0] - n.x, mid[1] - n.y, mid[2] - n.z], d, e);
+}
+const staffIdle = key([-0.24, 1.0, 0.18], [0.5, 0.5, 0.71], [0, -1, 0]);
+const staffOverhead = staffKey([0, 1.62, 0.04], [0.05, 0.62, -0.78], [0, 0, 1]);
+const staffSlam = staffKey([0, 1.0, 0.46], [0.02, -0.62, 0.78]);
+const staff: Grip = {
+  idle: staffIdle,
+  run: key([-0.25, 0.98, 0.13], [0.5, 0.25, 0.83], [0, -1, 0]),
+  show: key([-0.14, 1.03, 0.28], [0.59, 0.68, 0.43], [0, -0.2, 1]),
+  dash: key([-0.27, 0.97, 0.15], [0.55, 0.2, 0.81], [0, -1, 0]),
+  attacks: [{
+    keys: [[0, staffIdle], [0.28, staffKey([-0.05, 1.32, 0.2], [-0.85, 0.3, -0.42])],
+      [0.48, staffKey([0, 1.25, 0.34], [0.05, 0.12, 1])], [0.62, staffKey([0.06, 1.2, 0.28], [0.88, 0.05, 0.47])], [1, staffIdle]],
+    twist: [[0, 0], [0.28, -0.45], [0.48, 0.1], [0.64, 0.45], [1, 0]],
+    lean: [[0, 0], [0.28, -0.06], [0.48, 0.18], [0.64, 0.12], [1, 0]]
+  }, {
+    keys: [[0, staffIdle], [0.28, staffKey([0.08, 1.15, 0.22], [0.85, 0.1, -0.4])],
+      [0.48, staffKey([0, 1.05, 0.36], [-0.1, -0.05, 1])], [0.62, staffKey([-0.08, 1.1, 0.26], [-0.9, 0.15, 0.42])], [1, staffIdle]],
+    twist: [[0, 0], [0.28, 0.45], [0.48, -0.1], [0.64, -0.45], [1, 0]],
+    lean: [[0, 0], [0.28, -0.04], [0.48, 0.22], [0.64, 0.16], [1, 0]]
+  }, {
+    keys: [[0, staffIdle], [0.3, staffOverhead], [0.44, staffOverhead], [0.54, staffSlam], [0.75, staffSlam], [1, staffIdle]],
+    twist: [[0, 0], [0.3, -0.12], [0.54, 0.05], [1, 0]],
+    lean: [[0, 0], [0.3, -0.22], [0.44, -0.18], [0.54, 0.36], [0.75, 0.3], [1, 0]]
+  }, {
+    keys: [[0, staffIdle], [0.1, staffKey([0, 1.2, 0.3], [-0.95, 0.08, 0.3])], [0.5, staffKey([0, 1.2, 0.3], [-0.95, 0.08, 0.3])],
+      [0.6, staffOverhead], [0.72, staffSlam], [0.88, staffSlam], [1, staffIdle]],
+    twist: [[0, 0], [0.1, -0.3], [0.5, -0.3], [0.6, -0.1], [0.72, 0.08], [1, 0]],
+    spin: [[0, 0], [0.1, 0], [0.5, TAU], [1, TAU]],
+    rise: [[0, 0], [0.52, 0], [0.62, 0.28], [0.72, 0], [1, 0]],
+    lean: [[0, 0], [0.5, 0.06], [0.6, -0.26], [0.72, 0.42], [0.88, 0.36], [1, 0]]
+  }]
+};
+
 export function leftGripOffset(form: WeaponForm, extension: number) {
   // The supporting hand slides down the wrapping as the rear hand pushes the spear forward.
   if (form === 'spear') return THREE.MathUtils.clamp(0.31 - (extension - 0.19) * 0.9, 0.115, 0.31);
   if (form === 'broad') return -0.105;
+  if (form === 'staff') return STAFF_HANDS;
   return form === 'dual' ? 0 : -0.075;
 }
 
@@ -158,14 +202,15 @@ export const previewGripOffsets: Record<WeaponForm, readonly [right: number, lef
   katana: [0.06, -0.065],
   spear: [-0.025, 0.265],
   broad: [0.065, -0.10],
-  dual: [0, 0]
+  dual: [0, 0],
+  staff: [0, STAFF_HANDS]
 };
 
 export function previewPalmAxis(forward: THREE.Vector3, shaft: THREE.Vector3) {
   return forward.addScaledVector(shaft, -forward.dot(shaft)).normalize();
 }
 
-export const weaponGrips: Record<Exclude<WeaponForm, 'katana'>, Grip> = { spear, broad, dual: dualGrip(-1) };
+export const weaponGrips: Record<Exclude<WeaponForm, 'katana'>, Grip> = { spear, broad, dual: dualGrip(-1), staff };
 export const offhandGrip = dualGrip(1);
 
 export function sampleGrip(grip: Grip, s: AvatarInput, gait: number, outPos: THREE.Vector3, outQ: THREE.Quaternion) {

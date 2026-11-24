@@ -6,7 +6,9 @@ export const BLADE_LAYOUT: Record<WeaponForm, { base: number; width: number }> =
   katana: { base: BLADE_PROFILE.base, width: 1 },
   spear: { base: 0.91, width: 2.3 },
   broad: { base: 0.19, width: 4.25 },
-  dual: { base: 0.113, width: 1.35 }
+  dual: { base: 0.113, width: 1.35 },
+  // the staff has no blade: its upper half (the striking end, with the bronze cap) carries the trail and sparks
+  staff: { base: 0.3, width: 1 }
 };
 
 export function createWeaponModels(sam: Avatar, steel: THREE.MeshStandardMaterial) {
@@ -62,15 +64,39 @@ export function createWeaponModels(sam: Avatar, steel: THREE.MeshStandardMateria
     blade.name = 'short-blade';
     return { group, blade };
   }
+  // the sōhei's staff, held in the middle: the right hand at z = 0, the left hand further up the shaft.
+  // Oak with bronze caps and bindings; the upper cap (in the glowing steel material) is the striking end,
+  // crowned by the shakujō's ring and its six loose rings.
+  const staff = grp(sam.katana);
+  staff.name = 'staff-model';
+  const oak = new THREE.MeshStandardMaterial({ color: 0x5a3a24, roughness: 0.62 });
+  cylinder(staff, -0.78, 0.9, 0.021, 0.021, oak);
+  for (const z of [-0.1, 0.33]) cylinder(staff, z, z + 0.11, 0.0235, 0.0235, wrap);
+  for (const z of [-0.12, 0.0, 0.43]) cylinder(staff, z, z + 0.012, 0.025, 0.025, MAT.cord);
+  cylinder(staff, -0.83, -0.76, 0.024, 0.026, steel, 10);                         // ferrule at the butt
+  cylinder(staff, 0.86, 0.95, 0.026, 0.024, steel, 10);                           // cap at the head
+  const head = grp(staff, 0, 0, 1.03);
+  const loop = mesh(new THREE.TorusGeometry(0.075, 0.009, 6, 26), steel, head);
+  loop.rotation.y = Math.PI / 2; loop.scale.y = 1.25;
+  mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.19, 6), steel, head).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 6; i++) {
+    const side = i < 3 ? 1 : -1, k = i % 3;
+    const ring = mesh(new THREE.TorusGeometry(0.024, 0.004, 5, 14), steel, head, 0, side * (0.083 - k * 0.006), -0.035 + k * 0.035);
+    ring.rotation.set(0.4 * side, 0, 0.2 * k);
+  }
+  head.name = 'staff-head';
+
   const shortR = shortSword(sam.katana, 'short-sword-right');
   const shortL = shortSword(sam.offhand, 'short-sword-left');
-  const models = { katana, spear, broad, dual: shortR.group };
-  const blades = { katana: [katanaBlade], spear: [spearBlade], broad: [broadBlade], dual: [shortR.blade, shortL.blade] };
-  for (const model of [spear, broad, shortR.group, shortL.group]) model.traverse(o => {
+  const models = { katana, spear, broad, dual: shortR.group, staff };
+  const blades: Record<WeaponForm, THREE.Object3D[]> = { katana: [katanaBlade], spear: [spearBlade], broad: [broadBlade], dual: [shortR.blade, shortL.blade], staff: [] };
+  for (const model of [spear, broad, shortR.group, shortL.group, staff]) model.traverse(o => {
     if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
   return (form: WeaponForm, length: number) => {
     for (const key of Object.keys(models) as WeaponForm[]) models[key].visible = key === form;
+    // a longer staff: the shaft and its head stretch with the weapon's length
+    if (form === 'staff') staff.scale.set(1, 1, length / 0.9);
     sam.offhand.visible = form === 'dual';
     const layout = BLADE_LAYOUT[form];
     for (const blade of blades[form]) {

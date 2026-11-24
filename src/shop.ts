@@ -18,7 +18,8 @@ import { openCustom } from './custom';
 import { dressUp } from './outfit';
 import { createSmith } from './smith';
 import { SHOP_FLOOR as FY, shopRoninPos, shopStageActive, smithPos } from './shop-stage';
-import { WEAPONS, weapon, owns, buy, equip, applyWeapon, weaponStats } from './weapons';
+import { forSale, weapon, owns, buy, equip, applyWeapon, weaponStats } from './weapons';
+import { cls } from './classes';
 import { ARMORS, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
 import { threatLabel } from './equipment-threat';
@@ -161,7 +162,7 @@ export function updateShop(dt: number) {
   body.position.y = Math.sin(t * 2) * 0.007;
   hotMat.emissiveIntensity = 1.8 + Math.sin(t * 5) * 0.4;
   if (d < TALK_R && !state.dead && !state.prompt) state.prompt = `[ E ] hablar con ${SMITH_NAME}: armas y armaduras`;
-  if (state.indoors && !greeted) { greeted = true; showMsg(`${SMITH_NAME}, el armero:\n«¿Buscas acero, ronin?»`, 2.4); }
+  if (state.indoors && !greeted) { greeted = true; showMsg(`${SMITH_NAME}, el armero:\n«¿Buscas acero, ${cls().address}?»`, 2.4); }
   if (d > 30) greeted = false;
 }
 
@@ -170,7 +171,7 @@ const price = (n: number, mine: boolean, on: boolean, word: string) => on ? word
 function restoreGear() { applyWeapon(); dressUp(); }
 function shopRows(): MenuRow[] {
   const rows: MenuRow[] = [{ label: 'ARMAS', head: true }];
-  for (const w of WEAPONS) {
+  for (const w of forSale()) {
     const mine = owns(w.id), on = state.weapon === w.id;
     rows.push({
       label: w.name, value: price(w.price, mine, on, 'equipada'),
@@ -180,7 +181,7 @@ function shopRows(): MenuRow[] {
       preview() { applyWeapon(w); dressUp(); },
       act() {
         if (on) return menuStatus('ya la llevas en la mano');
-        if (mine) { equip(w.id); sfx.swing({ power: 0.8, pan: 0 }); return menuStatus(`desenvainas ${w.name}`); }
+        if (mine) { equip(w.id); sfx.swing({ power: 0.8, pan: 0 }); return menuStatus(`${w.form === 'staff' ? 'empuñas' : 'desenvainas'} ${w.name}`); }
         if (buy(w) === 'poor') { sfx.warn(); return menuStatus(`te faltan ${w.price - state.mon} mon`); }
         sfx.chime(true); menuStatus(`«Que te sirva bien.» · ${w.name} es tuya`);
       }

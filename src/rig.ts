@@ -244,6 +244,71 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     const mask = mesh(realMenpoGeometry(), skin, face.group);
     mask.userData.part = 'mask';
   } else mesh(new THREE.SphereGeometry(0.09, 20, 14), skin, hg, 0, -0.01, 0);   // the scan failed to load
+  // the sōhei's katō: a white cloth wound round the whole head, a slit left open for the eyes, a cowl over
+  // the neck and a long tail of simulated cloth (cloth.ts) falling down the back. Hidden unless you play the
+  // monk (outfit.ts); its colour is the "scarf" of the look (look.ts calls it the hood). Its neon brow ring
+  // is lit with the accents below.
+  const hoodMat = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.96, side: THREE.DoubleSide });
+  hoodMat.userData.role = 'scarf';
+  // fitted on the scanned head (in this group's space it spans x -0.076..0.069, y -0.138 (neck)..0.083 (crown),
+  // z -0.076..0.108 (nose tip)): the cloth sits a few millimetres off it, so the head keeps its size
+  const hood = grp(hg, -0.0035, -0.005, 0.016);
+  hood.userData.part = 'hood';
+  hood.visible = false;
+  const HOOD = new V(0.08, 0.093, 0.1), slitHalf = 0.9;
+  // the eye slit, between these heights of the hood (the eyes of the scan are at about 0.01 in the head's space)
+  const slitTop = 0.033, slitBottom = -0.001;
+  const hoodTh = (y: number) => Math.acos(clamp(y / HOOD.y, -1, 1));
+  let hoodTail: HangingCloth;
+  {
+    const shell = (phi0: number, phiLen: number, th0: number, thLen: number) => {
+      const s = mesh(new THREE.SphereGeometry(1, 40, 12, phi0, phiLen, th0, thLen), hoodMat, hood);
+      s.scale.copy(HOOD);
+      return s;
+    };
+    const t1 = hoodTh(slitTop), t2 = hoodTh(slitBottom);
+    shell(0, TAU, 0, t1);                                                   // crown and brow
+    shell(Math.PI / 2 + slitHalf, TAU - 2 * slitHalf, t1, t2 - t1);         // the band behind the eyes
+    {
+      // mouth, chin and nape: the veil over nose and mouth stands a little off the face (the nose would
+      // poke through a snug cloth), the back stays close to the head
+      const g = new THREE.SphereGeometry(1, 40, 12, 0, TAU, t2, 2.55 - t2), v = g.attributes.position;
+      for (let i = 0; i < v.count; i++) {
+        const z = v.getZ(i);
+        if (z > 0) { v.setZ(i, z * (1 + 0.16 * z)); v.setX(i, v.getX(i) * (1 + 0.06 * z)); }
+      }
+      g.computeVertexNormals();
+      mesh(g, hoodMat, hood).scale.copy(HOOD);
+    }
+    // a ring of cloth round the head, hugging it at height y (tilted a little)
+    const wrap = (y: number, r: number, tube: number, tilt = 0) => {
+      const k = Math.sin(hoodTh(y)) * r, t = mesh(new THREE.TorusGeometry(1, tube, 5, 40), hoodMat, hood, 0, y, 0);
+      t.rotation.set(Math.PI / 2 + tilt, 0, 0); t.scale.set(HOOD.x * k, HOOD.z * k, 0.08);
+      return t;
+    };
+    // the folded edges above and below the slit, and the turns of the cloth wound round the crown
+    wrap(slitTop + 0.002, 1.02, 0.05);
+    {                                                                       // the veil's upper hem, forward with the veil
+      const hem = wrap(slitBottom - 0.002, 1.025, 0.05);
+      hem.scale.y *= 1.08; hem.position.z = HOOD.z * 0.08;
+    }
+    wrap(0.047, 1.018, 0.04, 0.07); wrap(0.064, 1.015, 0.04, -0.06); wrap(0.079, 1.012, 0.035, 0.05);
+    // the knot at the back of the head
+    const knot = mesh(new THREE.SphereGeometry(0.022, 14, 10), hoodMat, hood, 0, 0.03, -0.098);
+    knot.scale.set(1.3, 0.85, 0.7);
+    // the cowl: the cloth gathered under the chin and round the neck, opening a little over the shoulders
+    const cowl = mesh(new THREE.LatheGeometry([[0.05, -0.07], [0.058, -0.105], [0.078, -0.145], [0.11, -0.183], [0.132, -0.205], [0.128, -0.215]]
+      .map(([r, y]) => new THREE.Vector2(r, y)), 32), hoodMat, hood, 0, 0, -0.014);
+    cowl.scale.z = 1.08;
+    // the tail hangs from the knot and swings behind as he runs
+    const tailMat = hoodMat.clone(); tailMat.userData.glyphRest = true;
+    hoodTail = new HangingCloth({
+      cols: 5, rows: 6, closed: false, material: tailMat, drape: 10, drapeMoving: 4,
+      rest: (i, j, out) => out.set((i / 4 - 0.5) * (0.06 + 0.01 * j), 0.02 - 0.055 * j, -0.104 - 0.01 * j)
+    });
+    hoodTail.mesh.name = 'hood-tail';
+    hood.add(hoodTail.mesh);
+  }
   hg.scale.setScalar(hh / 0.215);
   hg.position.set(head.x, head.y + hh * 0.45, head.z + 0.01);
   attach('Head', hg);
@@ -362,15 +427,20 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const neon = new THREE.MeshBasicMaterial({ color: 0xeef7ff });
   const halo = tagMat(new THREE.MeshBasicMaterial({ color: 0xa9dcff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
   const halos: THREE.Mesh[] = [];
-  const glowRing = (parent: THREE.Object3D, r: number, y: number, sy = 1) => {
-    const core = mesh(new THREE.TorusGeometry(r, 0.0055, 6, 64), neon, parent, 0, y, 0);
-    const soft = mesh(new THREE.TorusGeometry(r, 0.022, 6, 64), halo, parent, 0, y, 0);
+  // the sōhei's accents burn warm, like the bronze of his staff and his bell
+  const neonWarm = new THREE.MeshBasicMaterial({ color: 0xfff1d6 });
+  const haloWarm = tagMat(new THREE.MeshBasicMaterial({ color: 0xffb54a, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
+  const glowRing = (parent: THREE.Object3D, r: number, y: number, sy = 1, warm = false) => {
+    const core = mesh(new THREE.TorusGeometry(r, 0.0055, 6, 64), warm ? neonWarm : neon, parent, 0, y, 0);
+    const soft = mesh(new THREE.TorusGeometry(r, 0.022, 6, 64), warm ? haloWarm : halo, parent, 0, y, 0);
     for (const o of [core, soft]) { o.rotation.x = Math.PI / 2; o.scale.y = sy; }
     halos.push(soft);
     return [core, soft];
   };
   for (const o of glowRing(kasa, 0.238, -0.066)) o.userData.part = 'hat';
   glowRing(waist, 0.214, 0.005, 0.78);
+  // a ring of light round the hood's brow, just above the eye slit
+  glowRing(hood, HOOD.x * Math.sin(hoodTh(slitTop + 0.011)) * 1.04, slitTop + 0.011, HOOD.z / HOOD.x, true);
   {
     const draw = (blur: number) => {
       const c = document.createElement('canvas'); c.width = c.height = 128;
@@ -649,6 +719,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     pelvis: { a: new V(), b: new V(), r: 0.12 }, torso: { a: new V(), b: new V(), r: 0.17 }
   } satisfies Record<string, Capsule>;
   const legCaps = [caps.lThigh, caps.rThigh, caps.lShin, caps.rShin, caps.pelvis], armCaps = [caps.torso, caps.lThigh, caps.rThigh];
+  const hoodCaps = [caps.torso];
   function simulateRobe(dt: number) {
     const wp = (n: string, out: THREE.Vector3) => B[n].getWorldPosition(out);
     wp('LeftUpLeg', caps.lThigh.a); wp('LeftLeg', caps.lThigh.b); wp('RightUpLeg', caps.rThigh.a); wp('RightLeg', caps.rThigh.b);
@@ -658,6 +729,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     const moving = clamp(loco.spd / 4, 0, 1), ground = root.position.y + 0.03;
     if (robeG.visible) robe.update(dt, moving, legCaps, ground);
     for (const { cloth, g } of sleeves) if (g.visible) cloth.update(dt, moving, armCaps, ground);
+    if (hood.visible) hoodTail.update(dt, moving, hoodCaps, ground);
   }
 
   function update(dt: number, s: AvatarInput) {

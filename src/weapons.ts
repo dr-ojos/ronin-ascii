@@ -1,9 +1,10 @@
 // Blades sold by Masa, the smith of Kiri (shop.ts). Each one cuts differently: damage, reach, speed and
-// a gift of its own. Bought with mon; like the chest upgrades, they are lost when you fall.
+// a gift of its own. The sōhei's staves are here too: each class only wields its own forms (classes.ts). Bought with mon; like the chest upgrades, they are lost when you fall.
 // player.ts reads the current blade through the helpers below; applyWeapon() reshapes the katana mesh.
 import { bladeMat, showWeaponModel } from './avatar';
 import { BLADE_PROFILE } from './samurai';
 import { player, state } from './state';
+import { canWield, cls } from './classes';
 import { BLADE_LAYOUT } from './weapon-models';
 import type { WeaponForm } from './types';
 
@@ -16,6 +17,8 @@ export interface Weapon {
   len: number; glow: number; steel: number;
   /** life healed per oni struck, lightning charge per oni struck */
   heal?: number; charge?: number;
+  /** staves: how long each blow dazes the oni it strikes (multiplier) */
+  daze?: number;
   /** how it shines in use (katana-fx.ts): trail / halo / arc colour, sparks hot → cool, spark gravity,
    *  halo thickness, how bright the trail is, and a flourish of its own */
   fx: {
@@ -58,17 +61,29 @@ export const WEAPONS: Weapon[] = [
   { id: 'espada-montana', name: 'Quebramontes', desc: 'gran hoja ancha: tajo fuerte de gran daño y barrido amplio', form: 'broad', price: 6700, tier: 3, dmg: 2.28, reach: 0.7, speed: 1.23, len: 1.34, glow: 0xffbd6a, steel: 0xb4a099,
     fx: { glow: 0xffad61, hot: 0xffe7b1, cool: 0xf66d42, gravity: 8, halo: 1.8, trail: 2.15, sparks: [0xff985d, 0xffd664, 0xff648f] } },
   { id: 'aurora', name: 'Espada de la Aurora', desc: 'hoja iridiscente: tajos veloces que también cargan el rayo', price: 7900, tier: 3, dmg: 1.85, reach: 0.5, speed: 0.76, len: 1.2, glow: 0x5afdd2, steel: 0xa7d4dc, charge: 0.02,
-    fx: { glow: 0x83ffe5, hot: 0xbaffed, cool: 0xaf53ff, gravity: 1.5, halo: 1.8, trail: 2.2, sparks: [0x32ffc2, 0x4ebaff, 0xff67e6], extra: 'stars' } }
+    fx: { glow: 0x83ffe5, hot: 0xbaffed, cool: 0xaf53ff, gravity: 1.5, halo: 1.8, trail: 2.2, sparks: [0x32ffc2, 0x4ebaff, 0xff67e6], extra: 'stars' } },
+  // ---- the sōhei's staves: held in the middle with both hands; every blow dazes (player.ts)
+  { id: 'bo', name: 'Bō del peregrino', desc: 'bastón de roble con regatones de bronce: golpes amplios que aturden', form: 'staff', price: 0, tier: 0, dmg: 1, reach: 0.3, speed: 1, len: 0.9, glow: 0xffc46b, steel: 0xc9a979,
+    fx: { glow: 0xffcf7a, hot: 0xfff1c4, cool: 0xff8a2a, gravity: 6, halo: 1.1, trail: 1.2 } },
+  { id: 'shakujo', name: 'Shakujō del templo', desc: 'bastón de anillas que tintinean: cada golpe que acierta carga la técnica', form: 'staff', price: 950, tier: 1.25, dmg: 1.15, reach: 0.4, speed: 0.95, len: 0.95, glow: 0xffe48a, steel: 0xe8cf86, charge: 0.03,
+    fx: { glow: 0xffe27a, hot: 0xfff6cf, cool: 0xffa632, gravity: 3, halo: 1.3, trail: 1.5, sparks: [0xffe063, 0xffb347, 0xfff2b0] } },
+  { id: 'tetsubo-monje', name: 'Bastón de hierro', desc: 'hierro negro anillado: lento, pero aturde mucho más', form: 'staff', price: 2100, tier: 1.85, dmg: 1.6, reach: 0.5, speed: 1.18, len: 1, glow: 0xff7b4a, steel: 0x6f6660, daze: 1.6,
+    fx: { glow: 0xff8450, hot: 0xffd0a0, cool: 0xd8401c, gravity: 9, halo: 1.45, trail: 1.7, sparks: [0xff6a3a, 0xffb04d, 0xff4f6a] } },
+  { id: 'bishamon', name: 'Bastón de Bishamon', desc: 'del guardián del norte: gran daño y cada oni que golpeas te cura 2', form: 'staff', price: 5600, tier: 2.8, dmg: 2.05, reach: 0.6, speed: 0.92, len: 1, glow: 0x8fb6ff, steel: 0xd6e2ff, heal: 2, daze: 1.25,
+    fx: { glow: 0x9cc0ff, hot: 0xeaf2ff, cool: 0x5b6cff, gravity: 2, halo: 1.7, trail: 2.1, sparks: [0x8fc4ff, 0xb08cff, 0xfff0b0], extra: 'stars' } }
 ];
 const byId = new Map(WEAPONS.map(w => [w.id, w]));
-export const weapon = () => byId.get(state.weapon) || WEAPONS[0];
+export const weapon = () => byId.get(state.weapon) || byId.get(cls().weapon)!;
+/** what Masa can sell you: the forms your class wields */
+export const forSale = () => WEAPONS.filter(w => canWield(w.form));
 export const owns = (id: string) => state.owned.includes(id);
 
 /** a line of numbers for the shop: compared with the plain katana */
 export function weaponStats(w: Weapon) {
   const sp = w.form === 'broad' ? 'lenta' : w.form === 'dual' ? 'doble tajo' : w.speed < 0.8 ? 'muy rápida' : w.speed < 0.97 ? 'rápida' : w.speed > 1.15 ? 'lenta' : 'normal';
   const reach = w.reach ? `${w.reach > 0 ? '+' : '−'}${Math.abs(w.reach).toFixed(1)} m` : 'normal';
-  return `daño x${w.dmg.toFixed(2).replace(/\.?0+$/, '')} · alcance ${reach} · ${sp}`;
+  const daze = w.form === 'staff' ? ` · aturde${w.daze && w.daze > 1 ? ' mucho' : ''}` : '';
+  return `daño x${w.dmg.toFixed(2).replace(/\.?0+$/, '')} · alcance ${reach} · ${sp}${daze}`;
 }
 
 export function buy(w: Weapon): 'ok' | 'poor' | 'owned' {
@@ -90,7 +105,8 @@ export function cycleWeapon() {
   equip(list[(i + 1) % list.length].id);
   return weapon();
 }
-export function resetWeapons() { state.owned = ['katana']; state.weapon = 'katana'; applyWeapon(); }
+/** a new run (or another class): only the weapon your class starts with */
+export function resetWeapons() { const id = cls().weapon; state.owned = [id]; state.weapon = id; applyWeapon(); }
 
 // ------------------------------------------------------------ the blade mesh
 let displayed = WEAPONS[0];

@@ -41,6 +41,8 @@ root.traverse(o => { const m = o as THREE.Mesh; if (!kasaMesh && m.isMesh && m.u
 // the simulated robe (rig.ts): its colour follows the armour worn
 const robeMesh = root.getObjectByName('robe') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | undefined;
 const robeMat = robeMesh?.material, robeMap = robeMat?.map ?? null;
+// avatar.ts makes the waves glow faintly too (emissiveMap): plain robes drop both
+const robeGlowMap = robeMat?.emissiveMap ?? null;
 /** put `obj` beside `twin` (same bone, same place, turn and size), so it follows it exactly */
 function overlay(id: string, twin: THREE.Object3D, obj: THREE.Object3D) {
   finish(obj);
@@ -215,6 +217,7 @@ function build(a: Armor) {
       const mon = new THREE.Mesh(new THREE.CircleGeometry(0.03, 24), metal);
       mon.position.set(0, y0, rad).addScaledVector(nrm, 0.003); mon.rotation.x = -(Math.PI / 2 - slope); g.add(mon);
       const monIn = new THREE.Mesh(new THREE.RingGeometry(0.012, 0.02, 24), lacquer); monIn.position.copy(mon.position).addScaledVector(nrm, 0.0015); monIn.rotation.x = mon.rotation.x; g.add(monIn);
+      g.userData.helmet = true;   // the sōhei keeps his hood instead (dressUp)
       overlay(a.id, kasaMesh, g);
       return;
     } else {
@@ -276,72 +279,146 @@ function build(a: Armor) {
         }
       }
       g.position.set(H.x, H.y + hh * 0.51, H.z + 0.01);   // rim on the brow line, the bowl over the crown
+    g.userData.helmet = true;
     hang(a.id, 'Head', g);
     }
   }
 }
 
-function buildMonk(a: Armor) {
-  const { linen, mantle, sash } = a.robe!;
+// ------------------------------------------------------------ monks' habits
+// Two habits are cut from the same pattern: the sōhei's own (what the warrior monk wears with no plated
+// armour on: ink-dark, its colours from his look) and the wandering monk's robe sold by Masa (ochre
+// linen, anyone can wear it). A habit over the body (the simulated robe and sleeves below it take its
+// colour), a kesa of sewn patches over the left shoulder with gilded hems and a gold ring, a white
+// collar, a broad sash with a cord belt and a band of warm neon, a long rosary of big wooden beads whose
+// master bead glows, and a kanji in neon on the back. The sōhei's hood is rig.ts's.
+const SOHEI = 'sohei-garb';
+interface HabitColours { habit: number; kesa: number; belt: number; cord: number; mark: string; roles?: boolean }
+const kesaTex = canvasTex(128, 256, x => {
+  // patchwork: rows of rectangles of slightly different shades, with dark seams between them
+  x.fillStyle = '#4a4a4a'; x.fillRect(0, 0, 128, 256);
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 3; c++) {
+    const v = 170 + ((r * 7 + c * 13) % 5) * 17;
+    x.fillStyle = `rgb(${v},${v},${v})`;
+    x.fillRect(c * 43 + 3, r * 32 + 3, 37, 26);
+  }
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, 4, 256); x.fillRect(124, 0, 4, 256);   // bright hemmed edges
+});
+const NEON_CORE = 0xfff1d6;
+const neonHalo = (o: THREE.MeshBasicMaterialParameters) => tagMat(new THREE.MeshBasicMaterial({
+  color: 0xffb54a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, ...o }), CLS.fx);
+function buildHabit(id: string, c: HabitColours) {
   if (!rigChest || !rigWaist) return;
-  sets.set(a.id, []);
-  const cloth = (color: number) => new THREE.MeshStandardMaterial({ color, roughness: 0.94, emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide });
-  const ochre = cloth(linen), outer = cloth(mantle), beltMat = cloth(sash), collar = cloth(0xdbbe8f), beads = cloth(0x5c3822);
-  const body = new THREE.Group(); body.name = 'monk-robe';
+  const glows: THREE.Mesh[] = [];
+  sets.set(id, []);
+  const cloth = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
+    new THREE.MeshStandardMaterial({ color, roughness: 0.94, emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide, ...o });
+  const habit = cloth(c.habit), kesa = cloth(c.kesa, { map: kesaTex }), collar = cloth(0xe6e0d0), cord = cloth(c.cord), sash = cloth(c.belt);
+  const wood = new THREE.MeshStandardMaterial({ color: 0x3b2316, roughness: 0.45, metalness: 0.05 }), tassel = cloth(0xb3241c);
+  const gilt = new THREE.MeshStandardMaterial({ color: 0xe0b450, metalness: 0.85, roughness: 0.3 });
+  // the sōhei's colours come from his look (look.ts): habit = "cloth", kesa = "lacquer"
+  if (c.roles) { habit.userData.role = 'cloth'; kesa.userData.role = 'lacquer'; }
+  const body = new THREE.Group(); body.name = `${id}-habit`;
   const torso = new THREE.Mesh(new THREE.LatheGeometry([
-    [0.175, -0.268], [0.181, -0.16], [0.21, -0.03], [0.218, 0.09], [0.202, 0.168], [0.146, 0.234], [0.093, 0.262]
-  ].map(([r, y]) => new THREE.Vector2(r, y)), 32), ochre);
+    [0.178, -0.268], [0.184, -0.16], [0.213, -0.03], [0.221, 0.09], [0.205, 0.168], [0.148, 0.234], [0.094, 0.262]
+  ].map(([r, y]) => new THREE.Vector2(r, y)), 32), habit);
   torso.scale.z = 0.74;
   body.add(torso);
-
-  function trim(q: THREE.Vector3[], radius: number, mat: THREE.Material) {
+  const tube = (q: THREE.Vector3[], radius: number, mat: THREE.Material) => {
     const path = new THREE.CatmullRomCurve3(q);
-    body.add(new THREE.Mesh(new THREE.TubeGeometry(path, 20, radius, 6), mat));
+    body.add(new THREE.Mesh(new THREE.TubeGeometry(path, 24, radius, 6), mat));
     return path;
+  };
+  // the white under-collar crossing left over right
+  tube([new V(-0.080, 0.258, 0.026), new V(-0.084, 0.207, 0.103), new V(-0.047, 0.139, 0.146), new V(0.039, 0.062, 0.166)], 0.014, collar);
+  tube([new V(0.078, 0.256, 0.029), new V(0.083, 0.193, 0.116), new V(0.039, 0.126, 0.162), new V(-0.068, -0.025, 0.154)], 0.015, collar);
+  // the kesa: a broad band of patches from the left shoulder down across the chest to the right hip,
+  // and round the back the same way
+  for (const back of [false, true]) {
+    const z = back ? -1 : 1;
+    const path = new THREE.CatmullRomCurve3([
+      new V(0.13, 0.262, 0), new V(0.128, 0.205, 0.13 * z), new V(0.07, 0.09, 0.184 * z), new V(-0.06, -0.03, 0.184 * z), new V(-0.178, -0.17, 0.122 * z)
+    ]);
+    const strip = new THREE.PlaneGeometry(1, 1, 4, 30), v = strip.attributes.position;
+    for (let i = 0; i < v.count; i++) {
+      const side = v.getX(i), t = v.getY(i) + 0.5, p = path.getPoint(t), d = path.getTangent(t), span = 0.15 - t * 0.02;
+      v.setXYZ(i, p.x + d.y * side * span, p.y - d.x * side * span, p.z - z * 0.014 * Math.abs(2 * side));
+    }
+    strip.computeVertexNormals();
+    body.add(new THREE.Mesh(strip, kesa));
+    // gilded thread along both hems of the band
+    for (const side of [-0.5, 0.5]) {
+      const hem: THREE.Vector3[] = [];
+      for (let k = 0; k <= 12; k++) {
+        const t = k / 12, p = path.getPoint(t), d = path.getTangent(t), span = 0.15 - t * 0.02;
+        hem.push(new V(p.x + d.y * side * span, p.y - d.x * side * span, p.z - z * 0.012));
+      }
+      body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hem), 30, 0.0045, 5), gilt));
+    }
   }
-  // Two cloth lapels meet in a V, with the kesa crossing over one shoulder.
-  trim([new V(-0.080, 0.258, 0.026), new V(-0.084, 0.207, 0.103), new V(-0.047, 0.139, 0.144), new V(0.039, 0.062, 0.164)], 0.013, collar);
-  trim([new V(0.078, 0.256, 0.029), new V(0.083, 0.193, 0.114), new V(0.039, 0.126, 0.160), new V(-0.068, -0.025, 0.152)], 0.014, collar);
-  const sashPath = new THREE.CatmullRomCurve3([
-    new V(0.125, 0.24, 0), new V(0.117, 0.195, 0.102), new V(0.063, 0.086, 0.154), new V(-0.057, -0.032, 0.151), new V(-0.147, -0.171, 0.095)
-  ]);
-  const strip = new THREE.PlaneGeometry(1, 1, 4, 28);
-  const vertices = strip.attributes.position;
-  for (let i = 0; i < vertices.count; i++) {
-    const side = vertices.getX(i), t = vertices.getY(i) + 0.5;
-    const p = sashPath.getPoint(t), dir = sashPath.getTangent(t);
-    const span = 0.135 - t * 0.015;
-    vertices.setXYZ(i, p.x + dir.y * side * span, p.y - dir.x * side * span, p.z - 0.027 * Math.abs(2 * side) + 0.005 * Math.cos(side * 20));
+  // the gilded ring that fastens the kesa on the shoulder, with its cord
+  const clasp = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.0075, 8, 22), gilt);
+  clasp.position.set(0.1, 0.2, 0.15); clasp.rotation.set(0.3, 0.5, 0); body.add(clasp);
+  tube([new V(0.1, 0.2, 0.15), new V(0.07, 0.17, 0.17), new V(0.04, 0.12, 0.18)], 0.004, cord);
+  // the juzu: big beads round the neck hanging down to the belly, a bigger bead and a red tassel at the bottom
+  const beads = new THREE.CatmullRomCurve3([
+    new V(-0.09, 0.275, -0.03), new V(-0.115, 0.2, 0.125), new V(-0.075, 0.07, 0.2), new V(0, 0.0, 0.212),
+    new V(0.075, 0.07, 0.2), new V(0.115, 0.2, 0.125), new V(0.09, 0.275, -0.03), new V(0, 0.295, -0.11)
+  ], true);
+  const bead = new THREE.SphereGeometry(0.0145, 10, 8);
+  for (let i = 0; i < 30; i++) { const b = new THREE.Mesh(bead, wood); b.position.copy(beads.getPointAt(i / 30)); body.add(b); }
+  const big = new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 10), new THREE.MeshBasicMaterial({ color: NEON_CORE })); big.position.set(0, -0.015, 0.216); body.add(big);
+  const bigGlow = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), neonHalo({ opacity: 0.4 })); bigGlow.position.copy(big.position); body.add(bigGlow); glows.push(bigGlow);
+  const fringe = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.07, 8, 1, true), tassel); fringe.position.set(0, -0.07, 0.214); body.add(fringe);
+  // the habit's mark on the back, in warm neon like the sōhei's brow ring (rig.ts), as the ronin wears 浪
+  {
+    const draw = (blur: number) => canvasTex(128, 128, x => {
+      x.filter = blur ? `blur(${blur}px)` : 'none';
+      x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = 'bold 92px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif';
+      x.fillText(c.mark, 64, 68);
+    });
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.13), new THREE.MeshBasicMaterial({ map: draw(0), color: NEON_CORE, alphaTest: 0.45, side: THREE.DoubleSide }));
+    const soft = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.18), neonHalo({ map: draw(7), opacity: 0.85, side: THREE.DoubleSide }));
+    core.position.set(0.035, -0.1, -0.2); soft.position.set(0.035, -0.1, -0.204);   // low on the back, worn over the kesa like an emblem
+    core.rotation.y = soft.rotation.y = Math.PI;
+    body.add(core, soft); glows.push(soft);
   }
-  strip.computeVertexNormals(); body.add(new THREE.Mesh(strip, outer));
-  const cord = trim([new V(-0.071, 0.245, 0.047), new V(-0.085, 0.154, 0.146), new V(0, 0.074, 0.17), new V(0.085, 0.154, 0.146), new V(0.071, 0.245, 0.047)], 0.003, beltMat);
-  const bead = new THREE.SphereGeometry(0.009, 8, 6);
-  for (let i = 0; i < 19; i++) {
-    const b = new THREE.Mesh(bead, beads); b.position.copy(cord.getPointAt(i / 18)); body.add(b);
-  }
-  overlay(a.id, rigChest, body);
+  overlay(id, rigChest, body);
 
-  const waist = new THREE.Group(); waist.name = 'monk-sash';
-  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.196, 0.194, 0.073, 32, 1, true), beltMat);
+  const waist = new THREE.Group(); waist.name = `${id}-belt`;
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.198, 0.196, 0.075, 32, 1, true), sash);
   belt.scale.z = 0.78; belt.position.y = 0.005; waist.add(belt);
-  const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.025, 0.009, 24, 6), beltMat);
-  knot.position.set(-0.102, 0.005, 0.141); waist.add(knot);
-  // (the habit's long skirt is the ronin's simulated robe, dyed linen by dressUp)
-  overlay(a.id, rigWaist, waist);
+  const rope = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.011, 6, 40), cord);
+  rope.rotation.x = Math.PI / 2; rope.scale.y = 0.78; rope.position.y = 0.022; waist.add(rope);
+  const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.022, 0.008, 24, 6), cord);
+  knot.position.set(0.1, 0.02, 0.14); waist.add(knot);
+  for (const s of [-1, 1]) {   // the cord's two loose ends
+    const end = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.16, 6), cord);
+    end.position.set(0.1 + s * 0.015, -0.06, 0.15); end.rotation.z = s * 0.12; waist.add(end);
+  }
+  // a band of warm neon along the lower edge of the belt
+  for (const [r, mat, tube] of [[0.2, new THREE.MeshBasicMaterial({ color: NEON_CORE }), 0.0055], [0.2, neonHalo({ opacity: 0.45 }), 0.022]] as const) {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 6, 64), mat);
+    band.rotation.x = Math.PI / 2; band.scale.y = 0.78; band.position.y = -0.024; waist.add(band);
+    if (mat.blending === THREE.AdditiveBlending) glows.push(band);
+  }
+  overlay(id, rigWaist, waist);
 
   for (const side of ['Left', 'Right']) {
     const shoulder = P(side + 'Arm'), elbow = P(side + 'ForeArm');
-    const sleeve = new THREE.Group(); sleeve.name = `monk-sleeve-${side}`;
+    const sleeve = new THREE.Group(); sleeve.name = `${id}-sleeve-${side}`;
     const h = shoulder.distanceTo(elbow) * 0.94;
-    sleeve.add(new THREE.Mesh(new THREE.CylinderGeometry(0.079, 0.105, h, 18, 1, true), side === 'Left' ? outer : ochre));
-    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.101, 0.007, 5, 20), beltMat);
+    sleeve.add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.108, h, 18, 1, true), habit));
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.106, 0.006, 5, 22), gilt);
     cuff.rotation.x = Math.PI / 2; cuff.position.y = -h / 2; sleeve.add(cuff);
+    // the kesa covers the left shoulder
+    if (side === 'Left') { const k = new THREE.Mesh(new THREE.CylinderGeometry(0.084, 0.095, h * 0.45, 18, 1, true), kesa); k.position.y = h * 0.27; sleeve.add(k); }
     sleeve.position.copy(shoulder).lerp(elbow, 0.40);
     sleeve.quaternion.setFromUnitVectors(new V(0, 1, 0), shoulder.clone().sub(elbow).normalize());
-    hang(a.id, side + 'Arm', sleeve);
-
-    // (the rigid hem tubes round each thigh are gone: the simulated linen robe hangs there now)
+    hang(id, side + 'Arm', sleeve);
   }
+  for (const g of glows) g.castShadow = g.receiveShadow = false;   // halos glow round the figure, out of its mask
 }
 
 // ---- auras: they ride with the samurai, not with a bone
@@ -367,39 +444,55 @@ function buildAura(kind: 'foxfire' | 'gold') {
 }
 
 for (const a of ARMORS) {
-  if (a.robe) buildMonk(a);
+  // the wandering monk's robe: ochre linen, a darker mantle for the kesa, 禅 (zen) on the back
+  if (a.robe) buildHabit(a.id, { habit: a.robe.linen, kesa: a.robe.mantle, belt: a.robe.sash, cord: 0xdcc79a, mark: '禅' });
   else if (a.look) build(a);
 }
+// the sōhei's own habit, coloured by his look, 僧 (monk) on the back
+buildHabit(SOHEI, { habit: 0x1c1d24, kesa: 0xd8a630, belt: 0x23222a, cord: 0xd9cfb4, mark: '僧', roles: true });
 for (const a of ARMORS) if (a.look?.aura) auras.set(a.id, buildAura(a.look.aura));
+
+
 
 /** show the armour you wear (and its helmet instead of the kasa), with your chosen colours */
 let activeAura: THREE.Group | undefined;
 export function dressUp(cur = armor()) {
   applyLook(root);
-  for (const [id, list] of sets) for (const o of list) o.visible = id === cur.id;
+  // the sōhei wears his habit when he has no armour of his own on, and always keeps his hood
+  const sohei = state.cls === 'sohei';
+  const worn = sohei && !sets.has(cur.id) ? SOHEI : cur.id;
+  for (const [id, list] of sets) for (const o of list) o.visible = id === worn;
   for (const [id, g] of auras) g.visible = id === cur.id;
   activeAura = auras.get(cur.id);
-  const helmet = !!cur.look?.helmet;
-  const dressed = sets.has(cur.id), monk = dressed && !!cur.robe;
+  const helmet = !!cur.look?.helmet && !sohei;
+  const dressed = sets.has(worn), monk = dressed && (!!cur.robe || worn === SOHEI);
   sam.fitOutfit?.(dressed);
   roninRobe.uRoninOutfit.value = monk ? 2 : dressed ? 1 : 0;
-  if (dressed) roninRobe.uRoninLinen.value.set(cur.robe?.linen ?? cur.look!.lame);
+  const habit = worn === SOHEI ? opt('cloth').c : undefined;
+  if (dressed) roninRobe.uRoninLinen.value.set(habit ?? cur.robe?.linen ?? cur.look!.lame);
   for (const o of baseLayers) {
     const layer = o.userData.equipmentLayer;
     // the long cloth robe stays under every set (a long hakama under the armour, the monk's habit);
     // the hanging kimono sleeves only show without plates on the arms
     o.visible = layer === 'robe' ? true : layer === 'sleeves' ? !dressed || monk
-      : layer === 'scarf' || layer === 'wrapping' ? !monk : !dressed;
+      : layer === 'scarf' || layer === 'wrapping' ? !monk && !sohei : !dressed;
   }
   if (dressed && robeMat) {
-    if (monk) robeMat.color.set(cur.robe!.linen);
+    if (habit !== undefined) robeMat.color.set(habit);
+    else if (monk) robeMat.color.set(cur.robe!.linen);
     else robeMat.color.set(cur.look!.lame).multiplyScalar(0.42).lerp(new THREE.Color(cur.look!.lace), 0.22);
-    robeMat.map = null; robeMat.needsUpdate = true;
-  } else if (robeMat && robeMap) { robeMat.map = robeMap; robeMat.needsUpdate = true; }
+    robeMat.map = robeMat.emissiveMap = null; robeMat.emissive.copy(robeMat.color); robeMat.needsUpdate = true;
+  } else if (robeMat && robeMap) {
+    robeMat.map = robeMap; robeMat.emissiveMap = robeGlowMap;
+    if (robeGlowMap) robeMat.emissive.set(0xffffff);
+    robeMat.needsUpdate = true;
+  }
   root.traverse(o => {
-    if (o.userData.part === 'hat') o.visible = !helmet && !monk && !opt('hat').hidden;
-    if (monk && o.userData.part === 'mask') o.visible = false;
-    if (o.userData.part === 'topknot') o.visible = !helmet;   // the helmet covers the knot
+    if (o.userData.part === 'hat') o.visible = !helmet && !monk && !sohei && !opt('hat').hidden;
+    if ((monk || sohei) && o.userData.part === 'mask') o.visible = false;
+    if (o.userData.part === 'topknot') o.visible = !helmet && !sohei;   // the helmet covers the knot; the monk is shaven
+    if (o.userData.part === 'hood') o.visible = sohei;
+    if (o.userData.helmet) o.visible = !sohei && o.visible;
   });
 }
 dressUp();

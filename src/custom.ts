@@ -2,7 +2,8 @@
 // Opened from the title screen or from the smith's shop. The camera comes close and circles the
 // samurai while it is open (camera.ts), and every change shows at once.
 import { openMenu, closeMenu, menuStatus, type MenuRow } from './menu';
-import { look, LOOK_OPTIONS, LOOK_LABELS, opt, cycleLook, randomLook, saveLook, type LookPart } from './look';
+import { look, LOOK_PARTS, opt, cycleLook, randomLook, saveLook, type LookPart } from './look';
+import { cls } from './classes';
 import { dressUp } from './outfit';
 import { overlay } from './hud';
 import { state } from './state';
@@ -12,11 +13,13 @@ function rows(): MenuRow[] {
     label: 'Nombre',
     input: { value: look.name, max: 16, set(v) { look.name = v; saveLook(); } }
   }];
-  for (const k of Object.keys(LOOK_OPTIONS) as LookPart[]) {
+  const parts = LOOK_PARTS[state.cls];
+  for (const k of Object.keys(parts) as LookPart[]) {
     const step = (d: number) => () => { cycleLook(k, d); dressUp(); };
-    r.push({ label: LOOK_LABELS[k], value: opt(k).name, cls: 'y', left: step(-1), right: step(1), act: step(1) });
+    r.push({ label: parts[k]!, value: opt(k).name, cls: 'y', left: step(-1), right: step(1), act: step(1) });
   }
-  r.push({ label: 'Al azar', note: 'un ronin cualquiera de los caminos', act() { randomLook(); dressUp(); menuStatus('¿ así ?'); } });
+  r.push({ label: 'Al azar', note: state.cls === 'sohei' ? 'un monje cualquiera de las montañas' : 'un ronin cualquiera de los caminos',
+    act() { randomLook(); dressUp(); menuStatus('¿ así ?'); } });
   r.push({ label: 'Listo', act: closeMenu });
   return r;
 }
@@ -24,11 +27,11 @@ function rows(): MenuRow[] {
 /** opens the look menu; `back` runs when it closes (the shop reopens itself) */
 export function openCustom(back?: () => void) {
   openMenu({
-    id: 'custom', title: '— TU RONIN —',
+    id: 'custom', title: `— TU ${cls().name.toUpperCase()} —`,
     sub: () => 'así te verán los onis antes de caer',
     rows,
     foot: '↑ ↓ elegir · ← → cambiar · ESC listo',
-    onClose() { if (!look.name.trim()) { look.name = 'Ronin'; saveLook(); } back?.(); }
+    onClose() { if (!look.name.trim()) { look.name = cls().name; saveLook(); } back?.(); }
   }, 1);
 }
 

@@ -21,7 +21,7 @@ export const ARMORS: Armor[] = [
   { id: 'hayate', name: 'Armadura de Hayate', desc: 'peto ligero de explorador: corres más rápido', price: 800, tier: 1.2, hp: 20, guard: 0.08, run: 1.12,
     look: { lame: 0x385e38, lace: 0xb6c47e, metal: 0xc3a564, sode: 0.62, helmet: 'jingasa' } },
   { id: 'monje', name: 'Túnica del monje errante', desc: 'hábito de lino con manto ocre: permite esquivar y recupera vida poco a poco', price: 1250, tier: 1.25,
-    hp: 18, guard: 0.05, dash: 0.82, regen: 0.45, robe: { linen: 0xa96935, mantle: 0xc58336, sash: 0x51372f } },
+    hp: 18, guard: 0.05, dash: 0.82, regen: 0.45, robe: { linen: 0xb0743a, mantle: 0x7e3222, sash: 0x3d2a24 } },
   { id: 'kitsune',  name: 'Armadura del zorro',     desc: 'ligera: esquivas mucho más a menudo',         price: 1500, tier: 1.5, hp: 30,  guard: 0.12, dash: 0.7, run: 1.05,
     look: { lame: 0xf2eee6, lace: 0xe0202e, metal: 0xd0d6e0, sode: 1, aura: 'foxfire' } },
   { id: 'garza', name: 'Armadura de la Garza', desc: 'placas claras y ligeras para correr y esquivar', price: 1850, tier: 1.75, hp: 40, guard: 0.15, dash: 0.82, run: 1.09,
@@ -72,7 +72,7 @@ export function buyArmor(a: Armor): 'ok' | 'poor' | 'owned' {
   state.mon -= a.price; state.ownedArmor.push(a.id); wearArmor(a.id, true);
   return 'ok';
 }
-/** a new run: back to the travelling kimono (encounters.reset has already set the life back to 100) */
+/** a new run: back to the travelling clothes (encounters.reset has already set the class's starting life) */
 export function resetArmor() { state.armor = 'kimono'; state.ownedArmor = ['kimono']; }
 export function updateArmor(dt: number) {
   const r = armor().regen;

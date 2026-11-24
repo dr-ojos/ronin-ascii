@@ -1,7 +1,11 @@
 // The ronin's look, chosen by the player (custom.ts): name, lacquer of the armour bands, kimono and sash,
-// scarf, hat and mask. Saved in the browser. Applied to the avatar through the roles its materials and
-// parts carry (rig.ts / samurai.ts tag them: userData.role on materials, userData.part on meshes).
+// scarf, hat and mask. Saved in the browser, one look per class (classes.ts): the sōhei reuses the same
+// palettes for his habit (cloth), his kesa (lacquer) and his hood (scarf). Applied to the avatar through
+// the roles its materials and parts carry (rig.ts / samurai.ts tag them: userData.role on materials, userData.part on meshes).
 import * as THREE from 'three';
+import { state } from './state';
+import './classes';   // reads the stored class before the look is loaded below
+import type { ClassId } from './classes';
 
 export interface Option { name: string; c: number; hidden?: boolean }
 export const LOOK_OPTIONS = {
@@ -18,20 +22,34 @@ export const LOOK_OPTIONS = {
   mask: [{ name: 'sin máscara', c: 0xc8955a, hidden: true }, { name: 'laca roja', c: 0xb0201a }, { name: 'hueso', c: 0xe8e0cc }, { name: 'negra', c: 0x18161a }, { name: 'oro', c: 0xd8a630 }]
 } satisfies Record<string, Option[]>;
 export type LookPart = keyof typeof LOOK_OPTIONS;
-export const LOOK_LABELS: Record<LookPart, string> = { lacquer: 'Lacado', cloth: 'Kimono y faja', scarf: 'Bufanda', hat: 'Sombrero', mask: 'Máscara' };
+/** the parts each class can restyle, in menu order, and what they are called on it */
+export const LOOK_PARTS: Record<ClassId, Partial<Record<LookPart, string>>> = {
+  ronin: { lacquer: 'Lacado', cloth: 'Kimono y faja', scarf: 'Bufanda', hat: 'Sombrero', mask: 'Máscara' },
+  sohei: { cloth: 'Hábito', lacquer: 'Kesa', scarf: 'Capucha' }
+};
 
 export type Look = { name: string } & Record<LookPart, number>;
 const KEY = 'ronin-ascii.look';
-const DEFAULT: Look = { name: 'Ronin', lacquer: 0, cloth: 0, scarf: 0, hat: 0, mask: 0 };
-export const look: Look = { ...DEFAULT };
-try { Object.assign(look, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* no storage */ }
-for (const k of Object.keys(LOOK_OPTIONS) as LookPart[]) look[k] = ((Math.round(Number(look[k])) || 0) % LOOK_OPTIONS[k].length + LOOK_OPTIONS[k].length) % LOOK_OPTIONS[k].length;
-look.name = String(look.name || DEFAULT.name).slice(0, 16);
+const keyOf = (c: ClassId) => c === 'ronin' ? KEY : `${KEY}.${c}`;
+// the sōhei starts in an ink-black habit, a golden kesa and a white hood
+const DEFAULTS: Record<ClassId, Look> = {
+  ronin: { name: 'Ronin', lacquer: 0, cloth: 0, scarf: 0, hat: 0, mask: 0 },
+  sohei: { name: 'Benkei', lacquer: 3, cloth: 2, scarf: 2, hat: 3, mask: 0 }
+};
+export const look: Look = { ...DEFAULTS.ronin };
+/** the look saved for a class (or its default) */
+export function loadLook(c: ClassId = state.cls) {
+  Object.assign(look, DEFAULTS[c]);
+  try { Object.assign(look, JSON.parse(localStorage.getItem(keyOf(c)) || '{}')); } catch { /* no storage */ }
+  for (const k of Object.keys(LOOK_OPTIONS) as LookPart[]) look[k] = ((Math.round(Number(look[k])) || 0) % LOOK_OPTIONS[k].length + LOOK_OPTIONS[k].length) % LOOK_OPTIONS[k].length;
+  look.name = String(look.name || DEFAULTS[c].name).slice(0, 16);
+}
+loadLook();
 
-export function saveLook() { try { localStorage.setItem(KEY, JSON.stringify(look)); } catch { /* ignore */ } }
+export function saveLook() { try { localStorage.setItem(keyOf(state.cls), JSON.stringify(look)); } catch { /* ignore */ } }
 export const opt = (k: LookPart) => LOOK_OPTIONS[k][look[k]] as Option;
 export function cycleLook(k: LookPart, d: number) { const n = LOOK_OPTIONS[k].length; look[k] = (look[k] + d + n) % n; saveLook(); }
-export function randomLook() { for (const k of Object.keys(LOOK_OPTIONS) as LookPart[]) look[k] = Math.floor(Math.random() * LOOK_OPTIONS[k].length); saveLook(); }
+export function randomLook() { for (const k of Object.keys(LOOK_PARTS[state.cls]) as LookPart[]) look[k] = Math.floor(Math.random() * LOOK_OPTIONS[k].length); saveLook(); }
 
 /** recolour / show-hide the avatar's parts to match the current look */
 export function applyLook(root: THREE.Object3D) {
