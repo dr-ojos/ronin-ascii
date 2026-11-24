@@ -12,6 +12,7 @@ import { enemies, KINDS } from './enemies';
 import { sfx } from './sfx';
 import { TECHNIQUES } from './techniques';
 import { cls } from './classes';
+import { freePoints, level, MAX_LEVEL, xpFrac } from './progression';
 
 const hud = document.getElementById('hud')!, msgEl = document.getElementById('msg')!, promptEl = document.getElementById('prompt')!;
 export const overlay = document.getElementById('overlay')!;
@@ -53,8 +54,15 @@ export function updateHud(dt: number) {
   const foeBar = foe
     ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>${KINDS[foe.kind].boss ? ` · FASE ${foe.enraged ? 'II' : 'I'}` : ''}\n  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n${bossHud(foe)}`
     : '';
+  // the level and the road to the next one (progression.ts); the bar glows for a moment after a level-up
+  const xf = Math.floor(xpFrac() * 14), lv = level(), free = freePoints();
+  const xpBar = lv >= MAX_LEVEL
+    ? `[<span class="lv">${'#'.repeat(14)}</span>] <span class="lv">LEYENDA</span>`
+    : `[<span class="xp">${'#'.repeat(xf)}</span>${'-'.repeat(14 - xf)}] <span class="d">${Math.floor(xpFrac() * 100)} %</span>`;
+  const pts = free ? ` <span class="pts">+${free} U</span>` : '';
   hud.innerHTML =
     `<span class="r">${cls().kanji}</span> ${esc(look.name.toUpperCase() || cls().name.toUpperCase())}\n` +
+    `<span class="lv">NIVEL ${lv}</span> ${xpBar}${pts}\n` +
     `VIDA  [<span class="${player.hp < 30 ? 'r' : 'y'}">${bar}</span>] ${Math.ceil(player.hp)}\n` +
     `${special}\n` +
     `PUNTOS <span class="y">${state.score}</span>${streak}   <span class="d">récord ${state.best}</span>\n` +
@@ -72,7 +80,8 @@ export function showDeathScreen() {
   document.exitPointerLock?.();
   overlay.querySelector('.k')!.textContent = '散';
   const record = state.score > 0 && state.score >= state.best ? ' · ¡ nuevo récord !' : ` · récord ${state.best}`;
-  overlay.querySelector('.sub')!.textContent = `${state.score} puntos · ${state.kills} bajas · ${state.campsCleared} guaridas · ${state.chests} cofres · ${discovered.size} lugares${record}`;
+  dispatchEvent(new Event('ronin:overlay'));   // class-select.ts refreshes the level under the class
+  overlay.querySelector('.sub')!.textContent = `nivel ${level()} · ${state.score} puntos · ${state.kills} bajas · ${state.campsCleared} guaridas · ${state.chests} cofres · ${discovered.size} lugares${record}`;
   document.getElementById('go')!.textContent = '[ clic para volver a empezar ]';
   overlay.style.display = 'flex';
 }

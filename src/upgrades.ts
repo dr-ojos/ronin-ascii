@@ -3,6 +3,7 @@
 import { player, state } from './state';
 import { armorGuard, armorDash, armorRun } from './armor';
 import { cls } from './classes';
+import { baseHp, statDmg, statHurt, statDash, statRun, perkHeal, perkStreakTime } from './progression';
 
 export type UpgradeId = 'filo' | 'armadura' | 'viento' | 'sangre' | 'ofuda' | 'kitsune';
 export const UPGRADES: Record<UpgradeId, { name: string; desc: string; max: number }> = {
@@ -16,12 +17,12 @@ export const UPGRADES: Record<UpgradeId, { name: string; desc: string; max: numb
 export const lvl = (id: UpgradeId) => state.upgrades[id] || 0;
 export const roman = (n: number) => ['', 'I', 'II', 'III', 'IV'][n] || String(n);
 
-export const dmgMult = () => 1 + 0.4 * lvl('filo');
-export const hurtMult = () => (1 - 0.15 * lvl('ofuda')) * armorGuard() * (1 - cls().guard);
-export const dashCdMult = () => Math.pow(0.8, lvl('viento')) * armorDash();
-export const runMult = () => (1 + 0.07 * lvl('viento')) * armorRun() * cls().run;
-export const lifesteal = () => 3 * lvl('sangre');
-export const streakBonus = () => 2 * lvl('kitsune');
+export const dmgMult = () => (1 + 0.4 * lvl('filo')) * statDmg();
+export const hurtMult = () => (1 - 0.15 * lvl('ofuda')) * armorGuard() * (1 - cls().guard) * statHurt();
+export const dashCdMult = () => Math.pow(0.8, lvl('viento')) * armorDash() * statDash();
+export const runMult = () => (1 + 0.07 * lvl('viento')) * armorRun() * cls().run * statRun();
+export const lifesteal = () => 3 * lvl('sangre') + perkHeal();
+export const streakBonus = () => 2 * lvl('kitsune') + perkStreakTime();
 
 /** a random upgrade not yet at its top level (null when all are maxed) */
 export function rollUpgrade(): UpgradeId | null {
@@ -32,6 +33,6 @@ export function grant(id: UpgradeId) {
   state.upgrades[id] = lvl(id) + 1;
   if (id === 'armadura') { player.maxHp += 20; player.hp += 20; }
 }
-export function resetUpgrades() { state.upgrades = {}; player.maxHp = cls().hp; }
+export function resetUpgrades() { state.upgrades = {}; player.maxHp = baseHp(); }
 /** "filo II · ofuda I" for the HUD */
 export const upgradeList = () => (Object.keys(state.upgrades) as UpgradeId[]).map(id => `${UPGRADES[id].name.split(' ')[0].toLowerCase()} ${roman(lvl(id))}`).join(' · ');

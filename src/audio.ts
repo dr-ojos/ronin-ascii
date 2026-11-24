@@ -302,6 +302,17 @@ export function createAudio() {
     notes.forEach((f, i) => bell(t + i * 0.09, f, 0.12, 1.6));
     if (big) taiko(0.8, 0);
   }
+  function levelUp(big = false) { // a new level: a gong, a run of bells climbing two octaves, a held chord, drums
+    if (!ok()) return; const t = ctx.currentTime;
+    bell(t, 65, 0.22, 4.5); bell(t, 98, 0.12, 3.5);
+    const run = [392, 440, 523, 587, 659, 784, 880, 1047, 1175, 1319];
+    run.forEach((f, i) => bell(t + 0.08 + i * 0.055, f, 0.075, 1.1));
+    const end = t + 0.08 + run.length * 0.055 + 0.06;
+    for (const f of big ? [523, 659, 784, 1047, 1319, 1568] : [523, 784, 1047, 1568]) bell(end, f, big ? 0.085 : 0.07, big ? 4 : 3);
+    taiko(1.1, 0); taiko(0.8, 0.16);
+    if (big) { taiko(1.2, end - t); taiko(1.3, end - t + 0.22); taiko(1.4, end - t + 0.44); }
+    else taiko(1, end - t);
+  }
   function templeBell() { // the sōhei's Campana del Templo: a big bronze bell, struck once, humming long after
     if (!ok()) return; const t = ctx.currentTime;
     bell(t, 98, 0.32, 5.5); bell(t, 147, 0.16, 4); bell(t + 0.005, 392, 0.06, 2.2);
@@ -386,7 +397,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, splash, warn, chime, templeBell, rings, coin, anvil, arrow, thunder, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, splash, warn, chime, levelUp, templeBell, rings, coin, anvil, arrow, thunder, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

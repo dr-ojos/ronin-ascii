@@ -62,6 +62,17 @@ export const WEAPONS: Weapon[] = [
     fx: { glow: 0xffad61, hot: 0xffe7b1, cool: 0xf66d42, gravity: 8, halo: 1.8, trail: 2.15, sparks: [0xff985d, 0xffd664, 0xff648f] } },
   { id: 'aurora', name: 'Espada de la Aurora', desc: 'hoja iridiscente: tajos veloces que también cargan el rayo', price: 15800, tier: 3, dmg: 1.85, reach: 0.5, speed: 0.76, len: 1.2, glow: 0x5afdd2, steel: 0xa7d4dc, charge: 0.02,
     fx: { glow: 0x83ffe5, hot: 0xbaffed, cool: 0xaf53ff, gravity: 1.5, halo: 1.8, trail: 2.2, sparks: [0x32ffc2, 0x4ebaff, 0xff67e6], extra: 'stars' } },
+  // ---- legendary blades: Masa only forges them for a ronin of high enough level (progression.ts LEVEL_REQ)
+  { id: 'kusanagi', name: 'Kusanagi-no-Tsurugi', desc: 'la espada que segó el viento: cada golpe carga la técnica y cierra heridas', price: 16000, tier: 3, dmg: 2.55, reach: 0.7, speed: 0.8, len: 1.22, glow: 0x7dffb0, steel: 0xe9fff2, heal: 1, charge: 0.025,
+    fx: { glow: 0x8affc0, hot: 0xeafff2, cool: 0x2fd08a, gravity: 1.5, halo: 2, trail: 2.4, sparks: [0x6dffb2, 0xc8ff7a, 0x5ee0ff], extra: 'stars' } },
+  { id: 'ame-nuboko', name: 'Ame-no-Nuboko', desc: 'la lanza enjoyada que agitó el mar primordial: alcance enorme y rayo', form: 'spear', price: 19000, tier: 3, dmg: 2.4, reach: 2.5, speed: 0.95, len: 0.72, glow: 0xff7ae0, steel: 0xf3d7ff, charge: 0.025,
+    fx: { glow: 0xff8ae6, hot: 0xffe0fa, cool: 0x8a5cff, gravity: 2, halo: 1.9, trail: 2.3, sparks: [0xff7ae0, 0x9d7bff, 0x7af0ff], extra: 'bolts' } },
+  { id: 'hoo-tsubasa', name: 'Alas del Hō-ō', desc: 'filos gemelos del fénix: rapidísimos, y cada oni cortado te cura 2', form: 'dual', price: 23000, tier: 3, dmg: 2.3, reach: -0.35, speed: 0.72, len: 0.7, glow: 0xff9a2a, steel: 0xffe1a8, heal: 2,
+    fx: { glow: 0xffa53a, hot: 0xfff0b0, cool: 0xff3d1a, gravity: -2, halo: 2, trail: 2.4, sparks: [0xffb03a, 0xff5a2a, 0xffe57a], extra: 'feathers' } },
+  { id: 'tenrai', name: 'Tenrai, quiebracielos', desc: 'hoja ancha forjada en una tormenta: golpes devastadores que cargan el rayo', form: 'broad', price: 27000, tier: 3, dmg: 3.2, reach: 0.9, speed: 1.12, len: 1.4, glow: 0x9fd4ff, steel: 0xf0f6ff, charge: 0.03,
+    fx: { glow: 0xb0dcff, hot: 0xffffff, cool: 0x4a6bff, gravity: 3, halo: 2.1, trail: 2.5, sparks: [0xbfe6ff, 0x6f8bff, 0xfff3a0], extra: 'bolts' } },
+  { id: 'mugen', name: 'Mugen, filo del vacío', desc: 'la hoja de la leyenda: corta la nada, cura, carga y alcanza lejos', price: 32000, tier: 3, dmg: 3.6, reach: 1, speed: 0.76, len: 1.32, glow: 0xffffff, steel: 0x1a1424, heal: 3, charge: 0.03,
+    fx: { glow: 0xf4eaff, hot: 0xffffff, cool: 0xb06aff, gravity: 0.5, halo: 2.4, trail: 2.8, sparks: [0xffffff, 0xd6a8ff, 0xffd98a], extra: 'stars' } },
   // ---- the sōhei's staves: held in the middle with both hands; every blow dazes (player.ts)
   { id: 'bo', name: 'Bō del peregrino', desc: 'bastón de roble con regatones de bronce: golpes amplios que aturden', form: 'staff', price: 0, tier: 0, dmg: 1, reach: 0.3, speed: 1, len: 0.9, glow: 0xffc46b, steel: 0xc9a979,
     fx: { glow: 0xffcf7a, hot: 0xfff1c4, cool: 0xff8a2a, gravity: 6, halo: 1.1, trail: 1.2 } },
@@ -70,7 +81,14 @@ export const WEAPONS: Weapon[] = [
   { id: 'tetsubo-monje', name: 'Bastón de hierro', desc: 'hierro negro anillado: lento, pero aturde mucho más', form: 'staff', price: 4200, tier: 1.85, dmg: 1.6, reach: 0.5, speed: 1.18, len: 1, glow: 0xff7b4a, steel: 0x6f6660, daze: 1.6,
     fx: { glow: 0xff8450, hot: 0xffd0a0, cool: 0xd8401c, gravity: 9, halo: 1.45, trail: 1.7, sparks: [0xff6a3a, 0xffb04d, 0xff4f6a] } },
   { id: 'bishamon', name: 'Bastón de Bishamon', desc: 'del guardián del norte: gran daño y cada oni que golpeas te cura 2', form: 'staff', price: 11200, tier: 2.8, dmg: 2.05, reach: 0.6, speed: 0.92, len: 1, glow: 0x8fb6ff, steel: 0xd6e2ff, heal: 2, daze: 1.25,
-    fx: { glow: 0x9cc0ff, hot: 0xeaf2ff, cool: 0x5b6cff, gravity: 2, halo: 1.7, trail: 2.1, sparks: [0x8fc4ff, 0xb08cff, 0xfff0b0], extra: 'stars' } }
+    fx: { glow: 0x9cc0ff, hot: 0xeaf2ff, cool: 0x5b6cff, gravity: 2, halo: 1.7, trail: 2.1, sparks: [0x8fc4ff, 0xb08cff, 0xfff0b0], extra: 'stars' } },
+  // legendary staves, by level
+  { id: 'kongo', name: 'Vajra de Kongō', desc: 'el rayo diamantino de los reyes guardianes: aturde mucho y carga la técnica', form: 'staff', price: 16000, tier: 3, dmg: 2.45, reach: 0.6, speed: 0.95, len: 1, glow: 0xa8f0ff, steel: 0xe4f6ff, daze: 1.5, charge: 0.025,
+    fx: { glow: 0xb4f2ff, hot: 0xffffff, cool: 0x4a9bff, gravity: 2, halo: 1.9, trail: 2.3, sparks: [0xa8f0ff, 0x7aa8ff, 0xfff6c0], extra: 'bolts' } },
+  { id: 'jizo', name: 'Shakujō de Jizō', desc: 'el báculo del protector de viajeros: cada golpe cura 3 y carga la técnica', form: 'staff', price: 23000, tier: 3, dmg: 2.8, reach: 0.7, speed: 0.9, len: 1.02, glow: 0xffe9a8, steel: 0xfff4d0, heal: 3, charge: 0.02, daze: 1.3,
+    fx: { glow: 0xfff0b8, hot: 0xffffff, cool: 0xffb84a, gravity: 1, halo: 2.1, trail: 2.4, sparks: [0xffe9a8, 0xffc26a, 0xfff8e0], extra: 'stars' } },
+  { id: 'fudo', name: 'Kurikara de Fudō', desc: 'la llama inmóvil del rey de la sabiduría: el bastón de la leyenda', form: 'staff', price: 32000, tier: 3, dmg: 3.5, reach: 0.8, speed: 0.92, len: 1.05, glow: 0xff4a2a, steel: 0x2a1a1a, heal: 3, charge: 0.03, daze: 1.8,
+    fx: { glow: 0xff5a30, hot: 0xffe0a0, cool: 0xd01a3a, gravity: -1, halo: 2.4, trail: 2.8, sparks: [0xff5a30, 0xffb040, 0xff3a8a], extra: 'blood' } }
 ];
 const byId = new Map(WEAPONS.map(w => [w.id, w]));
 export const weapon = () => byId.get(state.weapon) || byId.get(cls().weapon)!;

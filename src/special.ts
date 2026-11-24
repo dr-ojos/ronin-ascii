@@ -19,6 +19,7 @@ import { rnd } from './utils';
 import { clearFlares, flare, updateFlares } from './flare';
 import { clearSutras, startSutras, updateSutras } from './sutra-shield';
 import { cls } from './classes';
+import { chargeMult } from './progression';
 
 const CHARGE_TIME = 45;     // seconds to fill the charge from empty
 const KILL_BONUS = 0.04;    // each kill fills this much more
@@ -28,7 +29,7 @@ const MAX_BOLTS = 8;
 /** fill the charge (time passing, or a kill) */
 export function charge(amount: number) {
   if (state.special >= 1) return;
-  state.special = Math.min(1, state.special + amount);
+  state.special = Math.min(1, state.special + amount * chargeMult());
   if (state.special >= 1) { sfx.chime(false); showMsg(`— ${TECHNIQUES[state.technique].name.toUpperCase()} —\nCarga lista · pulsa P`, 1.6); }
 }
 export const chargeKill = () => charge(KILL_BONUS);

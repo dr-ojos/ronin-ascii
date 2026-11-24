@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { TechniqueId } from './techniques';
 import type { ClassId } from './classes';
 
-export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory';
+export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory' | 'level';
 
 export const player = {
   pos: new THREE.Vector3(0, 0, 4), face: Math.PI, hp: 100, maxHp: 100, attackT: -1, attackDur: 0.3, combo: 0, lastAttackEnd: -9,

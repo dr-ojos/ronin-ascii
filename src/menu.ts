@@ -36,7 +36,7 @@ const el = document.getElementById('menu')!;
 let cur: MenuDef | null = null, sel = 0, status = '', statusT = 0;
 
 const esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
-const scrolls = (id: MenuId) => id === 'shop' || id === 'inventory';
+const scrolls = (id: MenuId) => id === 'shop' || id === 'inventory' || id === 'level';
 
 export function openMenu(def: MenuDef, at = 0) {
   cur = def; sel = at; status = ''; statusT = 0; state.menu = def.id;

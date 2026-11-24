@@ -9,7 +9,12 @@ import { WEAPONS, equip, owns, weaponStats } from './weapons';
 
 export const inventoryButton = document.querySelector<HTMLButtonElement>('#inventory-btn')!;
 const ownedWeapons = () => WEAPONS.filter(w => owns(w.id));
-const itemImage = (group: string, id: string) => `${import.meta.env.BASE_URL}inventory/${group}/${id}.webp`;
+/** legendary gear (progression.ts) has no picture of its own yet: it shows its closest kin */
+const IMAGE_KIN: Record<string, string> = {
+  kusanagi: 'masamune', 'ame-nuboko': 'yari-marea', 'hoo-tsubasa': 'gemelas-ocaso', tenrai: 'espada-montana', mugen: 'aurora',
+  kongo: 'tetsubo-monje', jizo: 'shakujo', fudo: 'bishamon'
+};
+const itemImage = (group: string, id: string) => `${import.meta.env.BASE_URL}inventory/${group}/${IMAGE_KIN[id] ?? id}.webp`;
 
 function inventoryRows(): MenuRow[] {
   const rows: MenuRow[] = [{ label: 'ARMAS', head: true }];

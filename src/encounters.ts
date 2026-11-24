@@ -7,7 +7,6 @@
 //    and by the fire of some camps of the wilds: their chest stays sealed while the guardian lives.
 // A group's oni only exist while you are near it; walk away and they vanish (keeping who is left),
 // clear a camp and it stays empty for a while. Also: starting a new run, and slow healing out of combat.
-import { cls } from './classes';
 import { enemies, spawnEnemy, despawn, ELITES, WILD_BOSSES, isBoss, isElite } from './enemies';
 import { clearEnemyHazards } from './enemy-ai';
 import { collide, isFree } from './physics';
@@ -17,6 +16,7 @@ import { CAMP_SPOTS, HIDDEN_CHESTS, POIS, WILDLIFE_SPOTS } from './landmarks';
 import { chests, makeChest, resetChests, updateLoot } from './loot';
 import { resetScore, updateScore } from './score';
 import { resetUpgrades } from './upgrades';
+import { baseHp } from './progression';
 import { resetBattle } from './battle';
 import { equipmentThreat } from './equipment-threat';
 import { showMsg } from './hud';
@@ -234,7 +234,7 @@ export function reset() {
   for (let i = camps.length - 1; i >= 0; i--) if (camps[i].temp) camps.splice(i, 1);
   for (const c of camps) { c.active = false; c.roster = c.kinds.slice(); c.threat = undefined; c.clearedAt = -1; }
   resetChests(); resetUpgrades();
-  Object.assign(player, { hp: cls().hp, maxHp: cls().hp, attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1, snareT: 0 });
+  Object.assign(player, { hp: baseHp(), maxHp: baseHp(), attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1, snareT: 0 });
   player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0;
   resetSpecial();
   resetBattle();

@@ -19,6 +19,8 @@ import { setDetailedSurfaces } from './surfaces';
 import { fitGlyphs } from './surface-glyphs';
 import './input';
 import './class-select';
+import './level-menu';
+import { devSetLevel, gainXp } from './progression';
 
 const clock = new THREE.Clock();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
@@ -60,6 +62,6 @@ addEventListener('resize', () => {
 });
 
 // dev only: lets the browser console move the samurai around the world (__ronin.player.pos.set(x, 0, z))
-if (import.meta.env.DEV) Object.assign(window, { __ronin: { state, player, scene, renderer, camera, THREE } });
+if (import.meta.env.DEV) Object.assign(window, { __ronin: { state, player, scene, renderer, camera, THREE, progress: { gainXp, setLevel: devSetLevel } } });
 
 frame();

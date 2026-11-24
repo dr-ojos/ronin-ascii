@@ -8,6 +8,7 @@ import { dressUp } from './outfit';
 import { resetSpecial } from './special';
 import { TECHNIQUES } from './techniques';
 import { player, state } from './state';
+import { baseHp, level, loadProgress, xpFrac } from './progression';
 
 const pick = document.getElementById('class-pick')!;
 const desc = document.getElementById('class-desc')!;
@@ -19,17 +20,18 @@ function render() {
     const c = CLASSES[id], on = id === state.cls;
     return `<span class="cls${on ? ' on' : ''}" data-cls="${id}" role="radio" aria-checked="${on}" tabindex="0">[ ${c.kanji} ${c.name} ]</span>`;
   }).join('');
-  desc.textContent = cls().desc;
+  desc.innerHTML = `${cls().desc}<br><span style="color:#ffd27a">nivel ${level()}</span> <span style="color:#6c7488">· ${Math.floor(xpFrac() * 100)} % al siguiente</span>`;
   if (startTech) startTech.innerHTML = `empiezas con <b>${TECHNIQUES[cls().technique].name}</b>`;
   customBtn.textContent = `[ personalizar ${cls().name.toLowerCase()} ]`;
 }
 
 /** arm and dress the avatar as the stored class (on load, and after a pick) */
 function outfitClass() {
+  loadProgress();
   loadLook();
   resetWeapons();
   resetSpecial();
-  player.maxHp = player.hp = cls().hp;
+  player.maxHp = player.hp = baseHp();
   dressUp();
   render();
 }
@@ -52,3 +54,5 @@ pick.addEventListener('keydown', e => {
 });
 
 outfitClass();
+// the death screen shows again: the level may have grown during the run
+addEventListener('ronin:overlay', render);

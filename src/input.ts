@@ -20,12 +20,19 @@ import { toggleRain } from './world';
 import { showMsg, overlay } from './hud';
 import { state, keys } from './state';
 import { resetMinimap, zoomBigMap } from './minimap';
+import { toggleLevelMenu } from './level-menu';
+import { startRun } from './progression';
 
 /** camera heading when photo mode was switched on */
 let photoYaw = 0;
 addEventListener('keydown', e => {
   if (e.code === 'KeyI' && !e.metaKey && !e.ctrlKey && !e.altKey && (!state.menu || state.menu === 'inventory')) {
     if (!e.repeat) toggleInventory(document.activeElement === inventoryButton);
+    e.preventDefault();
+    return;
+  }
+  if (e.code === 'KeyU' && !e.metaKey && !e.ctrlKey && !e.altKey && (!state.menu || state.menu === 'level')) {
+    if (!e.repeat) toggleLevelMenu();
     e.preventDefault();
     return;
   }
@@ -79,7 +86,7 @@ addEventListener('wheel', e => {
 }, { passive: true });
 overlay.addEventListener('click', () => {
   sfx.init(); overlay.style.display = 'none';
-  if (state.dead || !state.playing) { reset(); resetMinimap(); resetWeapons(); resetArmor(); dressUp(); }
+  if (state.dead || !state.playing) { reset(); resetMinimap(); resetWeapons(); resetArmor(); dressUp(); startRun(); }
   state.playing = true;
 });
 

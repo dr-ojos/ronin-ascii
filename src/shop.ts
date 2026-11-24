@@ -23,6 +23,7 @@ import { cls } from './classes';
 import { ARMORS, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
 import { threatLabel } from './equipment-threat';
+import { level, levelOk, levelReq } from './progression';
 import { angDiff } from './utils';
 
 export { smithPos } from './shop-stage';
@@ -168,19 +169,28 @@ export function updateShop(dt: number) {
 
 // ------------------------------------------------------------ the shop
 const price = (n: number, mine: boolean, on: boolean, word: string) => on ? word : mine ? (word === 'equipada' ? 'equipar' : 'ponerse') : `${n} mon`;
+/** gear above your level (progression.ts): shown, previewed, but not sold */
+const locked = (id: string, mine: boolean) => !mine && !levelOk(id);
+const lockNote = (id: string) => `requiere nivel ${levelReq(id)} (tienes ${level()}) · `;
+const legend = (id: string) => levelReq(id) >= 40 ? '✦ ' : '';
+function refuse(id: string) {
+  sfx.warn();
+  menuStatus(`«Esta pieza pide más camino, ${cls().address}.» · nivel ${levelReq(id)}`);
+}
 function restoreGear() { applyWeapon(); dressUp(); }
 function shopRows(): MenuRow[] {
   const rows: MenuRow[] = [{ label: 'ARMAS', head: true }];
   for (const w of forSale()) {
-    const mine = owns(w.id), on = state.weapon === w.id;
+    const mine = owns(w.id), on = state.weapon === w.id, shut = locked(w.id, mine);
     rows.push({
-      label: w.name, value: price(w.price, mine, on, 'equipada'),
-      cls: on ? 'y' : mine ? 'b' : state.mon >= w.price ? '' : 'r',
+      label: legend(w.id) + w.name, value: shut ? `nivel ${levelReq(w.id)}` : price(w.price, mine, on, 'equipada'),
+      cls: on ? 'y' : mine ? 'b' : shut ? 'd' : state.mon >= w.price ? '' : 'r',
       sparkColors: w.fx.sparks,
-      note: `${w.desc} · ${weaponStats(w)}`,
+      note: `${shut ? lockNote(w.id) + `${w.price} mon · ` : ''}${w.desc} · ${weaponStats(w)}`,
       preview() { applyWeapon(w); dressUp(); },
       act() {
         if (on) return menuStatus('ya la llevas en la mano');
+        if (shut) return refuse(w.id);
         if (mine) { equip(w.id); sfx.swing({ power: 0.8, pan: 0 }); return menuStatus(`${w.form === 'staff' ? 'empuñas' : 'desenvainas'} ${w.name}`); }
         if (buy(w) === 'poor') { sfx.warn(); return menuStatus(`te faltan ${w.price - state.mon} mon`); }
         sfx.chime(true); menuStatus(`«Que te sirva bien.» · ${w.name} es tuya`);
@@ -189,14 +199,15 @@ function shopRows(): MenuRow[] {
   }
   rows.push({ label: 'ARMADURAS', head: true });
   for (const a of ARMORS) {
-    const mine = ownsArmor(a.id), on = state.armor === a.id;
+    const mine = ownsArmor(a.id), on = state.armor === a.id, shut = locked(a.id, mine);
     rows.push({
-      label: a.name, value: price(a.price, mine, on, 'puesta'),
-      cls: on ? 'y' : mine ? 'b' : state.mon >= a.price ? '' : 'r',
-      note: `${a.desc} · ${armorStats(a)}`,
+      label: legend(a.id) + a.name, value: shut ? `nivel ${levelReq(a.id)}` : price(a.price, mine, on, 'puesta'),
+      cls: on ? 'y' : mine ? 'b' : shut ? 'd' : state.mon >= a.price ? '' : 'r',
+      note: `${shut ? lockNote(a.id) + `${a.price} mon · ` : ''}${a.desc} · ${armorStats(a)}`,
       preview() { dressUp(a); applyWeapon(); },
       act() {
         if (on) return menuStatus('ya la llevas puesta');
+        if (shut) return refuse(a.id);
         if (mine) { wearArmor(a.id); dressUp(); sfx.dash(); return menuStatus(`te pones ${a.name}`); }
         if (buyArmor(a) === 'poor') { sfx.warn(); return menuStatus(`te faltan ${a.price - state.mon} mon`); }
         dressUp();
@@ -216,7 +227,7 @@ export function openShop(at = 1) {
   showMsg('', 0.01);
   openMenu({
     id: 'shop', title: `— TIENDA DE ${SMITH_NAME.toUpperCase()} —`,
-    sub: () => `bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weapon().name}</span> · <span class="b">${armor().name}</span> · <span class="y">${threatLabel()}</span>`,
+    sub: () => `nivel <span class="y">${level()}</span> · bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weapon().name}</span> · <span class="b">${armor().name}</span> · <span class="y">${threatLabel()}</span>`,
     rows: shopRows,
     foot: '↑ ↓ previsualizar · E / ENTER comprar o equipar · ESC salir',
     onClose: restoreGear

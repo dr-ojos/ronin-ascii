@@ -14,6 +14,8 @@ import { updateTemples } from './temples';
 import { shopStageActive } from './shop-stage';
 import { updateArmor } from './armor';
 import { updateMenu } from './menu';
+import { updateProgression } from './progression';
+import { updateLevelFx } from './level-fx';
 import { state } from './state';
 
 export function update(dt: number) {
@@ -44,4 +46,6 @@ export function update(dt: number) {
   updateArmor(dt);
   updateSpecial(dt);
   updateFx(dt);
+  updateProgression(dt);
+  updateLevelFx(dt);
 }

@@ -10,6 +10,7 @@ import { showMsg } from './hud';
 import { dmgMult, dashCdMult, runMult } from './upgrades';
 import { weapon, type Weapon } from './weapons';
 import { charge } from './special';
+import { critMult, rollCrit } from './progression';
 import { hitChests, chestInReach } from './loot';
 import { burst, dashGhost, dashRing, impactRing } from './fx';
 import { sfx, panOf } from './sfx';
@@ -186,7 +187,7 @@ function quake(at: THREE.Vector3) {
 function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
   if (depth > 0.1) ripple(player.pos.x + Math.sin(player.face) * 1.2, player.pos.z + Math.cos(player.face) * 1.2, heavy ? 1.3 : 0.9);
   const heading = player.face + (strike.offset ?? 0);
-  let hits = 0, hitPan = 0;
+  let hits = 0, hitPan = 0, crits = 0;
   for (const en of enemies) {
     if (en.hp <= 0) continue;
     tmp.subVectors(en.g.position, player.pos); tmp.y = 0;
@@ -201,7 +202,10 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
       && Math.abs(angDiff(incoming, attack.yaw)) < attack.move.angle;
     const blocked = (guarding || parrying) && !heavy;
     hits++; hitPan += panOf(en.g.position.x, en.g.position.z);
-    const dealt = strike.power * (blocked ? 0.2 : 1) * dmgMult() * w.dmg * spirit() * damageTaken(en);
+    // a critical blow (progression.ts): more damage, a golden spray and a harder stop
+    const crit = !blocked && rollCrit();
+    if (crit) crits++;
+    const dealt = strike.power * (blocked ? 0.2 : 1) * (crit ? critMult() : 1) * dmgMult() * w.dmg * spirit() * damageTaken(en);
     en.hp -= dealt;
     if (!blocked) { onPlayerHit(en); bossHit(en, dealt, heavy); }
     en.flash = blocked ? 0.35 : 1;
@@ -221,6 +225,10 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
       if (daze > 0.9) burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 2 * en.scale, en.g.position.z), 0xffe27a, 10, 1.6, 0.1);
     } else if ((en.state === 'windup' || en.state === 'charge') && !en.big) staggerEnemy(en, 0.5);
     burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), blocked ? 0xffd889 : 0xffffff, 18, 5, 0.12);
+    if (crit) {
+      const at = new THREE.Vector3(en.g.position.x, en.g.position.y + 1.4 * en.scale, en.g.position.z);
+      burst(at, 0xffc23a, 34, 7.5, 0.15); impactRing(en.g.position, 0xffc23a, 2.2);
+    }
     sparkBurst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(player.pos.y + 1.25), 0.35), heavy ? 14 : 9, heavy ? 5.5 : 4.5);
   }
   const struck = hitChests(player.pos.x, player.pos.z, heading, reach, strike.arc === Math.PI, strike.arc);
@@ -228,7 +236,8 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
   if (!hits) return;
   if (w.heal) player.hp = Math.min(player.maxHp, player.hp + w.heal * hits);
   if (w.charge) charge(w.charge * hits);
-  state.hitStop = heavy ? 0.09 : strike.power < 0.9 ? 0.035 : 0.06;
+  state.hitStop = (heavy ? 0.09 : strike.power < 0.9 ? 0.035 : 0.06) + (crits ? 0.05 : 0);
+  if (crits) { state.gain = '¡ CRÍTICO !'; state.gainT = 0.9; }
   state.shake = Math.max(state.shake, heavy ? 0.35 : strike.power < 0.9 ? 0.12 : 0.2);
   sfx.hit({ heavy, pan: hitPan / hits, count: hits });
   if (w.form === 'staff') sfx.rings(hitPan / hits);

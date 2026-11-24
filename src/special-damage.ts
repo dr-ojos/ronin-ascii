@@ -2,6 +2,7 @@
 // Each technique can take at most a share of every enemy's life per cast (less from bosses, guardians
 // and the big ones); the katana has to finish the job.
 import { state } from './state';
+import { techMult } from './progression';
 import { addStagger, damageTaken } from './boss-mechanics';
 import type { Enemy } from './types';
 
@@ -16,7 +17,7 @@ export function specialDamage(e: Enemy, amount: number) {
   let rec = taken.get(e);
   if (!rec || state.time - rec.t > WINDOW) { rec = { t: state.time, dmg: 0 }; taken.set(e, rec); }
   const cap = e.maxHp * (e.big ? CAP_BIG : CAP);
-  const dmg = Math.max(0, Math.min(amount * damageTaken(e), cap - rec.dmg));
+  const dmg = Math.max(0, Math.min(amount * techMult() * damageTaken(e), cap - rec.dmg));
   rec.dmg += dmg; e.hp -= dmg;
   addStagger(e, dmg * 1.5);   // a technique shakes a boss or guardian more than a cut
   return dmg;
