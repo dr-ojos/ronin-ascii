@@ -4,16 +4,17 @@
 //  - combo and fighting spirit: hits in a row without being hurt raise your damage
 //  - finishers: a common foe left below a quarter of its life falls to the next cut (slow motion)
 //  - reinforcements: a boss that loses half its life calls more of its own to the fight
+//  - bosses and guardians: stagger bar and affixes (boss-mechanics.ts)
 //  - the end: slow motion on the last kill, then a summary with a rank and bonus points
 import * as THREE from 'three';
-import { enemies, KINDS, spawnEnemy } from './enemies';
+import { enemies, KINDS } from './enemies';
+import { resetBossMechanics, summon, updateBossMechanics } from './boss-mechanics';
 import { burst } from './fx';
 import { showMsg } from './hud';
-import { collide, isFree } from './physics';
 import { addPoints } from './score';
 import { sfx, panOf } from './sfx';
 import { player, state } from './state';
-import { rnd } from './utils';
+import { angDiff, rnd } from './utils';
 import type { Enemy, EnemyKind } from './types';
 
 const RANGE = 40;              // how far an enemy still counts as part of the fight
@@ -47,7 +48,7 @@ export function freeAgent(en: Enemy) {
 /** how many common foes may strike at once: more in long fights and against big groups */
 function maxStrikers() {
   const crowd = enemies.filter(e => !freeAgent(e) && e.state !== 'idle' && e.state !== 'return').length;
-  return 2 + (crowd >= 6 ? 1 : 0) + (battle.t > 30 ? 1 : 0);
+  return 2 + (crowd >= 4 ? 1 : 0) + (battle.t > 30 ? 1 : 0);
 }
 function releaseTokens() {
   for (const [e, turn] of tokens) {
@@ -56,7 +57,7 @@ function releaseTokens() {
     const done = turn.struck && e.state === 'chase', stuck = !turn.struck && state.time - turn.since > 4;
     if (!gone && !done && !stuck) continue;
     tokens.delete(e);
-    if (done || stuck) rest.set(e, state.time + rnd(0.6, 1.4));   // step back before trying again
+    if (done || stuck) rest.set(e, state.time + rnd(0.35, 0.9));   // step back before trying again
   }
 }
 /** this foe's turn to close in and strike: it keeps it until it has struck (bosses and the like always have it).
@@ -72,11 +73,13 @@ export function takeTurn(en: Enemy) {
 /** how far from you a foe waiting its turn keeps */
 export const ringRadius = (en: Enemy) => 3.3 + 0.9 * en.scale;
 
-/** wait for a turn: circle around you at the edge of the fight, now one way, now the other.
- *  (dx, dz) is the way to the player, d the distance; returns the walking speed */
+/** wait for a turn: circle around you at the edge of the fight, working round to your back and sides
+ *  (each to its own spot) so you have to turn and move. (dx, dz) is the way to the player, d the distance;
+ *  returns the walking speed */
 export function circle(en: Enemy, dx: number, dz: number, d: number, speed: number, dt: number) {
   if (d < 1e-3) return 0;
-  const side = (Math.floor(en.seed * 10) % 2 ? 1 : -1) * (Math.sin(state.time * 0.45 + en.seed * 7) > -0.3 ? 1 : -1);
+  const spot = player.face + Math.PI + (Math.floor(en.seed * 10) % 3 - 1) * 0.95;   // behind you, or to a flank
+  const side = THREE.MathUtils.clamp(angDiff(spot, Math.atan2(-dx, -dz)) * 1.5, -1, 1);
   const radial = THREE.MathUtils.clamp((d - ringRadius(en)) * 0.9, -1, 1);
   const sx = dx / d * radial - dz / d * side * 0.8, sz = dz / d * radial + dx / d * side * 0.8;
   const l = Math.hypot(sx, sz) || 1, walk = speed * (radial < -0.5 ? 0.85 : 0.55);   // backs off quicker when too close
@@ -116,23 +119,7 @@ export function onKill(en: Enemy) {
 }
 /** a boss reached its second phase: it calls reinforcements around it */
 export function onEnrage(boss: Enemy) {
-  const kinds = REINFORCE[boss.kind] ?? ['oni', 'ashigaru'];
-  const n = boss.camp.tier > 0.6 ? 3 : 2, camp = boss.camp, b = boss.g.position;
-  for (let i = 0; i < n; i++) {
-    const kind = kinds[i % kinds.length];
-    let x = b.x, z = b.z;
-    for (let k = 0; k < 10; k++) {
-      const a = Math.random() * Math.PI * 2, r = rnd(4, 7);
-      x = b.x + Math.cos(a) * r; z = b.z + Math.sin(a) * r;
-      if (isFree(x, z, 1)) break;
-    }
-    const p = { x, z }; collide(p, 0.6);
-    spawnEnemy(camp, kind, p.x, p.z);
-    const e = enemies[enemies.length - 1];
-    e.state = 'chase'; e.t = rnd(0.4, 1);
-    camp.roster.push(kind);
-    burst(new THREE.Vector3(p.x, e.g.position.y + 1, p.z), 0xff4a30, 40, 5, 0.14);
-  }
+  summon(boss, REINFORCE[boss.kind] ?? ['oni', 'ashigaru'], boss.camp.tier > 0.6 ? 3 : 2);
   sfx.waveStart(true);
 }
 
@@ -143,6 +130,7 @@ function rank() {
 const RANK_BONUS: Record<string, number> = { S: 25, A: 15, B: 8, C: 0 };
 
 export function updateBattle(dt: number) {
+  updateBossMechanics(dt);
   if (summaryT >= 0 && (summaryT -= dt) < 0) { showMsg(summary, 2.8); if (summaryBonus) addPoints(summaryBonus, 'batalla'); }
   if (state.time - battle.lastHit > COMBO_WINDOW) battle.combo = 0;
   const engaged = engagedNow();
@@ -175,5 +163,5 @@ export function battleLine() {
 
 export function resetBattle() {
   Object.assign(battle, { active: false, t: 0, kills: 0, finishers: 0, hurt: 0, combo: 0, bestCombo: 0, lastHit: -99, foes: 0 });
-  tokens.clear(); summaryT = -1;
+  tokens.clear(); summaryT = -1; resetBossMechanics();
 }

@@ -15,6 +15,7 @@ import { dropLoot, unseal } from './loot';
 import { lifesteal } from './upgrades';
 import { chargeKill, bolt, skyFlash } from './special';
 import { circle, onEnrage, onKill, takeTurn } from './battle';
+import { affixLabel } from './boss-mechanics';
 import { earnTechnique, TECHNIQUES } from './techniques';
 import { CLS, tagMat } from './materials';
 import { player, state } from './state';
@@ -42,8 +43,10 @@ export function alertCamp(camp: Camp) {
     return;
   }
   sfx.roar({ big: !!(camp.boss || camp.elite), pan });
-  if (camp.boss && camp.roster.includes(camp.boss)) { sfx.waveStart(true); showMsg(`¡ ${KINDS[camp.boss].name.toUpperCase()} !`, 1.8); }
-  else if (camp.elite) { sfx.waveStart(true); showMsg(`¡ ${KINDS[camp.elite].name.toUpperCase()} !\nel guardián del cofre`, 1.8); }
+  const leader = enemies.find(e => e.camp === camp && (e.kind === camp.boss || e.kind === camp.elite));
+  const traits = leader ? affixLabel(leader) : '';
+  if (camp.boss && camp.roster.includes(camp.boss)) { sfx.waveStart(true); showMsg(`¡ ${KINDS[camp.boss].name.toUpperCase()} !${traits ? `\n${traits}` : ''}`, 2.2); }
+  else if (camp.elite) { sfx.waveStart(true); showMsg(`¡ ${KINDS[camp.elite].name.toUpperCase()} !\n${camp.route ? 'el capitán de la patrulla' : 'el guardián del cofre'}${traits ? ` · ${traits}` : ''}`, 2.2); }
 }
 /** the player hit this oni: it fights back unless you are already out of its camp's reach */
 export function provoke(en: Enemy) {
@@ -53,7 +56,7 @@ export function provoke(en: Enemy) {
 export function staggerEnemy(en: Enemy, duration: number) {
   clearEnemyAttack(en);
   en.state = 'recover';
-  en.t = duration;
+  en.t = Math.max(duration, en.dazedT ?? 0);   // a light stagger does not cut a stun short
   en.strikeT = 0;
 }
 
@@ -157,7 +160,7 @@ function updateMarks(dt: number) {
 }
 
 /** The tengu withdraws. The shadow instead approaches from one side. */
-function blink(en: Enemy, flank = false) {
+export function blink(en: Enemy, flank = false) {
   const g = en.g, from = g.position.clone();
   const bearing = Math.atan2(g.position.x - player.pos.x, g.position.z - player.pos.z);
   const color = flank ? 0xbc93ff : 0xe8e8f0;

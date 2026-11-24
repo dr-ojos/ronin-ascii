@@ -97,6 +97,20 @@ function makeCamp(x: number, z: number, kinds: EnemyKind[], r: number, extra: Pa
 /** which sub-boss guards a chest (the thunder oni only far from the shrine) */
 const pickElite = (tier: number): EnemyKind => { const l = ELITES.filter(k => k !== 'raijin' || tier > 0.45); return l[Math.floor(Math.random() * l.length)]; };
 const GUARD_MIN = SAFE_R + 45;   // no guardians this close to the shrine
+/** a patrol is a squad, not a crowd: a captain (a guardian, or a boss far out) and one of each role,
+ *  so every patrol has a shield in front, a long reach, someone shooting from afar and someone flanking */
+function patrolRoster(n: number, tier: number, boss: boolean): EnemyKind[] {
+  const roles: EnemyKind[][] = [
+    ['escudero'],
+    ['ashigaru', 'guadanero'],
+    tier > 0.5 ? ['arquero', 'hechicero', 'piromante'] : tier > 0.35 ? ['arquero', 'hechicero'] : ['arquero'],
+    tier > 0.4 ? ['acechador', 'sombra'] : ['acechador'],
+    tier > 0.45 ? ['oni', 'bruto', 'duelista'] : ['oni', 'duelista']
+  ];
+  const out: EnemyKind[] = [boss ? pickBoss(tier) : pickElite(Math.max(0.3, tier))];
+  for (let i = 0; out.length < n; i++) { const r = roles[i % roles.length]; out.push(r[Math.floor(Math.random() * r.length)]); }
+  return out;
+}
 /** a free spot for a chest near a place's centre */
 function chestSpot(x: number, z: number, r0: number, r1: number): [number, number, number] {
   for (let k = 0; k < 40; k++) {
@@ -146,7 +160,7 @@ function buildCamps() {
     c.chest = makeChest(s.chest[0], s.chest[1], s.chest[2], c.boss ? 'jefe' : c.elite ? 'guardian' : 'guarida', s.tier, true);
     camps.push(c);
   }
-  // patrols of 5-6 along the roads (two on the long ones), some far ones led by a boss
+  // patrols of 5-6 along the roads (two on the long ones), each led by a captain: a guardian, or a boss
   for (const road of ROADS) {
     if (road === TORII_PATH || TEMPLE_PATHS.includes(road)) continue;
     const len = routeLen(road.pts);
@@ -154,7 +168,7 @@ function buildCamps() {
       const t0 = Math.random() * len * 2, [x, z] = routeAt(road.pts, len, t0);
       const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
       const boss = tier > 0.3 && Math.random() < BOSS_PATROLS;
-      const c = makeCamp(x, z, roster(5 + Math.floor(Math.random() * 2), Math.max(0.3, tier), boss), 9, { route: road.pts, routeT: t0 });
+      const c = makeCamp(x, z, patrolRoster(5 + Math.floor(Math.random() * 2), Math.max(0.3, tier), boss), 9, { route: road.pts, routeT: t0 });
       lens.set(c, len); camps.push(c);
     }
   }

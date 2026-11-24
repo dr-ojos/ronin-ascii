@@ -1,5 +1,6 @@
 // HUD text, centre-screen messages and the title / death overlay.
 import { battleLine } from './battle';
+import { bossHud } from './boss-mechanics';
 import { player, state } from './state';
 import { camps, discovered, placeCount, chestsLeft } from './encounters';
 import { upgradeList } from './upgrades';
@@ -49,7 +50,7 @@ export function updateHud(dt: number) {
   }
   const ff = foe ? Math.max(0, Math.ceil(foe.hp / foe.maxHp * 16)) : 0;
   const foeBar = foe
-    ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>${KINDS[foe.kind].boss ? ` · FASE ${foe.enraged ? 'II' : 'I'}` : ''}\n  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n`
+    ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>${KINDS[foe.kind].boss ? ` · FASE ${foe.enraged ? 'II' : 'I'}` : ''}\n  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n${bossHud(foe)}`
     : '';
   hud.innerHTML =
     `<span class="r">浪人</span> ${esc(look.name.toUpperCase() || 'RONIN')}\n` +

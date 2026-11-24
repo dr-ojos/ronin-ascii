@@ -63,6 +63,7 @@ export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 
   | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'espectro'
   | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianRayo' | 'shuten' | 'enma' | 'senorBosque' | 'yukiOnna'
   | 'kensei' | 'tengu' | 'raijin';
+export type Affix = 'acorazado' | 'regenerador' | 'furioso' | 'gelido' | 'invocador' | 'errante' | 'espinoso';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
 
 export interface EnemyModel {
@@ -93,6 +94,14 @@ interface EnemyBase {
   strikeT: number;
   /** cooldown of a blink or flank */
   cd: number;
+  /** bosses and guardians (battle.ts): the stagger bar, how much it needs, and the seconds left stunned */
+  stagger?: number;
+  staggerNeed?: number;
+  dazedT?: number;
+  /** random modifiers of a boss or guardian (battle.ts AFFIXES) */
+  affixes?: Affix[];
+  /** state.time of the next thing an affix does */
+  affixT?: number;
   /** the coloured glow that follows a boss or guardian */
   aura?: LightAnchor;
   state: EnemyState;

@@ -1,5 +1,6 @@
 // The player's moves: walking, dashing and the katana combo, hit detection included.
 import { onPlayerHit, spirit } from './battle';
+import { bossHit, damageTaken } from './boss-mechanics';
 import * as THREE from 'three';
 import { sam } from './avatar';
 import { sparkBurst } from './katana-fx';
@@ -191,8 +192,9 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
       && Math.abs(angDiff(incoming, attack.yaw)) < attack.move.angle;
     const blocked = (guarding || parrying) && !heavy;
     hits++; hitPan += panOf(en.g.position.x, en.g.position.z);
-    en.hp -= strike.power * (blocked ? 0.2 : 1) * dmgMult() * w.dmg * spirit();
-    if (!blocked) onPlayerHit(en);
+    const dealt = strike.power * (blocked ? 0.2 : 1) * dmgMult() * w.dmg * spirit() * damageTaken(en);
+    en.hp -= dealt;
+    if (!blocked) { onPlayerHit(en); bossHit(en, dealt, heavy); }
     en.flash = blocked ? 0.35 : 1;
     provoke(en);
     const push = heavy ? 12 : strike.power < 0.9 ? 4 : 8;
