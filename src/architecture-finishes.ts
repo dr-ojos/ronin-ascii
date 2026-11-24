@@ -102,6 +102,10 @@ export const TILES = /* glsl */`
   vec3 ceramic = diffuseColor.rgb * (1.36 + mix(0.49, variation, detail) * 0.70) + vec3(0.021, 0.020, 0.018);
   ceramic = mix(ceramic, vec3(0.055, 0.065, 0.031), moss * 0.67);
   ceramic *= (0.91 + 0.19 * mineral) * lap * mix(1.0, 0.88 + 0.33 * roll + 0.15 * overlap, detail);
+  // seen from afar, when single tiles blur: patches of older, darker tiles and rain stains running down the slope
+  float aged = texture2D(uSurfaceTile, metres * vec2(0.045, 0.07) + vec2(0.41, 0.17)).r;
+  float runoff = texture2D(uSurfaceTile, vec2(metres.x * 0.55, metres.y * 0.04) + vec2(0.7, 0.3)).b;
+  ceramic *= (0.78 + 0.42 * smoothstep(0.2, 0.8, aged)) * (1.0 - 0.22 * smoothstep(0.55, 0.85, runoff));
   float tiled = smoothstep(0.15, 0.39, plane.y);
   diffuseColor.rgb = mix(diffuseColor.rgb * clayTint, ceramic, tiled);
   relief = 0.17 * mineral + tiled * detail * (0.65 * roll + 0.44 * overlap);
@@ -134,6 +138,9 @@ export const SIDING = /* glsl */`
   float wash = smoothstep(0.25, 0.81, fibre * 0.62 + stain * 0.38);
   vec3 cedar = diffuseColor.rgb * mix(vec3(0.58, 0.44, 0.33), vec3(1.77, 1.66, 1.38), wash) * (0.77 + 0.44 * variation);
   cedar = mix(cedar, cedar * vec3(0.64, 0.69, 0.75), smoothstep(0.6, 0.9, tex.r));
+  float streaks = texture2D(uSurfaceTile, vec2(wall.x * 0.8 + 0.23, wall.y * 0.06)).b;
+  float weathered = texture2D(uSurfaceTile, wall * 0.07 + vec2(0.52, 0.88)).r;
+  cedar *= (1.0 - 0.3 * smoothstep(0.52, 0.82, streaks)) * (0.8 + 0.4 * weathered);
   diffuseColor.rgb = mix(diffuseColor.rgb * woodTint, cedar * (0.45 + seam * 0.55), 1.0 - abs(plane.y));
   relief = 0.34 * fibre + 0.31 * seam + 0.14 * stain;
 `;
@@ -161,4 +168,81 @@ export const MASONRY = /* glsl */`
   stone = mix(stone, vec3(0.059, 0.073, 0.030), lichen * 0.64);
   diffuseColor.rgb = mix(vec3(0.029, 0.024, 0.016), stone, ashlar);
   relief = 0.61 * ashlar + 0.22 * mineral;
+`;
+
+// ------------------------------------------------------------ text view
+// The ASCII pass has no use for normal maps, so each finish gets a coarse version painted straight into
+// the colour: tile rows, boards, ashlar and straw courses big enough to span several character cells,
+// fading out (to the broad weathering underneath) before they get small enough to shimmer.
+const ASCII_COMMON = /* glsl */`
+  float asciiFade(vec2 grid) { vec2 w = fwidth(grid); return 1.0 - smoothstep(0.08, 0.2, max(w.x, w.y)); }
+  vec2 asciiFade2(vec2 grid) { vec2 w = fwidth(grid); return 1.0 - smoothstep(vec2(0.08), vec2(0.2), w); }
+`;
+export const ASCII_HELPERS = ASCII_COMMON;
+
+/** broad weathering everywhere: blotches of age, rain streaks running down the walls */
+const ASCII_AGE = /* glsl */`
+  float asciiAge = texture2D(uSurfaceTile, (vSurfacePosition.xz + vSurfacePosition.y * 0.37) * 0.045 + vec2(0.13, 0.71)).r;
+  float asciiRain = texture2D(uSurfaceTile, vec2(dot(vSurfacePosition.xz, vec2(0.71, 0.71)) * 0.7, vSurfacePosition.y * 0.05)).b;
+`;
+
+export const ASCII_TILES = (swept: boolean) => ASCII_AGE + /* glsl */`
+  vec3 plane = surfacePlane(vViewPosition, worldNormal);
+  vec2 metres = ${swept ? 'vRoofPanelPosition' : 'roofCourses(vSurfacePosition, plane)'};
+  vec2 grid = metres / vec2(0.42, 0.34);
+  vec2 detail = asciiFade2(grid) * smoothstep(0.15, 0.39, plane.y);
+  float roll = 1.0 - smoothstep(0.08, 0.36, abs(fract(grid.x) - 0.5));       // the round cover tiles
+  float lap = smoothstep(0.0, 0.25, fract(grid.y));                          // the shadow under each course
+  float variation = cellVariation(floor(grid));
+  float shade = mix(1.0, mix(0.5, 1.2, roll), detail.x) * mix(1.0, mix(0.55, 1.0, lap) * (0.88 + 0.24 * variation), detail.y);
+  diffuseColor.rgb *= shade * (0.84 + 0.3 * asciiAge);
+`;
+
+export const ASCII_THATCH = ASCII_AGE + /* glsl */`
+  vec3 plane = surfacePlane(vViewPosition, worldNormal);
+  vec2 roof = roofCourses(vSurfacePosition, plane);
+  float course = roof.y / 0.43 + asciiAge * 0.3;
+  float detail = asciiFade2(vec2(course, 0.0)).x;
+  float strand = texture2D(uSurfaceTile, roof * vec2(0.9, 0.2)).b;
+  float shade = (0.62 + 0.5 * smoothstep(0.0, 0.75, fract(course))) * (0.8 + 0.4 * strand);
+  diffuseColor.rgb *= mix(0.9 + 0.2 * strand, shade, detail) * (0.85 + 0.3 * asciiAge);
+`;
+
+export const ASCII_SIDING = ASCII_AGE + /* glsl */`
+  vec3 plane = surfacePlane(vViewPosition, worldNormal);
+  vec2 wall = roofProjection(vSurfacePosition, plane);
+  float board = wall.x / 0.29;
+  float detail = asciiFade2(vec2(board, 0.0)).x * (1.0 - abs(plane.y));
+  float seam = smoothstep(0.04, 0.14, abs(fract(board + 0.5) - 0.5));
+  float variation = cellVariation(vec2(floor(board), floor(wall.y / 1.7)));
+  float shade = mix(0.4, 1.25 + 0.5 * variation, seam);
+  diffuseColor.rgb *= mix(1.0, shade, detail) * (0.86 + 0.26 * asciiAge) * (1.0 - 0.16 * smoothstep(0.55, 0.8, asciiRain));
+  // the dark cedar in shadow sinks into black at night: a faint glow of its own keeps the boards
+  // readable (the ASCII relief engine shades the wall again from the depth buffer)
+  asciiLift = vec3(0.17, 0.135, 0.11) * mix(1.0, shade, detail) * (0.8 + 0.4 * asciiAge);
+`;
+
+export const ASCII_PLASTER = ASCII_AGE + /* glsl */`
+  float blot = surfaceSample(vSurfacePosition * 0.21, inverseTransformDirection(normal, viewMatrix)).r;
+  float streak = smoothstep(0.5, 0.78, asciiRain);
+  diffuseColor.rgb *= (0.8 + 0.3 * blot) * (1.0 - 0.26 * streak) * (0.9 + 0.16 * asciiAge);
+`;
+
+export const ASCII_MASONRY = ASCII_AGE + /* glsl */`
+  vec3 plane = surfacePlane(vViewPosition, worldNormal);
+  vec2 grid = roofProjection(vSurfacePosition, plane) / vec2(0.86, 0.49);
+  grid.x += mod(floor(grid.y), 2.0) * 0.5;
+  float detail = asciiFade(grid);
+  float block = cellVariation(floor(grid));
+  float ashlar = 1.0 - smoothstep(-0.07, 0.03, stoneJoint(grid, 0.13));
+  diffuseColor.rgb *= mix(0.92 + 0.16 * block, mix(0.42, 0.78 + 0.44 * block, ashlar), detail) * (0.84 + 0.3 * asciiAge);
+`;
+
+export const ASCII_WOOD = ASCII_AGE + /* glsl */`
+  float fibre = surfaceSample(vSurfacePosition * vec3(1.2, 0.25, 1.2), inverseTransformDirection(normal, viewMatrix)).b;
+  diffuseColor.rgb *= (0.78 + 0.42 * fibre) * (0.88 + 0.22 * asciiAge);
+`;
+
+export const ASCII_MOTTLE = ASCII_AGE + /* glsl */`
+  diffuseColor.rgb *= 0.8 + 0.38 * asciiAge;
 `;

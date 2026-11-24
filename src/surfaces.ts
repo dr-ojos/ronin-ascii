@@ -1,7 +1,7 @@
 // Materials and rounded geometry for the direct 3D view.
 import * as THREE from 'three';
 import { seeded } from './map';
-import { DIRT, FINISH_HELPERS, MASONRY, PAVERS, PLASTER, SIDING, THATCH, TILES } from './architecture-finishes';
+import { DIRT, FINISH_HELPERS, MASONRY, PAVERS, PLASTER, SIDING, THATCH, TILES, ASCII_HELPERS, ASCII_TILES, ASCII_THATCH, ASCII_SIDING, ASCII_PLASTER, ASCII_MASONRY, ASCII_WOOD, ASCII_MOTTLE } from './architecture-finishes';
 
 export const detailedSurfaces = { value: 0 };
 interface SurfaceVariant {
@@ -167,9 +167,15 @@ const finishes = {
   leafBlade: { scale: 0.82, stretch: 1, bump: 0.002, height: 'grit', color: '', roughness: 0.88, shader: leafBlade },
 };
 
+/** what the buildings show in the text view, where the detailed finishes above are switched off */
+const asciiFinishes: Partial<Record<keyof typeof finishes, string>> = {
+  tiles: ASCII_TILES(false), sweptTiles: ASCII_TILES(true), clay: ASCII_MOTTLE, thatch: ASCII_THATCH,
+  siding: ASCII_SIDING, plaster: ASCII_PLASTER, masonry: ASCII_MASONRY, wood: ASCII_WOOD, boards: ASCII_WOOD, stone: ASCII_MOTTLE
+};
+
 export function surfaceMaterial(mat: THREE.MeshStandardMaterial, style: keyof typeof finishes, smooth?: 'mesh' | 'rounded') {
   const finish = finishes[style], compile = mat.onBeforeCompile, cacheKey = mat.customProgramCacheKey();
-  const pattern = 'shader' in finish ? finish.shader : '';
+  const pattern = 'shader' in finish ? finish.shader : '', ascii = asciiFinishes[style] ?? '';
   const finishVarying = style === 'sweptTiles' ? 'varying vec2 vRoofPanelPosition;\n'
     : style === 'bark' ? 'varying float vBarkHeight;\n'
     : style === 'leafBlade' ? 'varying vec2 vBambooUv;\n' : '';
@@ -191,7 +197,7 @@ ${style === 'bark' ? 'attribute float aBarkHeight;\n' : ''}` + sh.vertexShader
         ${style === 'bark' ? 'vBarkHeight = aBarkHeight;' : ''}
         ${style === 'leafBlade' ? 'vBambooUv = uv;' : ''}
         vSurfacePosition = vec3(0.0);
-        if (uDetailedSurfaces > 0.5) {
+        if (uDetailedSurfaces > 0.5 || ${ascii ? 'true' : 'false'}) {
           vec4 surfacePosition = vec4(position, 1.0);
           #ifdef USE_INSTANCING
             surfacePosition = instanceMatrix * surfacePosition;
@@ -219,7 +225,8 @@ vec3 surfaceRelief(vec3 n, float h, vec3 p) {
   vec3 gradient = (dFdx(h) * rx + dFdy(h) * ry) * sign(det) / max(abs(det), 0.000001);
   return normalize(n - gradient / max(1.0, length(gradient) * 1.5));
 }
-${pattern ? FINISH_HELPERS : ''}
+${pattern || ascii ? FINISH_HELPERS : ''}
+${ascii ? ASCII_HELPERS : ''}
 ` + sh.fragmentShader
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
     if (uDetailedSurfaces > 0.5) {
@@ -253,7 +260,15 @@ ${pattern ? FINISH_HELPERS : ''}
       float relief = ${finish.height};
       ${pattern}
       normal = surfaceRelief(normal, relief * ${finish.bump.toFixed(3)}, -vViewPosition);
-    }`);
+    }${ascii ? ` else {
+      vec3 worldNormal = inverseTransformDirection(normal, viewMatrix);
+      ${ascii}
+    }` : ''}`);
+    if (ascii.includes('asciiLift')) {
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <map_fragment>', 'vec3 asciiLift = vec3(0.0);\n#include <map_fragment>')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += asciiLift;');
+    }
     if (style === 'paper') {
       // The paper light uses an emissive map, applied after the normal and diffuse weathering.
       sh.fragmentShader = sh.fragmentShader
