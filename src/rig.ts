@@ -258,13 +258,20 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   // ---- long black scarf streaming behind
   const scarf = new THREE.Group();
   scarf.userData.equipmentLayer = 'scarf';
-  const ribbons: { geo: THREE.PlaneGeometry; base: Float32Array; len: number; ph: number }[] = [];
+  // each ribbon is a little rope of particles simulated in world space (gravity, air drag, flutter),
+  // so it trails behind, lags in turns and bounces with the stride instead of moving with the torso
+  const SEG = 18;
+  type Ribbon = { geo: THREE.PlaneGeometry; mesh: THREE.Mesh; w: number; len: number; ph: number; p: THREE.Vector3[]; q: THREE.Vector3[] };
+  const ribbons: Ribbon[] = [];
   for (let i = 0; i < 4; i++) {
-    const len = rnd(1.2, 1.9), w = rnd(0.07, 0.15), geo = new THREE.PlaneGeometry(w, len, 1, 18);
+    const len = rnd(1.2, 1.9), w = rnd(0.07, 0.15), geo = new THREE.PlaneGeometry(w, len, 1, SEG);
     geo.rotateX(Math.PI / 2); geo.translate(0, 0, -len / 2);              // lies along -z (behind the neck)
     const m = new THREE.Mesh(geo, scarfMat); m.position.set((i - 1.5) * 0.05, 0, 0); scarf.add(m);
-    ribbons.push({ geo, base: Float32Array.from(geo.attributes.position.array), len, ph: Math.random() * 6 });
+    m.frustumCulled = false;
+    const p = Array.from({ length: SEG + 1 }, () => new V()), q = p.map(() => new V());
+    ribbons.push({ geo, mesh: m, w, len, ph: Math.random() * 6, p, q });
   }
+  let scarfInit = false;
   mesh(new THREE.TorusGeometry(0.09, 0.025, 6, 20), scarfMat, scarf, 0, -0.02, 0.06).rotation.x = Math.PI / 2;
   scarf.position.set(neck.x, neck.y - 0.02, neck.z - 0.06);
   attach('Spine2', scarf);
@@ -444,6 +451,89 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     return { idleW, runW, move: 1 - idleW };
   }
 
+  // ---- scarf cloth: verlet ropes, the first two particles of each pinned to the knot at the neck
+  const sInv = new THREE.Matrix4(), sX = new V(), sY = new V(), sZ = new V(), sV = new V(), sA = new V(), sD = new V(), sL = new V(), sR = new V();
+  const scarfRest = (r: Ribbon, j: number, out: THREE.Vector3) => {   // loose resting shape, scarf-group space
+    const s = j / SEG;
+    return out.set(r.mesh.position.x + s * s * 0.25, -s * s * 0.85, -s * r.len * 0.8);
+  };
+  function simulateScarf(dt: number, t: number) {
+    scarf.updateWorldMatrix(true, false);
+    const mw = scarf.matrixWorld;
+    mw.extractBasis(sX, sY, sZ);
+    const k = sX.length();                                   // world units per scarf-space unit
+    sX.normalize(); sY.normalize();
+    sInv.copy(mw).invert();
+    const spd = loco.spd, gust = Math.min(1, spd / 5);
+    // after a teleport (respawn, shop preview) start again from the resting shape
+    if (scarfInit && ribbons[0].p[0].distanceToSquared(scarfRest(ribbons[0], 0, sR).applyMatrix4(mw)) > 25) scarfInit = false;
+    if (!scarfInit) {
+      scarfInit = true;
+      for (const r of ribbons) for (let j = 0; j <= SEG; j++) { scarfRest(r, j, r.p[j]).applyMatrix4(mw); r.q[j].copy(r.p[j]); }
+    }
+    const h = Math.min(dt, 1 / 30), n = Math.max(1, Math.ceil(h * 120)), sub = h / n;
+    if (!(h > 1e-5)) return;                                 // paused / first frame: nothing to integrate
+    for (const r of ribbons) {
+      const { p, q } = r, l = (r.len / SEG) * k;
+      for (let it = 0; it < n; it++) {
+        const tt = t - h + sub * (it + 1);
+        for (let j = 0; j <= SEG; j++) {
+          if (j < 2) { scarfRest(r, j, p[j]).applyMatrix4(mw); q[j].copy(p[j]); continue; }
+          const s = j / SEG;
+          sV.subVectors(p[j], q[j]);                          // displacement this substep
+          q[j].copy(p[j]);
+          // gravity + air drag (still air: a moving body leaves the cloth trailing behind it)
+          sA.set(0, -7 * k, 0).addScaledVector(sV, -3.2 / sub);
+          // flutter: a wave travelling down the ribbon, stronger at the tip and with speed
+          const fl = (0.8 + 4.5 * gust) * k * (0.3 + s);
+          sA.addScaledVector(sY, Math.sin(tt * (7 + 6 * gust) - j * 0.75 + r.ph) * fl);
+          sA.addScaledVector(sX, Math.cos(tt * (5 + 4 * gust) - j * 0.6 + r.ph * 1.7) * fl * 0.55);
+          // a little memory of its loose shape so it drapes nicely when standing still
+          const pull = 2.4 * (1 - gust);
+          if (pull > 0.01) sA.addScaledVector(sD.subVectors(scarfRest(r, j, sR).applyMatrix4(mw), p[j]), pull * pull);
+          p[j].addScaledVector(sV, 0.996).addScaledVector(sA, sub * sub);
+        }
+        for (let pass = 0; pass < 5; pass++) {
+          for (let j = 0; j < SEG; j++) {                     // keep every segment its length
+            const a = p[j], b = p[j + 1], wa = j < 2 ? 0 : 1, wb = j + 1 < 2 ? 0 : 1;
+            if (wa + wb === 0) continue;
+            sD.subVectors(b, a); const d = sD.length() || 1e-6, c = (d - l) / (d * (wa + wb));
+            a.addScaledVector(sD, c * wa); b.addScaledVector(sD, -c * wb);
+          }
+          for (let j = 0; j + 2 <= SEG; j++) {                // a bit of bending stiffness: no crumpling
+            const a = p[j], b = p[j + 2], wa = j < 2 ? 0 : 1, rest = 2 * l * 0.92;
+            sD.subVectors(b, a); const d = sD.length() || 1e-6;
+            if (d >= rest) continue;
+            const c = ((d - rest) / (d * (wa + 1))) * 0.5;
+            a.addScaledVector(sD, c * wa); b.addScaledVector(sD, -c);
+          }
+        }
+        // stay out of the back: the cloth slides over it
+        for (let j = 2; j <= SEG; j++) {
+          sL.copy(p[j]).applyMatrix4(sInv);
+          const zMax = -0.03 - 0.1 * clamp(-sL.y / 0.35, 0, 1);
+          if (sL.y < 0.6 && sL.y > -1.4 && sL.z > zMax) {
+            sL.z = zMax; p[j].copy(sL).applyMatrix4(mw);
+            q[j].lerp(p[j], 0.3);                              // friction against the body
+          }
+          if (p[j].y < root.position.y + 0.03) { p[j].y = root.position.y + 0.03; q[j].lerp(p[j], 0.5); }   // drags on the ground
+        }
+      }
+      // write the rope into the ribbon: two vertices per particle, the ribbon twisting as it flaps
+      const pa = r.geo.attributes.position, ox = r.mesh.position.x, ww = r.w / 2;
+      for (let j = 0; j <= SEG; j++) {
+        const s = j / SEG;
+        sL.copy(p[j]).applyMatrix4(sInv);
+        const a = Math.sin(t * 7 - j * 0.5 + r.ph) * 0.45 * s * (0.3 + gust);
+        const cx = Math.cos(a) * ww, cy = Math.sin(a) * ww;
+        pa.setXYZ(j * 2, sL.x - ox - cx, sL.y - cy, sL.z);
+        pa.setXYZ(j * 2 + 1, sL.x - ox + cx, sL.y + cy, sL.z);
+      }
+      pa.needsUpdate = true;
+      r.geo.computeVertexNormals();
+    }
+  }
+
   function update(dt: number, s: AvatarInput) {
     const atk = s.attack, p = atk ? clamp(atk.p, 0, 1) : 0, m = s.moving, t = s.time;
     const form = s.weaponForm;
@@ -522,18 +612,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     }
     previousForm = form;
 
-    // scarf ribbons: travelling wave, streaming further back when running
-    for (const r of ribbons) {
-      const pa = r.geo.attributes.position;
-      for (let i = 0; i < pa.count; i++) {
-        const bz = r.base[i * 3 + 2], sN = Math.min(1, -bz / r.len);
-        const wave = Math.sin(t * 6 - sN * 7 + r.ph) * 0.12 * sN + Math.sin(t * 2.3 + r.ph) * 0.05 * sN;
-        pa.setX(i, r.base[i * 3] + wave * (1 + m) + sN * sN * 0.35);
-        pa.setY(i, r.base[i * 3 + 1] - sN * sN * (0.9 - m * 0.7) + Math.cos(t * 5 - sN * 6 + r.ph) * 0.05 * sN);
-        pa.setZ(i, bz * (0.75 + m * 0.25));
-      }
-      pa.needsUpdate = true;
-    }
+    simulateScarf(dt, t);
     // hair sways in the wind
     for (const g of kusa) g.rotation.x = -0.2 - Math.abs(Math.sin(t * 9)) * 0.08 * m;
     tabard.rotation.x = -0.3 - (0.12 + 0.18 * L.runW) * L.move * Math.abs(Math.sin(TAU * loco.phase)) + 0.02 * Math.sin(t * 1.7);
