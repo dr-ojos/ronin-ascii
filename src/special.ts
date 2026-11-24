@@ -9,6 +9,7 @@ import { sfx, panOf } from './sfx';
 import { showMsg } from './hud';
 import { CLS, tagMat } from './materials';
 import { dmgMult } from './upgrades';
+import { specialDamage } from './special-damage';
 import { player, state } from './state';
 import { clearBladeDance, startBladeDance, updateBladeDance } from './blade-dance';
 import { clearFourFlames, startFourFlames, updateFourFlames } from './four-flames';
@@ -16,8 +17,8 @@ import { clearTechniqueWaves, startTechniqueWave, updateTechniqueWaves } from '.
 import { TECHNIQUES } from './techniques';
 import { rnd } from './utils';
 
-const CHARGE_TIME = 30;     // seconds to fill the charge from empty
-const KILL_BONUS = 0.06;    // each kill fills this much more
+const CHARGE_TIME = 45;     // seconds to fill the charge from empty
+const KILL_BONUS = 0.04;    // each kill fills this much more
 const RANGE = 15;           // metres around you the lightning reaches
 const MAX_BOLTS = 8;
 
@@ -106,7 +107,7 @@ function castLightning() {
     if (!enemies.includes(e)) return;
     const p = e.g.position;
     bolt(new THREE.Vector3(p.x, p.y + 1.1 * e.scale, p.z));
-    e.hp -= 6 * dmgMult(); e.flash = 1; provoke(e);
+    specialDamage(e, 6 * dmgMult()); e.flash = 1; provoke(e);
     e.knock.set(p.x - player.pos.x, 0, p.z - player.pos.z).normalize().multiplyScalar(e.big ? 5 : 12);
     if (e.state !== 'return') staggerEnemy(e, 1.4);
     sfx.thunder(panOf(p.x, p.z), i === 0);

@@ -10,6 +10,7 @@ import { surfaceY } from './structures';
 import { TECHNIQUES, type WaveTechniqueId } from './techniques';
 import type { Enemy } from './types';
 import { dmgMult } from './upgrades';
+import { specialDamage } from './special-damage';
 
 const WAVES = {
   viento: { range: 24, time: 0.62, damage: 7.5, stagger: 0.75, knock: 5, halfArc: 0 },
@@ -100,7 +101,7 @@ function hitEnemies(wave: Wave, before: number, radius: number) {
     if (id === 'viento' && (ahead < -pad || Math.abs(side) > WIND_WIDTH + pad)) continue;
     if (id === 'agua' && ahead < range * Math.cos(effect.halfArc) - pad) continue;
     wave.hits.add(enemy);
-    enemy.hp -= effect.damage * dmgMult(); enemy.flash = 1;
+    specialDamage(enemy, effect.damage * dmgMult()); enemy.flash = 1;
     provoke(enemy);
     if (enemy.state !== 'return') staggerEnemy(enemy, effect.stagger);
     if (id === 'viento') enemy.knock.copy(forward);

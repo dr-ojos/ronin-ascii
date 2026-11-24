@@ -4,6 +4,7 @@ import { sam } from './avatar';
 import { updatePetals } from './world';
 import { updatePlayer } from './player';
 import { updateEnemies } from './enemy-ai';
+import { updateBattle } from './battle';
 import { updateEncounters } from './encounters';
 import { updateFx } from './fx';
 import { updateSpecial } from './special';
@@ -36,6 +37,7 @@ export function update(dt: number) {
 
   updatePlayer(dt);
   updateEnemies(dt);
+  updateBattle(dt);
   updateEncounters(dt);
   updateShop(dt);
   updateTemples(dt);

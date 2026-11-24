@@ -10,6 +10,7 @@ import { surfaceY } from './structures';
 import { TECHNIQUES } from './techniques';
 import type { Enemy } from './types';
 import { dmgMult } from './upgrades';
+import { specialDamage } from './special-damage';
 
 const RANGE = 14;
 const WINDUP = 0.32, FADE = 0.31;
@@ -90,7 +91,7 @@ function ignite(cast: Cast) {
     burst(point, GOLD, 12, 4, 0.13);
   }
   for (const [enemy, hits] of strikes) {
-    enemy.hp -= hits * HIT_DAMAGE * cast.force;
+    specialDamage(enemy, hits * HIT_DAMAGE * cast.force);
     enemy.flash = 1;
     provoke(enemy);
     if (enemy.state !== 'return') staggerEnemy(enemy, 0.85);
@@ -110,7 +111,7 @@ export function updateFourFlames(dt: number) {
     if (!enemies.includes(enemy) || enemy.hp <= 0) { burning.delete(enemy); continue; }
     burn.remaining -= dt;
     while (burn.remaining <= 0 && burn.ticks > 0 && enemy.hp > 0) {
-      burn.remaining += TICK_TIME; burn.ticks--; enemy.hp -= burn.damage;
+      burn.remaining += TICK_TIME; burn.ticks--; specialDamage(enemy, burn.damage);
       enemy.flash = Math.max(0.45, enemy.flash);
       const p = enemy.g.position.clone().add(new THREE.Vector3(0, enemy.scale * 0.7, 0));
       burst(p, FIRE, 18, 3, 0.13);

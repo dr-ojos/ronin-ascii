@@ -125,7 +125,7 @@ export const KINDS: Record<EnemyKind, KindDef> = {
 };
 export const ELITES: EnemyKind[] = ['kensei', 'tengu', 'raijin'];
 /** the bosses that can lead a camp or a patrol of the wilds, and how far out (tier) they start to appear */
-export const WILD_BOSSES: [EnemyKind, number][] = [['jefe', 0], ['senorBosque', 0.4], ['yukiOnna', 0.45], ['enma', 0.55], ['shuten', 0.65]];
+export const WILD_BOSSES: [EnemyKind, number][] = [['jefe', 0], ['senorBosque', 0.3], ['yukiOnna', 0.35], ['enma', 0.45], ['shuten', 0.5]];
 export const isElite = (k: EnemyKind) => !!KINDS[k].elite;
 export const isBoss = (k: EnemyKind) => !!KINDS[k].boss;
 
@@ -144,16 +144,17 @@ const oniGeo = {
 const hornMat = M(0xdccca2), bladeMat = M(0xdbe4ed, { metalness: 0.7 }), bootMat = M(0x2e2426);
 export const enemies: Enemy[] = [];
 
-/** bosses are tougher and hit harder than their table numbers */
-const BOSS_HP = 1.4, BOSS_DMG = 1.15;
+/** every enemy is tougher, hits harder and strikes sooner than its table numbers; bosses even more */
+const HP_MULT = 1.5, DMG_MULT = 1.3, WINDUP_MULT = 0.88, SPEED_MULT = 1.08;
+const BOSS_HP = 1.5, BOSS_DMG = 1.25;
 /** Regional danger and acquired gear scale independently. */
 function stats(camp: Camp, kind: EnemyKind, x: number, z: number) {
-  const k = KINDS[kind], t = camp.tier, bh = k.boss ? BOSS_HP : 1, bd = k.boss ? BOSS_DMG : 1;
+  const k = KINDS[kind], t = camp.tier, bh = HP_MULT * (k.boss ? BOSS_HP : 1), bd = DMG_MULT * (k.boss ? BOSS_DMG : 1);
   const hp = Math.round(k.hp * bh * (1 + t * 0.8) * (1 + (camp.threat?.offense ?? 0) * 0.16));
   const dmg = Math.round(k.dmg * bd * (1 + t * 0.3) * (1 + (camp.threat?.defense ?? 0) * 0.11));
   return {
-    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup, swings: 0, strikeT: 0, cd: 0,
-    big: k.heavy || !!k.elite || !!k.boss, enraged: false, speed: rnd(k.speed[0], k.speed[1]), camp, wander: { x, z }
+    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup * WINDUP_MULT, swings: 0, strikeT: 0, cd: 0,
+    big: k.heavy || !!k.elite || !!k.boss, enraged: false, speed: rnd(k.speed[0], k.speed[1]) * SPEED_MULT, camp, wander: { x, z }
   };
 }
 function place(g: THREE.Object3D, x: number, z: number, skip?: THREE.Object3D) {

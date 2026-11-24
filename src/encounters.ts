@@ -16,6 +16,7 @@ import { CAMP_SPOTS, HIDDEN_CHESTS, POIS, WILDLIFE_SPOTS } from './landmarks';
 import { chests, makeChest, resetChests, updateLoot } from './loot';
 import { resetScore, updateScore } from './score';
 import { resetUpgrades } from './upgrades';
+import { resetBattle } from './battle';
 import { equipmentThreat } from './equipment-threat';
 import { showMsg } from './hud';
 import { sfx } from './sfx';
@@ -28,8 +29,9 @@ const SPAWN_R = 85;       // oni appear when you come this close to their group.
 const DESPAWN_R = 130;    // ...and vanish beyond this (if they are not fighting you)
 const RESPAWN = 240;      // seconds a cleared camp stays empty (and only while you are far away)
 const SAFE_R = 75;        // nothing attacks you around the shrine you start at
-const BOSS_CAMPS = 0.14;  // extra chance that a camp of the wilds (past tier 0.4) is led by a boss
-const BOSS_PATROLS = 0.3; // chance that a patrol far from the shrine (past tier 0.45) is led by a boss
+const BOSS_CAMPS = 0.28;  // extra chance that a camp of the wilds (past tier 0.3) is led by a boss
+const BOSS_PATROLS = 0.5; // chance that a patrol away from the shrine (past tier 0.3) is led by a boss
+const BOSS_AMBUSH = 0.2;  // chance that an ambush away from the shrine (past tier 0.35) is led by a boss
 
 export const camps: Camp[] = [];
 
@@ -137,8 +139,8 @@ function buildCamps() {
   // the camps of the wilds, with their chest by the fire
   // (a third of the ones further out also have a guardian by the chest)
   for (const s of CAMP_SPOTS) {
-    const boss = s.boss || (s.tier > 0.4 && Math.random() < BOSS_CAMPS);
-    const kinds = roster(s.size + 1, s.tier, boss);   // one more oni than the camp was laid out for
+    const boss = s.boss || (s.tier > 0.3 && Math.random() < BOSS_CAMPS);
+    const kinds = roster(s.size + 2, s.tier, boss);   // two more oni than the camp was laid out for
     if (!boss && s.tier > 0.3 && Math.hypot(s.x, s.z) > GUARD_MIN && Math.random() < 0.33) kinds.push(pickElite(s.tier));
     const c = makeCamp(s.x, s.z, kinds, s.r);
     c.chest = makeChest(s.chest[0], s.chest[1], s.chest[2], c.boss ? 'jefe' : c.elite ? 'guardian' : 'guarida', s.tier, true);
@@ -151,7 +153,7 @@ function buildCamps() {
     for (let k = 0; k < (len > 260 ? 2 : 1); k++) {
       const t0 = Math.random() * len * 2, [x, z] = routeAt(road.pts, len, t0);
       const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
-      const boss = tier > 0.45 && Math.random() < BOSS_PATROLS;
+      const boss = tier > 0.3 && Math.random() < BOSS_PATROLS;
       const c = makeCamp(x, z, roster(5 + Math.floor(Math.random() * 2), Math.max(0.3, tier), boss), 9, { route: road.pts, routeT: t0 });
       lens.set(c, len); camps.push(c);
     }
@@ -160,7 +162,7 @@ function buildCamps() {
   for (const [x, z, ry] of HIDDEN_CHESTS) {
     const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
     if (Math.hypot(x, z) < GUARD_MIN || Math.random() > 0.5) { makeChest(x, z, ry, 'oculto', tier, false); continue; }
-    const escort = tier > 0.7 ? 2 : tier > 0.45 ? 1 : 0;
+    const escort = tier > 0.7 ? 3 : tier > 0.45 ? 2 : 1;
     const c = makeCamp(x, z, [pickElite(tier), ...roster(escort, tier, false)], 8);
     c.chest = makeChest(x, z, ry, 'guardian', tier, true);
     camps.push(c);
@@ -220,9 +222,10 @@ export function reset() {
   Object.assign(player, { hp: 100, maxHp: 100, attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1, snareT: 0 });
   player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0;
   resetSpecial();
+  resetBattle();
   resetScore();
   discovered.clear(); discovered.add('claro');
-  ambushT = rnd(25, 45);
+  ambushT = rnd(20, 35);
 }
 
 // ------------------------------------------------------------ ambushes
@@ -236,7 +239,8 @@ function tryAmbush() {
   const a = player.face + rnd(-0.7, 0.7), dist = rnd(26, 34), x = px + Math.sin(a) * dist, z = pz + Math.cos(a) * dist;
   if (Math.hypot(x, z) > WORLD_R - 20 || inLake(x, z, 4) || lineDist(x, z, RIVER) < 8) return false;
   const tier = Math.min(1, Math.hypot(x, z) / WORLD_R);
-  const c = makeCamp(x, z, roster(3 + Math.floor(Math.random() * (1 + tier * 2)), tier, false), 8, { temp: true });
+  const boss = tier > 0.35 && Math.random() < BOSS_AMBUSH;
+  const c = makeCamp(x, z, roster(4 + Math.floor(Math.random() * (1 + tier * 2)), tier, boss), 9, { temp: true });
   camps.push(c); activate(c);
   if (Math.random() < 0.5) {   // half of them have already seen you
     for (const e of enemies) if (e.camp === c) e.state = 'chase';
@@ -275,7 +279,7 @@ export function updateEncounters(dt: number) {
     }
     // nothing around for a while? an ambush
     const fighting = enemies.some(e => e.state !== 'idle' && e.state !== 'return');
-    if (!fighting && (ambushT -= 0.25) <= 0) ambushT = tryAmbush() ? rnd(40, 75) : rnd(4, 8);
+    if (!fighting && (ambushT -= 0.25) <= 0) ambushT = tryAmbush() ? rnd(28, 50) : rnd(4, 8);
   }
   // heal slowly when nobody is fighting you and you have not been hit for a while
   const fighting = enemies.some(e => e.state !== 'idle' && e.state !== 'return');

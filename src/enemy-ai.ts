@@ -14,6 +14,7 @@ import { addPoints, POINTS } from './score';
 import { dropLoot, unseal } from './loot';
 import { lifesteal } from './upgrades';
 import { chargeKill, bolt, skyFlash } from './special';
+import { circle, onEnrage, onKill, takeTurn } from './battle';
 import { earnTechnique, TECHNIQUES } from './techniques';
 import { CLS, tagMat } from './materials';
 import { player, state } from './state';
@@ -334,7 +335,8 @@ export function updateEnemies(dt: number) {
       burst(g.position.clone().add(new THREE.Vector3(0, 1.25, 0)), def.boss.aura, 90, 7, 0.16);
       if (en.aura) en.aura.intensity = 4;
       sfx.roar({ big: true, pan: panOf(g.position.x, g.position.z) });
-      showMsg(`¡ ${def.name.toUpperCase()} ENFURECIDO !`, 1.65);
+      onEnrage(en);
+      showMsg(`¡ ${def.name.toUpperCase()} ENFURECIDO !\nllama a sus refuerzos`, 2);
     }
     const speed = en.speed * (en.enraged ? 1.13 : 1) * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));
     en.t -= dt; en.cd -= dt;
@@ -374,12 +376,15 @@ export function updateEnemies(dt: number) {
           && !enemies.some(ally => rallyTarget(en, ally, g.position, planned.radius)) ? moveDef('staffStrike') : planned;
         const pack = camp.wildlife === 'lobos' && camp.roster.length > 1;
         const waiting = pack && enemies.some(o => o !== en && o.camp === camp && (o.state === 'windup' || o.state === 'charge'));
-        if (d <= move.range && en.t <= 0 && !waiting) {
+        const turn = takeTurn(en);
+        if (d <= move.range && en.t <= 0 && !waiting && turn) {
           en.attack = prepareEnemyAttack(en, move, player.pos, Math.atan2(tmp.x, tmp.z));
           en.state = 'windup'; en.t = en.attack.windup; en.knock.set(0, 0, 0);
           if (def.beast) {
             if (def.beast.species !== 'spider') sfx.growl(panOf(g.position.x, g.position.z), def.beast.species === 'bear');
           } else sfx.warn(panOf(g.position.x, g.position.z));
+        } else if (!turn && d < move.range + 4) {
+          walk = circle(en, tmp.x, tmp.z, d, speed, dt);   // not its turn: circle and wait (battle.ts)
         } else if (pack && d < 11 && fromHome < camp.leash - 3) {
           // Move along different arcs. The next wolf closes in as the attacker starts recovering.
           const side = Math.floor(en.seed * 10) % 2 === 0 ? 1 : -1;
@@ -398,7 +403,8 @@ export function updateEnemies(dt: number) {
         const want = d < 6 ? -1 : d > reach ? 1 : 0;
         if (want) { walk = speed * (want < 0 ? 0.9 : 1); g.position.addScaledVector(step.copy(tmp).normalize(), want * walk * dt); }
         if (d < reach + 1 && en.t <= 0) { en.state = 'windup'; en.t = en.windup; }
-      } else if (d > reach && !(thunder && d < 13)) { walk = speed; g.position.addScaledVector(step.copy(tmp).normalize(), speed * dt); }
+      } else if (!takeTurn(en) && d < reach + 4) walk = circle(en, tmp.x, tmp.z, d, speed, dt);   // not its turn (battle.ts)
+      else if (d > reach && !(thunder && d < 13)) { walk = speed; g.position.addScaledVector(step.copy(tmp).normalize(), speed * dt); }
       else if (en.t <= 0) { en.state = 'windup'; en.t = en.windup * (slamming ? 1.25 : combo ? 0.55 : 1); sfx.warn(panOf(g.position.x, g.position.z)); }
     } else if (en.state === 'windup') {
       if (en.t <= 0 && en.attack) executeMove(en, en.attack);
@@ -476,7 +482,7 @@ function kill(en: Enemy, i: number, gy: number) {
   const c = new THREE.Vector3(g.position.x, gy + (def.beast ? 0.7 : 1.2) * en.scale, g.position.z);
   burst(c, 0xff3a2a, en.big ? 160 : 70, en.big ? 10 : 7);
   burst(c, 0xffe0c0, 30, 4, 0.1);
-  despawn(en); enemies.splice(i, 1); state.kills++;
+  despawn(en); enemies.splice(i, 1); state.kills++; onKill(en);
   const pan = panOf(g.position.x, g.position.z);
   if (def.beast) sfx.hit({ heavy: en.big, pan });
   else sfx.death({ big: en.big, pan });

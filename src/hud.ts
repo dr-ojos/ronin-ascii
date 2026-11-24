@@ -1,4 +1,5 @@
 // HUD text, centre-screen messages and the title / death overlay.
+import { battleLine } from './battle';
 import { player, state } from './state';
 import { camps, discovered, placeCount, chestsLeft } from './encounters';
 import { upgradeList } from './upgrades';
@@ -60,7 +61,7 @@ export function updateHud(dt: number) {
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}   <span class="y">${threatLabel()}</span>\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}\n` +
     (ups ? `<span class="y">${ups}</span>\n` : '') +
-    foeBar +
+    battleLine() + foeBar +
     `${gain}\n` +
     `<span class="d">esquiva ${player.dashCd > 0 ? '·'.repeat(Math.ceil(player.dashCd * 8)) : 'lista'}${sfx.muted ? '  ·  sin sonido' : ''}</span>${player.snareT > 0 ? ' <span class="r">· telaraña</span>' : ''}`;
 }

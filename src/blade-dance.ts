@@ -1,9 +1,10 @@
 // Danza de los Mil Tajos, the technique every ronin starts with: a string of flashes from oni to
 // oni, cutting straight through each one (and anyone standing in the way), then a last ring of
-// light on everyone cut as the blade goes back into its sheath.
+// light on everyone cut as the blade goes back into its sheath: the three weakest fall, the rest are left
+// badly hurt for the katana to finish.
 import * as THREE from 'three';
 import { sam } from './avatar';
-import { enemies } from './enemies';
+import { enemies, KINDS } from './enemies';
 import { provoke, staggerEnemy } from './enemy-ai';
 import { burst, dashGhost, dashRing } from './fx';
 import { sparkBurst } from './katana-fx';
@@ -14,6 +15,7 @@ import { surfaceY } from './structures';
 import { TECHNIQUES } from './techniques';
 import type { Enemy } from './types';
 import { dmgMult } from './upgrades';
+import { specialDamage } from './special-damage';
 import { weapon } from './weapons';
 
 const RANGE = 13;          // metres: who the dance can reach
@@ -21,7 +23,10 @@ const MAX_TARGETS = 6;
 const STEP = 0.13;         // seconds per flash
 const CUT = 1.5;           // damage of one cut (× upgrades × weapon)
 const CLEAVE = 1.9;        // anyone this close to the path of a flash is cut too
-const FINISH = 2;          // the sheathing blow on everyone cut
+const FINISH = 2;          // the sheathing blow on a boss or guardian that was cut
+const KILLS = 3;           // the sheathing blow kills this many common foes (the weakest)...
+const LEFT = 0.15;         // ...and leaves the other common ones with this much life
+const LEFT_BIG = 0.3;      // ...or this much, the heavy ones
 const FINISH_DELAY = 0.22;
 const SPIN_R = 2.6;        // with nobody around, the flashes trace a star this wide
 const COLOR = TECHNIQUES.tajos.color;
@@ -95,7 +100,7 @@ function cutAlong(d: Dance) {
     const p = e.g.position;
     const k = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.z - az) * dz) / len2)) : 0;
     if (Math.hypot(p.x - ax - dx * k, p.z - az - dz * k) > CLEAVE + 0.4 * e.scale) continue;
-    e.hp -= CUT * force; e.flash = 1;
+    specialDamage(e, CUT * force); e.flash = 1;
     provoke(e);
     if (e.state !== 'return') staggerEnemy(e, 0.6);
     e.knock.set(dz, 0, -dx).normalize().multiplyScalar((d.cut % 2 ? 1 : -1) * (e.big ? 1.5 : 4));
@@ -113,21 +118,27 @@ function cutAlong(d: Dance) {
   }
 }
 
-/** the blade goes back into its sheath: everyone it cut takes one last blow at once */
+/** the blade goes back into its sheath: everyone it cut takes one last blow at once. The weakest
+ *  KILLS common foes fall; the rest are left badly hurt (bosses and guardians only lose their share). */
 function finishingBlow(d: Dance) {
   const force = dmgMult() * weapon().dmg;
+  const cut = [...d.hits].filter(alive);
+  const strong = (e: Enemy) => !!(KINDS[e.kind].boss || KINDS[e.kind].elite);
+  const doomed = new Set(cut.filter(e => !strong(e)).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp || a.hp - b.hp).slice(0, KILLS));
   let hits = 0;
-  for (const e of d.hits) {
-    if (!alive(e)) continue;
+  for (const e of cut) {
     const p = e.g.position, at = new THREE.Vector3(p.x, p.y + 1.15 * e.scale, p.z);
-    e.hp -= FINISH * force; e.flash = 1;
-    burst(at, 0xffffff, 26, 6, 0.14);
+    if (doomed.has(e)) e.hp = 0;
+    else if (!strong(e)) e.hp = Math.min(e.hp, Math.max(1, e.maxHp * (e.big ? LEFT_BIG : LEFT)));
+    else specialDamage(e, FINISH * force);
+    e.flash = 1;
+    burst(at, 0xffffff, doomed.has(e) ? 40 : 26, 6, 0.14);
     burst(at, COLOR, 22, 4, 0.18);
     hits++;
   }
   if (hits) {
     sfx.hit({ heavy: true, pan: 0, count: hits });
-    state.hitStop = 0.1; state.shake = Math.max(state.shake, 0.5);
+    state.hitStop = doomed.size ? 0.22 : 0.1; state.shake = Math.max(state.shake, 0.5);
   }
 }
 
