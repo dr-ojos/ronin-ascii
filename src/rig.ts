@@ -588,7 +588,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const loco = { init: false, px: 0, pz: 0, yaw: 0, lag: 0, spd: 0, acc: 0, turn: 0, phase: 0, lean: 0, bank: 0, step: 0 };
   const angWrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
   const ease = (rate: number, dt: number) => 1 - Math.exp(-dt * rate);
-  const AX_X = new V(1, 0, 0), axis = new V(), swQ = new Q();
+  const AX_X = new V(1, 0, 0), axis = new V(), swQ = new Q(), stepAxis = new V();
 
   function locomotion(dt: number, atk: AvatarInput['attack'], spinning: boolean) {
     const dts = Math.max(dt, 1e-4);
@@ -772,6 +772,18 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     rotateBoneWorld(B.Neck, UP, look);
     // keep the head steadier than the torso when leaning (eyes stay level)
     rotateBoneWorld(B.Neck, leftAxis, -loco.lean * 0.5);
+    // weight in the stride, on top of the mocap: the hips roll over onto the planted leg, the shoulders
+    // counter-twist against them, the body settles a little at each footfall and the head stays level
+    {
+      const w = L.move * (1 - 0.55 * L.runW) * (atk ? 0.3 : 1), ph = TAU * loco.phase;
+      const roll = Math.sin(ph) * 0.035 * w;   // small: the whole leg swings with the hips, the feet must not slide
+      const fwd = stepAxis.set(0, 0, 1).applyQuaternion(bq);
+      rotateBoneWorld(B.Hips, fwd, roll);
+      rotateBoneWorld(B.Spine1, UP, -Math.sin(ph) * 0.08 * w);
+      rotateBoneWorld(B.Spine2, fwd, -roll * 0.6);
+      rotateBoneWorld(B.Neck, fwd, -roll * 0.5);
+      body.position.y = rise - 0.022 * w * Math.pow(0.5 + 0.5 * Math.cos(2 * ph), 4);   // the drop onto each foot
+    }
 
     const gait = -Math.cos(TAU * loco.phase);
     if (grip) sampleGrip(grip, s, gait, tPos, tQ);

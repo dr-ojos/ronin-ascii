@@ -99,7 +99,9 @@ export function startTechniqueWave(id: WaveTechniqueId) {
   const round = ROUND(id);
   const at = origin.clone().addScaledVector(forward, round ? 0 : 1.2).add(new THREE.Vector3(0, 0.8, 0));
   burst(at, TECHNIQUES[id].color, round ? 75 : 42, 6, 0.17);
-  flare(at, TECHNIQUES[id].color, { size: round ? 1.25 : 1, life: round ? 0.6 : 0.5 });
+  // the star opens above the ronin's head (ahead of him for the waves that travel), so his own figure never hides its core
+  const star = origin.clone().addScaledVector(forward, round ? 0 : 2.4).add(new THREE.Vector3(0, round ? 2.3 : 1.7, 0));
+  flare(star, TECHNIQUES[id].color, { size: round ? 1.25 : 1, life: round ? 0.6 : 0.5 });
   if (id === 'campana') {
     // the bronze keeps ringing: two fainter rings follow the first, and the ground shakes
     addWave(id, 0.22, true); addWave(id, 0.46, true);
