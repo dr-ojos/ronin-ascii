@@ -30,7 +30,7 @@ const atlas = (() => {
   const x = c.getContext('2d')!;
   x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
   x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.font = `bold ${Math.round(gh * 0.78)}px "Courier New", Courier, monospace`;
+  x.font = `bold ${Math.round(gh * 0.95)}px "Courier New", Courier, monospace`;   // big: neighbouring letters nearly touch
   SETS.forEach((set, r) => [...set].forEach((ch, i) => x.fillText(ch, i * gw + gw / 2, r * gh + gh / 2 + 2)));
   const t = new THREE.CanvasTexture(c);
   t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
@@ -77,7 +77,7 @@ if (uSurfGlyph > 0.5) {
   if (n.x > n.y && n.x > n.z) { q = vec2(-P.z * sign(vGlyphN.x), P.y); face = 0.0; }
   else if (n.z > n.y) { q = vec2(P.x * sign(vGlyphN.z), P.y); face = 1.0; }
   else { q = P.xz; face = 2.0; }
-  vec2 g = q / vec2(uGlyphH * 0.62, uGlyphH);
+  vec2 g = q / vec2(uGlyphH * 0.58, uGlyphH);
   vec2 cell = floor(g), f = g - cell;
   float lum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
   float L = 1.0 - exp(-lum * 2.6);                                     // 0..1, compressed like the eye
@@ -87,7 +87,7 @@ if (uSurfGlyph > 0.5) {
   else if (pixelCls > 0.61) sub = 1.0;                                 // embroidered trim reads as metal
   float h = fract(sin(dot(cell + face * 37.17, vec2(12.9898, 78.233))) * 43758.5453);
   float idx = floor(h * ${COLS.toFixed(1)});
-  vec2 fi = mix(vec2(0.07), vec2(0.93), f);
+  vec2 fi = mix(vec2(0.03), vec2(0.97), f);
   vec2 auv = vec2((idx + fi.x) / ${COLS.toFixed(1)}, 1.0 - (sub * 3.0 + band + 1.0 - fi.y) / ${ROWS.toFixed(1)});
   vec2 k = vec2(0.86 / ${COLS.toFixed(1)}, 0.86 / ${ROWS.toFixed(1)});
   float ink = textureGrad(tGlyphs, auv, dFdx(g) * k, dFdy(g) * k).r;
@@ -96,7 +96,9 @@ if (uSurfGlyph > 0.5) {
   vec3 letter = mix(tint, vec3(1.0), 0.18 + 0.5 * L * L) * (0.12 + 1.25 * L);
   // a far oni's letters shrink below a few pixels: fade back to its plain shading instead of shimmering
   float cellPx = 1.0 / max(fwidth(g.y), 1e-4);
-  outgoingLight = mix(outgoingLight, mix(outgoingLight * 0.14, letter, ink), smoothstep(2.5, 5.0, cellPx));
+  // between the strokes the surface sinks; the brighter it is lit, the deeper, so a sunlit kasa still reads as letters
+  vec3 backing = outgoingLight * mix(0.14, 0.045, L);
+  outgoingLight = mix(outgoingLight, mix(backing, letter, ink), smoothstep(2.5, 5.0, cellPx));
 }
 `;
 
@@ -116,7 +118,7 @@ uniform float uSurfGlyph; uniform float uGlyphH; uniform sampler2D tGlyphs;
 const BODY = 1.75;   // metres, kasa included
 let rows = 0;
 export function fitGlyphs(px: number) {
-  const ideal = THREE.MathUtils.clamp(px / (3.4 * DPR), 14, 44);
+  const ideal = THREE.MathUtils.clamp(px / (3.0 * DPR), 16, 52);
   if (!rows || Math.abs(ideal - rows) > 3) rows = Math.round(ideal / 2) * 2;
   surfaceGlyphs.uGlyphH.value = BODY / rows;
 }

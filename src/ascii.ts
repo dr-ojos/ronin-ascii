@@ -134,7 +134,7 @@ export const cellMat = new THREE.ShaderMaterial({
     uN: { value: N }, uEdgeRow: { value: EDGE_ROW }, uMode: { value: 0 }, uHit: { value: 0 }, uTime: { value: 0 }, uActor: { value: 0 },
     uLight: { value: new THREE.Vector2(0, 1) },  // moonlight direction on screen (unit, pixels, y up)
     // ---- relief engine: the scene's depth buffer rebuilt into view-space positions and normals
-    tDepth: { value: sceneDepth }, uProjInv: { value: new THREE.Matrix4() }, uProjScale: { value: new THREE.Vector2(1, 1) },
+    tDepth: { value: sceneDepth }, uProjInv: { value: new THREE.Matrix4() }, uProj: { value: new THREE.Matrix4() }, uProjScale: { value: new THREE.Vector2(1, 1) },
     uViewRot: { value: new THREE.Matrix3() },    // view -> world rotation (for the sky term)
     uMoonW: { value: new THREE.Vector3(0, 1, 0) }, uMoonV: { value: new THREE.Vector3(0, 0, 1) },   // moon direction, world / view
     uExposure: { value: 2.25 },                    // environment exposure (the figures keep their own)
@@ -145,7 +145,7 @@ export const cellMat = new THREE.ShaderMaterial({
     uniform sampler2D tScene; uniform sampler2D tMask; uniform sampler2D tDepth;
     uniform vec2 uRes; uniform vec2 uCell; uniform float uN; uniform float uEdgeRow; uniform float uMode; uniform float uHit; uniform float uActor;
     uniform vec2 uLight;
-    uniform mat4 uProjInv; uniform vec2 uProjScale; uniform mat3 uViewRot; uniform vec3 uMoonV; uniform float uExposure;
+    uniform mat4 uProjInv; uniform mat4 uProj; uniform vec2 uProjScale; uniform mat3 uViewRot; uniform vec3 uMoonV; uniform float uExposure; uniform float uTime;
     #define MAXF ${MAX_FLARES}
     uniform vec4 uFlareA[MAXF]; uniform vec4 uFlareB[MAXF];
     // view-space position of the surface seen at uv (z < 0 in front of the camera)
@@ -323,6 +323,8 @@ export const cellMat = new THREE.ShaderMaterial({
         float edgeK = 0.0; vec2 eg = vec2(0.0); float facingE = 0.0;
         float relief = 1.0;
         vec3 mist = vec3(0.0); float far = 0.0;
+        float reflK = 0.0, reflL = 0.0; vec3 reflTint = vec3(1.0);   // what the water mirrors
+        float strokeOn = 0.0; vec2 strokeDir = vec2(0.0);            // roofs and walls: letters that follow the surface
         if (solid) {
           float dist = -P.z;
           vec2 o = cs * 0.5;                                           // half a cell: one normal per character
@@ -334,6 +336,18 @@ export const cellMat = new THREE.ShaderMaterial({
           vec3 Nv = normalize(cross(ddx, ddy));
           if (Nv.z < 0.0) Nv = -Nv;
           vec3 Nw = uViewRot * Nv;
+          if (abs(row - 3.0) < 0.1) {
+            mat3 toView = transpose(uViewRot);
+            if (Nw.y > 0.2 && Nw.y < 0.97) {
+              // a roof: strokes run down the slope, row after row like its tiles in the rain
+              vec3 D = cross(cross(Nw, vec3(0.0, 1.0, 0.0)), Nw);
+              strokeDir = (toView * normalize(D)).xy; strokeOn = 1.0;
+            } else if (abs(Nw.y) < 0.2 && mod(cell.y, 2.0) < 0.5) {
+              // a wall: every other row a plank line along it, converging with the perspective
+              vec3 T = cross(vec3(0.0, 1.0, 0.0), Nw);
+              strokeDir = (toView * normalize(T)).xy; strokeOn = 1.0;
+            }
+          }
           // moon: half-lambert, squared so the lit flank and the far flank separate into different letters
           float ndl = dot(Nv, uMoonV);
           float hl = ndl * 0.5 + 0.5; hl *= hl;
@@ -368,6 +382,29 @@ export const cellMat = new THREE.ShaderMaterial({
           if (waterRow) {                                              // the moon's path on the water
             vec3 H = normalize(uMoonV + normalize(-P));
             relief += pow(max(dot(Nv, H), 0.0), 70.0) * 2.2;
+            // ---- reflection: march the mirrored view ray across the screen against the depth buffer, so the
+            // water shows what stands over it (the ronin in his letters, lanterns, trees), broken by ripples
+            vec3 upV = normalize(vec3(uViewRot[0].y, uViewRot[1].y, uViewRot[2].y));
+            float ripple = sin(P.x * 3.1 + uTime * 1.7) * 0.5 + sin(P.z * 2.3 - uTime * 1.3 + P.x) * 0.5;
+            vec3 Rv = reflect(normalize(P), normalize(upV + Nv * 0.15 + vec3(ripple * 0.025, 0.0, 0.0)));
+            float t = 0.15;
+            for (int i = 0; i < 24; i++) {
+              t *= 1.22;
+              vec3 Q = P + Rv * t;
+              vec4 cq = uProj * vec4(Q, 1.0);
+              if (cq.w <= 0.0) break;
+              vec2 uq = cq.xy / cq.w * 0.5 + 0.5;
+              if (uq.x < 0.0 || uq.x > 1.0 || uq.y < 0.0 || uq.y > 1.0) break;
+              float sz = vpos(uq).z, dz = sz - Q.z;                        // > 0: the ray went behind what the screen shows there
+              if (dz > 0.0 && dz < 0.6 + t * 0.25 && texture2D(tDepth, uq).r < 0.99999) {
+                vec3 rc = pow(aces(cellCol(uq, cs) * uExposure), vec3(1.0 / 2.2));
+                float edge = smoothstep(0.0, 0.08, min(min(uq.x, 1.0 - uq.x), min(uq.y, 1.0 - uq.y)));
+                reflK = 0.85 * edge * smoothstep(16.0, 2.0, t);             // near things mirror clearly, far ones fade out
+                reflL = luma(rc);
+                reflTint = rc / max(max(max(rc.r, rc.g), rc.b), 0.04);
+                break;
+              }
+            }
           }
           // aerial perspective: far ground fades into a cool moonlit mist instead of black, so the
           // planes of the landscape stack one behind the other
@@ -381,13 +418,18 @@ export const cellMat = new THREE.ShaderMaterial({
         l = smoothstep(0.0, 1.0, l) * 0.5 + l * 0.5;                   // contrast curve: shadows sink, lit areas pop
         if (row > 0.5 && row < 4.5) l = max(l, 0.13);  // shadows keep a faint woven texture
         if (waterRow) l = max(l, 0.12);                // still water in the dark: a field of dots
+        if (reflK > 0.0) l = mix(l, clamp(reflL * 1.15 + 0.06, 0.08, 0.95), reflK);   // the mirror sets the water's brightness: dark figures mirror dark
         idx = floor(l * uN);
         vec3 tint = col / max(max(max(col.r, col.g), col.b), 0.04);
         tint = mix(tint, mist / 0.78, far * 0.5);
+        tint = mix(tint, reflTint * vec3(0.88, 0.96, 1.08), reflK * 0.92);   // the mirrored colour, a touch cooler
         c = light ? mix(tint, vec3(1.0), 0.25) * (0.8 + 0.6 * l) : tint * (0.27 + 0.75 * l);
         c = mix(c, mix(tint, vec3(0.8, 1.0, 0.55), 0.2) * (0.5 + 0.85 * l), vividGrass);   // lit blades glow
         // the moon's side of every surface warms a touch, the shaded side cools: volume through colour too
         c *= mix(vec3(0.85, 0.9, 1.1), vec3(1.06, 1.02, 0.95), smoothstep(0.25, 0.85, l));
+        if (strokeOn > 0.5 && edgeK <= 0.5 && l > 0.14 && length(strokeDir) > 0.05) {
+          row = uEdgeRow; idx = bin(vec2(-strokeDir.y, strokeDir.x));
+        }
         if (edgeK > 0.5) {
           row = uEdgeRow; idx = bin(eg);
           float lit = smoothstep(-0.2, 0.7, facingE);
@@ -648,6 +690,8 @@ export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
   // the relief engine's camera: rebuild view-space positions from depth, light them with the moon
   const cu0 = cellMat.uniforms, pc = camera as THREE.PerspectiveCamera;
   cu0.uProjInv.value.copy(pc.projectionMatrixInverse);
+  cu0.uProj.value.copy(pc.projectionMatrix);
+  cu0.uTime.value = performance.now() / 1000;
   cu0.uProjScale.value.set(pc.projectionMatrix.elements[0] * 0.5, pc.projectionMatrix.elements[5] * 0.5);
   cu0.uViewRot.value.setFromMatrix4(pc.matrixWorld);
   cu0.uMoonV.value.copy(cu0.uMoonW.value).transformDirection(pc.matrixWorldInverse);

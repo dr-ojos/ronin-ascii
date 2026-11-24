@@ -85,7 +85,9 @@ export function startTechniqueWave(id: WaveTechniqueId) {
   waves.push(wave); scene.add(mesh);
   const at = origin.clone().addScaledVector(forward, id === 'fuego' ? 0 : 1.2).add(new THREE.Vector3(0, 0.8, 0));
   burst(at, TECHNIQUES[id].color, id === 'fuego' ? 75 : 42, 6, 0.17);
-  flare(at, TECHNIQUES[id].color, { size: id === 'fuego' ? 1.25 : 1, life: id === 'fuego' ? 0.6 : 0.5 });
+  // the star opens above the ronin's head (ahead of him for the waves that travel), so his own figure never hides its core
+  const star = origin.clone().addScaledVector(forward, id === 'fuego' ? 0 : 2.4).add(new THREE.Vector3(0, id === 'fuego' ? 2.3 : 1.7, 0));
+  flare(star, TECHNIQUES[id].color, { size: id === 'fuego' ? 1.25 : 1, life: id === 'fuego' ? 0.6 : 0.5 });
   sfx.swing({ power: id === 'fuego' ? 1.6 : 1.1, pan: 0 });
 }
 
