@@ -11,6 +11,7 @@ import { updateRain, updateWorld, updateSky } from './world';
 import { updateMinimap } from './minimap';
 import { updateCamera, updateLightDir } from './camera';
 import { updateHud } from './hud';
+import { updateInventoryButton } from './inventory';
 import { update } from './game';
 import { state, player } from './state';
 import { setDetailedSurfaces } from './surfaces';
@@ -33,6 +34,7 @@ function frame() {
   updateSky(camera.position);
   updateLightDir();
   updateHud(dt);
+  updateInventoryButton();
   updateMinimap(dt);
   cellMat.uniforms.uMode.value = state.colorMode;
   setDetailedSurfaces(!state.asciiOn);

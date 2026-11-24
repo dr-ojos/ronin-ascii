@@ -22,6 +22,10 @@
   #zone{position:fixed;right:16px;top:188px;width:233px;text-align:center;font-size:12px;color:#ffd27a;pointer-events:none;text-shadow:0 0 6px #000;letter-spacing:.08em}
   #bigmap{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:none;border:1px solid #2a3348;background:#05060a;box-shadow:0 0 40px #000;pointer-events:none}
   #prompt{position:fixed;left:0;right:0;bottom:16%;text-align:center;font-size:16px;font-weight:bold;color:#ffd27a;pointer-events:none;text-shadow:0 0 8px #000,0 0 2px #000;letter-spacing:.06em}
+  #inventory-btn{position:fixed;left:16px;bottom:12px;z-index:4;display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:0 12px;
+    background:#0a0d15;color:#ffd27a;border:1px solid #59617a;box-shadow:0 0 12px #000;font:700 13px "Courier New",monospace;cursor:pointer}
+  #inventory-btn kbd{padding:1px 5px;border:1px solid #49536b;color:#cfd6e6;font:inherit}
+  #inventory-btn[hidden],body[data-menu] #inventory-btn{display:none}
   #overlay .cbtn{margin-top:16px;color:#8fb4ff;border:1px solid #2a3348;padding:6px 14px;cursor:pointer;font-size:14px;letter-spacing:.08em}
   #overlay .cbtn:hover{color:#ffd27a;border-color:#ffd27a}
   #menu{position:fixed;right:24px;top:50%;transform:translateY(-50%);width:min(440px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow-y:auto;display:none;z-index:5;
@@ -51,7 +55,27 @@
   #menu .mst{min-height:1.3em;margin-top:8px;color:#ffd27a;text-align:center;font-size:13px}
   #menu .mf{color:#5c6478;font-size:11px;text-align:center}
   #menu .y{color:#ffd27a}#menu .r{color:#ff5a4a}#menu .b{color:#8fb4ff}#menu .d{color:#6c7488}
+  #menu[data-menu="inventory"]{inset:50% auto auto 50%;transform:translate(-50%,-50%);width:min(480px,calc(100vw - 24px));
+    max-height:calc(100dvh - 24px);flex-direction:column;overflow:hidden;background:#0a0d15;box-shadow:0 0 0 100vmax rgba(3,4,8,.62),0 0 30px #000}
+  #menu[data-menu="inventory"] .mheader{display:grid;grid-template-columns:44px 1fr 44px;align-items:center}
+  #menu[data-menu="inventory"] .mt{grid-column:2;margin:0;font-size:16px}
+  #menu[data-menu="inventory"] .mclose{min-height:44px;border:1px solid #2a3348;background:#101624;color:#cfd6e6;font:inherit;font-size:22px;cursor:pointer}
+  #menu[data-menu="inventory"] .mrows{min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#384359 #080b12;padding-right:4px}
+  #menu[data-menu="inventory"] .mh{color:#9aa3b5}
+  #menu[data-menu="inventory"] .mr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;width:100%;min-height:44px;
+    padding:7px 8px;background:transparent;border:0;border-left:2px solid transparent;box-sizing:border-box;color:inherit;font:inherit;text-align:left}
+  #menu[data-menu="inventory"] div.mr{cursor:default}
+  #menu[data-menu="inventory"] button.mr:is(.on,:hover){background:#141c2c;border-left-color:#ffd27a}
+  #menu[data-menu="inventory"] .mr .ml{white-space:normal;overflow-wrap:anywhere}
+  #menu[data-menu="inventory"] .mv{float:none;font-size:12px}
+  #menu[data-menu="inventory"] .mn{grid-column:1/-1;margin:0;color:#9aa3b5;font-size:12px}
+  #menu[data-menu="inventory"] .mf{color:#9aa3b5}
+  #inventory-btn:is(:hover,:focus-visible),#menu[data-menu="inventory"] .mclose:hover{border-color:#ffd27a;background:#141c2c}
+  #inventory-btn:focus-visible,#menu[data-menu="inventory"] button:focus-visible{outline:2px solid #ffd27a;outline-offset:-2px}
   #hint{position:fixed;right:16px;bottom:12px;font-size:12px;color:#5c6478;pointer-events:none;white-space:pre;text-align:right}
+  @media(max-width:800px){
+    #hint{left:160px;white-space:pre-wrap}
+  }
 </style>
 </head>
 <body>
@@ -62,6 +86,7 @@
 <div id="zone"></div>
 <canvas id="bigmap"></canvas>
 <div id="menu"></div>
+<button type="button" id="inventory-btn" aria-controls="menu" aria-expanded="false" aria-haspopup="dialog" aria-keyshortcuts="I" hidden><kbd aria-hidden="true">I</kbd> Inventario</button>
 <div id="hint">WASD mover · SHIFT correr · clic tajo · ESPACIO esquivar · E hablar / abrir
 Q arma · P técnica especial · O cambiar técnica · N mapa
 K tajo · L giro · T vista 3D · F foto · R lluvia · M sonido</div>
@@ -78,7 +103,7 @@ K tajo · L giro · T vista 3D · F foto · R lluvia · M sonido</div>
     <b>SHIFT</b> correr &nbsp;·&nbsp; <b>ESPACIO</b> esquivar &nbsp;·&nbsp; <b>E</b> / tajo abrir cofre &nbsp;·&nbsp; <b>N</b> mapa<br>
     <b>P</b> usar técnica cargada &nbsp;·&nbsp; <b>O</b> cambiar técnica &nbsp;·&nbsp; <b>◆ Templos</b> aprende técnicas con los sellos de jade de los cofres<br>
     empiezas con la <b>Danza de los Mil Tajos</b> &nbsp;·&nbsp; el <b>Rayo</b> se gana venciendo al guardián del Templo del Rayo<br>
-    <b>E</b> hablar con los maestros o con Masa, el armero &nbsp;·&nbsp; <b>Q</b> cambiar de arma<br>
+    <b>E</b> hablar con los maestros o con Masa, el armero &nbsp;·&nbsp; <b>I</b> inventario &nbsp;·&nbsp; <b>Q</b> cambiar de arma<br>
     <b>C</b> paleta &nbsp;·&nbsp; <b>T</b> ver sin ASCII &nbsp;·&nbsp; <b>F</b> modo foto &nbsp;·&nbsp; <b>+ / -</b> densidad &nbsp;·&nbsp; <b>M</b> sonido
   </div>
   <div class="cbtn" id="custom-btn">[ personalizar ronin ]</div>

@@ -54,17 +54,22 @@ export function armorStats(a: Armor) {
   if (a.regen) bits.push(`+${a.regen} vida/s`);
   return a.hp ? bits.join(' · ') : 'sin protección';
 }
-export function wearArmor(id: string) {
-  if (!ownsArmor(id)) return;
+export function wearArmor(id: string, justBought = false) {
+  if (!ownsArmor(id) || state.armor === id) return;
   const before = armor().hp;
+  const healthRatio = player.hp / player.maxHp;
   state.armor = id;
   const d = armor().hp - before;
-  player.maxHp += d; player.hp = Math.max(1, Math.min(player.maxHp, player.hp + Math.max(0, d)));
+  player.maxHp += d;
+  // Swapping armour keeps the same health percentage so repeated changes cannot heal the player.
+  player.hp = justBought
+    ? Math.max(1, Math.min(player.maxHp, player.hp + Math.max(0, d)))
+    : healthRatio * player.maxHp;
 }
 export function buyArmor(a: Armor): 'ok' | 'poor' | 'owned' {
   if (ownsArmor(a.id)) return 'owned';
   if (state.mon < a.price) return 'poor';
-  state.mon -= a.price; state.ownedArmor.push(a.id); wearArmor(a.id);
+  state.mon -= a.price; state.ownedArmor.push(a.id); wearArmor(a.id, true);
   return 'ok';
 }
 /** a new run: back to the travelling kimono (encounters.reset has already set the life back to 100) */

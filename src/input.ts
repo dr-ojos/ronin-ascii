@@ -10,6 +10,7 @@ import { cycleTechnique } from './techniques';
 import { tryTalkTemple } from './temples';
 import { tryTalk } from './shop';
 import { menuKey } from './menu';
+import { inventoryButton, toggleInventory } from './inventory';
 import { cycleWeapon, resetWeapons } from './weapons';
 import { resetArmor } from './armor';
 import { dressUp } from './outfit';
@@ -22,7 +23,13 @@ import { resetMinimap, zoomBigMap } from './minimap';
 /** camera heading when photo mode was switched on */
 let photoYaw = 0;
 addEventListener('keydown', e => {
+  if (e.code === 'KeyI' && !e.metaKey && !e.ctrlKey && !e.altKey && (!state.menu || state.menu === 'inventory')) {
+    if (!e.repeat) toggleInventory(document.activeElement === inventoryButton);
+    e.preventDefault();
+    return;
+  }
   if (menuKey(e)) return;   // an open menu takes the keys
+  if (e.target === inventoryButton && (e.code === 'Enter' || e.code === 'Space')) return;
   keys[e.code] = true;
   if (e.code === 'Space') { e.preventDefault(); tryDash(); }
   if (!e.repeat && e.code === 'KeyK' && state.playing && !state.dead) tryAttack(false);
