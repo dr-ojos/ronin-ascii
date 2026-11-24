@@ -127,13 +127,25 @@ export const cellMat = new THREE.ShaderMaterial({
     tScene: { value: rt.texture }, tMask: { value: maskRT.texture },
     uRes: { value: bufSize.clone() }, uCell: { value: new THREE.Vector2() },
     uN: { value: N }, uEdgeRow: { value: EDGE_ROW }, uMode: { value: 0 }, uHit: { value: 0 }, uTime: { value: 0 }, uActor: { value: 0 },
-    uLight: { value: new THREE.Vector2(0, 1) }   // moonlight direction on screen (unit, pixels, y up)
+    uLight: { value: new THREE.Vector2(0, 1) },  // moonlight direction on screen (unit, pixels, y up)
+    // ---- relief engine: the scene's depth buffer rebuilt into view-space positions and normals
+    tDepth: { value: sceneDepth }, uProjInv: { value: new THREE.Matrix4() }, uProjScale: { value: new THREE.Vector2(1, 1) },
+    uViewRot: { value: new THREE.Matrix3() },    // view -> world rotation (for the sky term)
+    uMoonW: { value: new THREE.Vector3(0, 1, 0) }, uMoonV: { value: new THREE.Vector3(0, 0, 1) },   // moon direction, world / view
+    uExposure: { value: 2.25 }                     // environment exposure (the figures keep their own)
   },
   vertexShader: `void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tScene; uniform sampler2D tMask;
+    uniform sampler2D tScene; uniform sampler2D tMask; uniform sampler2D tDepth;
     uniform vec2 uRes; uniform vec2 uCell; uniform float uN; uniform float uEdgeRow; uniform float uMode; uniform float uHit; uniform float uActor;
     uniform vec2 uLight;
+    uniform mat4 uProjInv; uniform vec2 uProjScale; uniform mat3 uViewRot; uniform vec3 uMoonV; uniform float uExposure;
+    // view-space position of the surface seen at uv (z < 0 in front of the camera)
+    vec3 vpos(vec2 uv){
+      float d = texture2D(tDepth, uv).r;
+      vec4 p = uProjInv * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+      return p.xyz / p.w;
+    }
     vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
     vec3 grade(vec3 c){ return pow(aces(c * 1.9), vec3(1.0 / 2.2)); }
     float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
@@ -245,7 +257,7 @@ export const cellMat = new THREE.ShaderMaterial({
         if (coverage / 6.0 > 0.35) { gl_FragColor = vec4(0.0); return; }
         // ---- environment: glyph ramp chosen per material class (stored in alpha)
         vec4 s0 = texture2D(tScene, uv);
-        vec3 col = grade(cellCol(uv, cs));
+        vec3 col = pow(aces(cellCol(uv, cs) * uExposure), vec3(1.0 / 2.2));
         float cls = floor(s0.a * 10.0 + 0.5);
         if (abs(cls - 9.0) < 0.5) {
           // ---- ASCII-art flowers: the exact texel (no filtering between cells) says which glyph to draw
@@ -288,15 +300,87 @@ export const cellMat = new THREE.ShaderMaterial({
         }
         else if (foliageRow) col = mix(vec3(l), col, 1.15) * vec3(0.95, 0.95, 1.05);  // canopies keep their colour: pink sakura, green pine
         else if (!light) col = mix(vec3(l), col, 0.5) * vec3(0.86, 0.9, 1.12);        // indigo stone / wood
-        float gain = light ? 1.4 : (grassRow ? 0.95 : (waterRow ? 1.15 : (row < 3.5 && row > 1.5 ? 1.0 : 1.05)));
+        float gain = light ? 1.4 : (grassRow ? 1.0 : (waterRow ? 1.15 : (row < 3.5 && row > 1.5 ? 1.08 : 1.1)));
         l = clamp(luma(col) * gain, 0.0, 0.999);
-        l = smoothstep(0.0, 1.0, l) * 0.55 + l * 0.45;                 // contrast curve: shadows sink, lit areas pop
-        if (row > 0.5 && row < 4.5) l = max(l, 0.1);   // shadows keep a faint woven texture
-        if (waterRow) l = max(l, 0.09);                // still water in the dark: a field of dots
+        l = pow(l, 0.85);                                              // night lift: the mid-tones come up out of the black
+
+        // ---- relief engine: rebuild the surface from the depth buffer and light it again in ASCII
+        // (half-lambert moon, sky dome, ambient occlusion, depth contours, glints on water, aerial depth)
+        vec3 P = vpos(uv);
+        bool solid = texture2D(tDepth, uv).r < 0.99999 && !(row < 0.5);
+        float edgeK = 0.0; vec2 eg = vec2(0.0); float facingE = 0.0;
+        float relief = 1.0;
+        vec3 mist = vec3(0.0); float far = 0.0;
+        if (solid) {
+          float dist = -P.z;
+          vec2 o = cs * 0.5;                                           // half a cell: one normal per character
+          vec3 pr = vpos(uv + vec2(o.x, 0.0)), pl = vpos(uv - vec2(o.x, 0.0));
+          vec3 pu = vpos(uv + vec2(0.0, o.y)), pd = vpos(uv - vec2(0.0, o.y));
+          // pick the flatter side on each axis, so a cell on a silhouette keeps its own surface's normal
+          vec3 ddx = abs(pr.z - P.z) < abs(P.z - pl.z) ? pr - P : P - pl;
+          vec3 ddy = abs(pu.z - P.z) < abs(P.z - pd.z) ? pu - P : P - pd;
+          vec3 Nv = normalize(cross(ddx, ddy));
+          if (Nv.z < 0.0) Nv = -Nv;
+          vec3 Nw = uViewRot * Nv;
+          // moon: half-lambert, squared so the lit flank and the far flank separate into different letters
+          float ndl = dot(Nv, uMoonV);
+          float hl = ndl * 0.5 + 0.5; hl *= hl;
+          float skyT = Nw.y * 0.5 + 0.5;                              // faces turned to the sky catch the moonlit sky
+          // ambient occlusion: 8 taps in a ring of ~0.7 m around the point, the classic Alchemy estimator
+          float R = 0.7, ao = 0.0, jr = hash(cell) * 6.2832;
+          vec2 rad = R * uProjScale / max(dist, 0.5);
+          for (int i = 0; i < 8; i++) {
+            float a = float(i) * 0.785398 + jr;
+            float rr = 0.35 + 0.65 * fract(float(i) * 0.618 + jr);
+            vec3 S = vpos(uv + vec2(cos(a), sin(a)) * rad * rr);
+            vec3 v = S - P; float vl = length(v) + 1e-4;
+            ao += max(0.0, dot(Nv, v / vl) - 0.12) * smoothstep(R * 2.2, R * 0.6, vl);
+          }
+          ao = clamp(1.0 - ao * 0.24, 0.0, 1.0);
+          // creases from the second derivative of the surface: a ridge (box corner, stone lip, roof edge)
+          // catches the light, a valley sinks
+          vec3 lap = (pr + pl - 2.0 * P) + (pu + pd - 2.0 * P);
+          float crease = clamp(-dot(lap, Nv) / max(dist * 0.02, 0.01), -1.0, 1.0);
+          // depth contours: where this cell stands in front of what is next to it, the edge is drawn
+          // with a | / - \\ stroke, lit on the moon's side and sunk on the other
+          vec4 jump = vec4(pr.z, pl.z, pu.z, pd.z) - P.z;              // < 0: that neighbour is farther away
+          float behind = -min(min(jump.x, jump.y), min(jump.z, jump.w));
+          edgeK = smoothstep(0.05, 0.14, behind / dist);
+          eg = vec2(pr.z - pl.z, pu.z - pd.z);                         // points towards the nearer side (into the object)
+          facingE = length(eg) > 1e-5 ? dot(normalize(-eg), uLight) : 0.0;
+          // how much each material listens: grass blades are too thin for a clean normal
+          float k = grassRow ? 0.45 : (light ? 0.2 : (waterRow ? 0.6 : 1.0));
+          relief = mix(1.0, (0.45 + 0.75 * hl) * (0.85 + 0.2 * skyT), k);   // flat ground stays ~1
+          relief *= mix(1.0, 0.35 + 0.65 * ao, grassRow ? 0.75 : 1.0);
+          relief *= 1.0 + crease * (grassRow ? 0.15 : 0.45);
+          if (waterRow) {                                              // the moon's path on the water
+            vec3 H = normalize(uMoonV + normalize(-P));
+            relief += pow(max(dot(Nv, H), 0.0), 70.0) * 2.2;
+          }
+          // aerial perspective: far ground fades into a cool moonlit mist instead of black, so the
+          // planes of the landscape stack one behind the other
+          far = smoothstep(18.0, 95.0, dist);
+          mist = vec3(0.42, 0.5, 0.78);
+          // grass and foliage do not get outlines (every blade would be one)
+          if (grassRow || foliageRow && edgeK < 0.9 || light) edgeK = 0.0;
+        }
+        l = clamp(l * clamp(relief, 0.3, waterRow ? 3.0 : 1.3), 0.0, light || waterRow ? 0.999 : 0.86);   // only real lights reach the densest glyphs
+        l = mix(l, 0.2 + 0.25 * l, far * 0.55);
+        l = smoothstep(0.0, 1.0, l) * 0.5 + l * 0.5;                   // contrast curve: shadows sink, lit areas pop
+        if (row > 0.5 && row < 4.5) l = max(l, 0.13);  // shadows keep a faint woven texture
+        if (waterRow) l = max(l, 0.12);                // still water in the dark: a field of dots
         idx = floor(l * uN);
         vec3 tint = col / max(max(max(col.r, col.g), col.b), 0.04);
-        c = light ? mix(tint, vec3(1.0), 0.25) * (0.75 + 0.6 * l) : tint * (0.2 + 0.6 * l);
-        c = mix(c, mix(tint, vec3(0.8, 1.0, 0.55), 0.2) * (0.45 + 0.8 * l), vividGrass);   // lit blades glow
+        tint = mix(tint, mist / 0.78, far * 0.5);
+        c = light ? mix(tint, vec3(1.0), 0.25) * (0.8 + 0.6 * l) : tint * (0.27 + 0.75 * l);
+        c = mix(c, mix(tint, vec3(0.8, 1.0, 0.55), 0.2) * (0.5 + 0.85 * l), vividGrass);   // lit blades glow
+        // the moon's side of every surface warms a touch, the shaded side cools: volume through colour too
+        c *= mix(vec3(0.85, 0.9, 1.1), vec3(1.06, 1.02, 0.95), smoothstep(0.25, 0.85, l));
+        if (edgeK > 0.5) {
+          row = uEdgeRow; idx = bin(eg);
+          float lit = smoothstep(-0.2, 0.7, facingE);
+          c = mix(tint * (0.22 + 0.4 * l), mix(tint, vec3(0.92, 0.96, 1.0), 0.45) * (0.75 + 0.5 * l), lit);
+        }
         c = modeCol(c, l);
       }
       c = mix(c, hurt * max(luma(c), 0.5), uHit * 0.6);   // damage flash tints the characters, not the background
@@ -388,7 +472,7 @@ const postMat = new THREE.ShaderMaterial({
         col *= 1.0 - near * mix(0.95, 0.6, litSide);
       }
       vec2 q = fc / uRes - 0.5;
-      float vig = 1.0 - dot(q, q) * 1.1;
+      float vig = 1.0 - dot(q, q) * 0.6;
       gl_FragColor = vec4(col * vig, 1.0);
     }`
 });
@@ -445,6 +529,12 @@ export function changeDensity(step: number) {
 /** scene -> actor mask -> character cells (environment grid + actor grid) -> screen */
 export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
+  // the relief engine's camera: rebuild view-space positions from depth, light them with the moon
+  const cu0 = cellMat.uniforms, pc = camera as THREE.PerspectiveCamera;
+  cu0.uProjInv.value.copy(pc.projectionMatrixInverse);
+  cu0.uProjScale.value.set(pc.projectionMatrix.elements[0] * 0.5, pc.projectionMatrix.elements[5] * 0.5);
+  cu0.uViewRot.value.setFromMatrix4(pc.matrixWorld);
+  cu0.uMoonV.value.copy(cu0.uMoonW.value).transformDirection(pc.matrixWorldInverse);
   const bg = scene.background;
   scene.background = null; scene.overrideMaterial = maskMat; camera.layers.set(ACTOR_LAYER);
   renderer.setClearColor(0x000000, 1);

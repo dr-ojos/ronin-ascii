@@ -66,6 +66,7 @@ export function updateLightDir() {
   if (len > 1e-3) cellMat.uniforms.uLight.value.set(dx / len, dy / len);
   // the figures' key light: a 3/4 light from the moon's side of the screen, a little above and in
   // front, so one side of the body is lit and the other turns into shadow (manga-art.ts FORM)
+  cellMat.uniforms.uMoonW.value.copy(moonDir);   // the relief engine re-lights the scene with the same moon (ascii.ts)
   const L = cellMat.uniforms.uLight.value;
   const k = formKey.value.set(L.x * 0.78, Math.max(L.y, -0.2) * 0.62 + 0.38, 0.62).normalize();
   _l0.copy(k).transformDirection(camera.matrixWorld);
