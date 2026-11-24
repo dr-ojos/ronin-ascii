@@ -2,7 +2,7 @@
 // that closes the world. One height grid feeds the CPU (groundY: feet, trees, buildings) and the GPU
 // (grass, wind and the ground mesh) with the same bilinear filter, so everything sits on the same ground.
 import * as THREE from 'three';
-import { HALF, SIZE, WORLD_R, PLACES, LAKES, lakeRadius, fbm, place } from './map';
+import { HALF, SIZE, WORLD_R, PLACES, LAKES, lakeRadius, fbm, vnoise, place, rockZone, rockyGround, hillsAt } from './map';
 import { surfaceMaterial } from './surfaces';
 
 export const HN = 449;                       // vertices per side
@@ -18,6 +18,16 @@ function rawHeight(x: number, z: number) {
   h += 5 * Math.exp(-((dc / 110) ** 2));                                     // castle mound
   const rp = place('ruinas'), dr = Math.hypot(x - rp.x, z - rp.z);
   h += 12 * Math.exp(-((dr / 210) ** 2));                                    // the hill of the ruined castle
+  // small hills: round knolls, and rocky crags that rise steeply out of the stony country
+  for (const hl of hillsAt(x, z)) {
+    const d = Math.hypot(x - hl.x, z - hl.z);
+    if (d > hl.R * 1.9) continue;
+    if (hl.rocky) h += hl.H * Math.pow(Math.max(0, 1 - d / (hl.R * 1.15)), 1.45) * (0.78 + 0.44 * vnoise(x * 0.09 + hl.x, z * 0.09));
+    else h += hl.H * Math.exp(-((d / hl.R) ** 2) * 1.7);
+  }
+  // rugged, broken ground in the rocky country: short ridges and hollows
+  const rz = rockZone(x, z);
+  if (rz > 0) { const rg = 1 - Math.abs(2 * fbm(x * 0.022 + 7, z * 0.022 - 3, 2) - 1); h += rz * (rg * rg * 9 - 2.5); }
   const r = Math.hypot(x, z), m = sm(r, WORLD_R - 80, WORLD_R + 100);
   h += m * m * (75 + 45 * fbm(x * 0.012, z * 0.012, 3));                   // mountains around the world
   return h;
@@ -80,7 +90,7 @@ export function buildTerrainMesh() {
     const hx = heights[j * HN + Math.min(HN - 1, i + 1)] - heights[j * HN + Math.max(0, i - 1)];
     const hz = heights[Math.min(HN - 1, j + 1) * HN + i] - heights[Math.max(0, j - 1) * HN + i];
     const slope = Math.hypot(hx, hz) / (HCELL * 2), r = Math.hypot(x, z);
-    rock[k] = Math.max(sm(r, WORLD_R - 50, WORLD_R + 10), sm(slope, 0.85, 1.1));
+    rock[k] = Math.max(sm(r, WORLD_R - 50, WORLD_R + 10), sm(slope, 0.75, 1.0), rockyGround(x, z) ? 1 : 0);
     const v = 0.75 + fbm(x * 0.05, z * 0.05, 2) * 0.5, snow = sm(h, 70, 100);
     col.set([0.36 * v + snow * 0.5, 0.38 * v + snow * 0.5, 0.45 * v + snow * 0.5], k * 3);
   }

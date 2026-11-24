@@ -46,6 +46,15 @@ export const PLACES: Place[] = [
   { id: 'ruinas', name: 'RUINAS DEL CASTILLO TAKAMORI', x: -560, z: -880, r: 140, flat: 150, blend: 85, glyph: 'R' },
   { id: 'bosquenegro', name: 'BOSQUE NEGRO', x: -900, z: -470, r: 240, flat: 0, blend: 0, glyph: '!' },
   { id: 'llanura', name: 'LLANURA DE LOS SUSURROS', x: 620, z: 700, r: 260, flat: 0, blend: 0, glyph: '"' },
+  // rocky country: boulders, needles of rock, crags and bare stone; each hides a maze of canyons
+  { id: 'pedregal', name: 'PEDREGAL DE LOS CUERVOS', x: 380, z: 1000, r: 230, flat: 0, blend: 0, glyph: '%' },
+  { id: 'riscos', name: 'RISCOS DEL VIENTO', x: -960, z: 180, r: 220, flat: 0, blend: 0, glyph: '%' },
+  { id: 'canchal', name: 'CANCHAL DEL NORTE', x: 300, z: -960, r: 220, flat: 0, blend: 0, glyph: '%' },
+  // winding canyon paths through the rock, with side trails that end in hidden nooks (canyons.ts)
+  { id: 'desfiladero-cuervo', name: 'DESFILADERO DEL CUERVO', x: 380, z: 990, r: 120, flat: 0, blend: 0, glyph: 'D' },
+  { id: 'desfiladero-viento', name: 'DESFILADERO DEL VIENTO', x: -960, z: 180, r: 120, flat: 0, blend: 0, glyph: 'D' },
+  { id: 'desfiladero-ecos', name: 'DESFILADERO DE LOS ECOS', x: 300, z: -960, r: 120, flat: 0, blend: 0, glyph: 'D' },
+  { id: 'desfiladero-zorros', name: 'SENDA DE LOS ZORROS', x: -430, z: 430, r: 95, flat: 0, blend: 0, glyph: 'D' },
   ...TEMPLES
 ];
 export const place = (id: string) => PLACES.find(p => p.id === id)!;
@@ -98,6 +107,50 @@ const TEMPLE_ROADS: P2[][] = [
 ];
 export const TEMPLE_PATHS: Line[] = TEMPLE_ROADS.map(points => ({ pts: smoothLine(points, 2), width: 2.8 }));
 ROADS.push(TORII_PATH, ...TEMPLE_PATHS);
+
+// ------------------------------------------------------------ canyon paths (built by canyons.ts)
+/** a winding path between rock walls: the main way through, side trails, and the nooks they end in */
+export interface Canyon { id: string; main: Line; branches: Line[]; nooks: P2[]; width: number }
+export const CANYONS: Canyon[] = [];
+{
+  const specs: { id: string; from: P2; to: P2; approach: P2[]; seed: number }[] = [
+    { id: 'desfiladero-viento', from: [-830, 120], to: [-1100, 250], approach: [[-492, 64], [-620, 85], [-760, 108]], seed: 11 },
+    { id: 'desfiladero-ecos', from: [255, -840], to: [355, -1085], approach: [[82, -300], [150, -520], [225, -760]], seed: 22 },
+    { id: 'desfiladero-cuervo', from: [455, 875], to: [300, 1105], approach: [[520, 730], [480, 815]], seed: 33 },
+    { id: 'desfiladero-zorros', from: [-345, 365], to: [-520, 505], approach: [[-200, 318], [-265, 330]], seed: 44 }
+  ];
+  const W = 2.6;
+  /** a path from a to b that snakes from side to side (two waves, so the bends never repeat) */
+  const snake = (a: P2, b: P2, amp: number, waves: number, R: () => number): P2[] => {
+    const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), nx = -dz / len, nz = dx / len, ph = R() * 6.28, ph2 = R() * 6.28;
+    const pts: P2[] = [];
+    for (let i = 0, n = Math.max(4, Math.round(len / 9)); i <= n; i++) {
+      const t = i / n, env = Math.sin(t * Math.PI), o = env * amp * (Math.sin(t * waves * 6.28 + ph) + 0.45 * Math.sin(t * waves * 2.3 * 6.28 + ph2));
+      pts.push([a[0] + dx * t + nx * o, a[1] + dz * t + nz * o]);
+    }
+    return smoothLine(pts, 2);
+  };
+  const tooClose = (p: P2, lines: P2[][], d: number) => lines.some(l => l.some(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < d));
+  for (const sp of specs) {
+    const R = seeded(sp.seed);
+    const main = snake(sp.from, sp.to, 22 + R() * 8, 2.6 + R() * 1.2, R);
+    const branches: Line[] = [], nooks: P2[] = [];
+    for (let k = 0, tries = 0; k < 5 && tries < 40; tries++) {
+      const i = Math.floor(main.length * (0.15 + R() * 0.7)), [px, pz] = main[i], [qx, qz] = main[Math.min(main.length - 1, i + 1)];
+      const l = Math.hypot(qx - px, qz - pz) || 1, side = R() < 0.5 ? -1 : 1, len = 30 + R() * 40;
+      const a: P2 = [px, pz], b: P2 = [px - (qz - pz) / l * side * len, pz + (qx - px) / l * side * len];
+      const path = snake(a, b, 6 + R() * 7, 1 + R() * 1.4, R);
+      // cut a side trail short where it would run into the main path or another trail
+      let cut = path.length;
+      for (let j = 6; j < path.length; j++) if (tooClose(path[j], [main.filter((_, m) => Math.abs(m - i) > 6), ...branches.map(br => br.pts)], 13)) { cut = j - 3; break; }
+      if (cut < 12) continue;
+      const pts = path.slice(0, cut);
+      branches.push({ pts, width: W }); nooks.push(pts[pts.length - 1]); k++;
+    }
+    CANYONS.push({ id: sp.id, main: { pts: main, width: W }, branches, nooks, width: W });
+    ROADS.push({ pts: smoothLine([...sp.approach, sp.from], 2), width: 2.8 }, { pts: main, width: W }, ...branches);
+  }
+}
 
 // ------------------------------------------------------------ bridges (where a road crosses the river)
 export interface Bridge { x: number; z: number; dir: number; len: number; width: number }
@@ -176,20 +229,63 @@ export function biomeAt(x: number, z: number): Biome {
   const sak = near(x, z, 'cerezos', 1.2), bam = near(x, z, 'bambu', 1.2), pin = near(x, z, 'pinos', 1.1);
   const cem = near(x, z, 'cementerio', 2.5), cas = near(x, z, 'castillo', 2.2);
   const neg = near(x, z, 'bosquenegro', 1.1), lla = near(x, z, 'llanura', 1.1), rui = near(x, z, 'ruinas', 1.8);
+  const rz = rockZone(x, z);
   // forests vs open meadows: low-frequency noise, denser towards the mountains
   const n = fbm(x * 0.0065 + 3, z * 0.0065 - 7, 3);
   let density = THREE.MathUtils.smoothstep(n, 0.42, 0.72) * 0.8 + 0.06 + THREE.MathUtils.smoothstep(r, WORLD_R - 320, WORLD_R - 20) * 0.5;
-  density = Math.max(density * (1 - lla * 0.85), sak * 0.75, bam * 1.1, pin * 0.9, neg * 1.15);
+  density = Math.max(density * (1 - lla * 0.85), sak * 0.75, bam * 1.1, pin * 0.9, neg * 1.15) * (1 - rz * 0.6);
   return {
     density: Math.min(1, density),
     sakura: 0.25 + sak * 6 + cas * 0.6,
-    pine: 0.35 + pin * 5 + neg * 1.5 + THREE.MathUtils.smoothstep(r, WORLD_R - 420, WORLD_R - 60) * 1.2,
+    pine: 0.35 + pin * 5 + neg * 1.5 + rz * 1.5 + THREE.MathUtils.smoothstep(r, WORLD_R - 420, WORLD_R - 60) * 1.2,
     cypress: 0.3 + cem * 3 + cas * 1.5 + pin * 1 + neg * 7 + rui * 2,
     bamboo: 0.12 + bam * 9,
     bush: 0.5 + sak * 0.8 + lla * 1.2,
-    rock: 0.25 + pin * 0.8 + rui * 2 + THREE.MathUtils.smoothstep(r, WORLD_R - 340, WORLD_R - 60) * 1.5
+    rock: 0.25 + pin * 0.8 + rui * 2 + rz * 4 + THREE.MathUtils.smoothstep(r, WORLD_R - 340, WORLD_R - 60) * 1.5
   };
 }
+
+// ------------------------------------------------------------ rocky country and small hills
+const ROCKY = ['pedregal', 'riscos', 'canchal'].map(place);
+const FLATS = () => PLACES.filter(p => p.flat > 0);
+let flats: Place[] | null = null;
+/** 0..1: how rocky the land is here (the three rocky regions, plus scattered stony patches everywhere) */
+export function rockZone(x: number, z: number) {
+  let v = 0;
+  for (const p of ROCKY) { const d = Math.hypot(x - p.x, z - p.z); if (d < p.r * 1.15) v = Math.max(v, 1 - THREE.MathUtils.smoothstep(d, p.r * 0.55, p.r * 1.15)); }
+  if (v < 0.75) v = Math.max(v, THREE.MathUtils.smoothstep(fbm(x * 0.0045 + 11, z * 0.0045 - 5, 3), 0.63, 0.73) * 0.75);
+  if (v <= 0) return 0;
+  // never in the towns, temples and shrines
+  for (const p of (flats ??= FLATS())) { const d = Math.hypot(x - p.x, z - p.z); if (d < p.flat + p.blend) v *= THREE.MathUtils.smoothstep(d, p.flat, p.flat + p.blend); }
+  return v;
+}
+/** bare rock showing through the ground (no grass), in patches across the rocky country */
+export function rockyGround(x: number, z: number) {
+  const rz = rockZone(x, z);
+  return rz > 0.5 && fbm(x * 0.035 + 3, z * 0.035, 2) > 0.64 - (rz - 0.5) * 0.12;
+}
+/** small hills all over the world: gentle knolls, and steep rocky ones with crags on top */
+export interface Hill { x: number; z: number; R: number; H: number; rocky: boolean }
+export const HILLS: Hill[] = [];
+{
+  const R = seeded(5151);
+  for (let t = 0; HILLS.length < 360 && t < 9000; t++) {
+    const a = R() * Math.PI * 2, d = Math.sqrt(R()) * (WORLD_R - 70), x = Math.cos(a) * d, z = Math.sin(a) * d;
+    const rz = rockZone(x, z), rocky = rz > 0.35 || R() < 0.18;
+    const r = rocky ? 16 + R() * 20 : 24 + R() * 34, H = rocky ? 9 + R() * 14 : 5 + R() * 9;
+    if (d < 90 || PLACES.some(p => p.flat > 0 && Math.hypot(x - p.x, z - p.z) < p.flat + p.blend + r)) continue;
+    if (HILLS.some(h => Math.hypot(h.x - x, h.z - z) < (h.R + r) * 0.85)) continue;
+    if (inLake(x, z, r * 1.4 + 10) || lineDist(x, z, RIVER) < r * 1.4 + 10 || ROADS.some(rd => lineDist(x, z, rd) < r * 1.35 + 6)) continue;
+    HILLS.push({ x, z, R: r, H, rocky });
+  }
+}
+const HB = 120, hillBuckets = new Map<number, Hill[]>();
+for (const h of HILLS) for (let i = Math.floor((h.x - h.R * 2) / HB); i <= Math.floor((h.x + h.R * 2) / HB); i++)
+  for (let j = Math.floor((h.z - h.R * 2) / HB); j <= Math.floor((h.z + h.R * 2) / HB); j++) {
+    const k = (i + 64) * 128 + (j + 64); let l = hillBuckets.get(k); if (!l) hillBuckets.set(k, l = []); l.push(h);
+  }
+/** hills whose slopes reach this point */
+export const hillsAt = (x: number, z: number) => hillBuckets.get((Math.floor(x / HB) + 64) * 128 + Math.floor(z / HB) + 64) ?? [];
 
 // ------------------------------------------------------------ masks
 // ground mask (3072², ~0.9 m / px): R = road, G = water, B = built (plazas, floors). No grass on any of them.
@@ -227,6 +323,12 @@ export function buildMasks() {
   g.fillStyle = '#0000ff';
   for (const [x, z, w, d, ry] of FOOTPRINTS.rects) { g.save(); g.translate(x, z); g.rotate(-ry); g.fillRect(-w / 2, -d / 2, w, d); g.restore(); }
   FOOTPRINTS.discs.forEach(([x, z], i) => { g.beginPath(); g.arc(x, z, FOOTPRINTS.discR[i], 0, Math.PI * 2); g.fill(); });
+  // bare rock: looked for on a coarse grid first, then in 4 m steps where the land is rocky enough
+  g.fillStyle = '#0000c0';
+  for (let bx = -HALF; bx < HALF; bx += 32) for (let bz = -HALF; bz < HALF; bz += 32) {
+    if (Math.max(rockZone(bx + 16, bz + 16), rockZone(bx, bz), rockZone(bx + 32, bz + 32)) < 0.45) continue;
+    for (let x = bx; x < bx + 32; x += 4) for (let z = bz; z < bz + 32; z += 4) if (rockyGround(x + 2, z + 2)) g.fillRect(x - 0.4, z - 0.4, 4.8, 4.8);
+  }
   groundMask = new Uint8Array(g.getImageData(0, 0, MASK_RES, MASK_RES).data);
 
   const t = canvasFor(TREE_RES);

@@ -410,9 +410,10 @@ export function createKit(o: KitOpts) {
     }
     o.addCollider({ x, z, r: 1.7 });
   }
-  function rock(x: number, z: number, k: number, solid = true) {
+  /** a mossy rock; shape stretches it (sx across, sy up, sz along), turns it (ry) and sets its centre height (y) */
+  function rock(x: number, z: number, k: number, solid = true, shape?: { sx?: number; sy?: number; sz?: number; ry?: number; y?: number }) {
     const g = jitter(new THREE.IcosahedronGeometry(k, 1), k * 0.22);
-    g.scale(1, rnd(0.45, 0.75), 1);
+    if (shape) g.scale(shape.sx ?? 1, shape.sy ?? 1, shape.sz ?? 1); else g.scale(1, rnd(0.45, 0.75), 1);
     g.computeVertexNormals();
     const n = g.attributes.normal, cols: number[] = [];
     for (let i = 0; i < n.count; i++) {
@@ -421,9 +422,9 @@ export function createKit(o: KitOpts) {
       cols.push(c.r, c.g, c.b);
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-    g.rotateY(rnd(0, TAU));
+    g.rotateY(shape?.ry ?? rnd(0, TAU));
     roundedNormals(g);
-    g.translate(x, groundY(x, z) + k * 0.2, z);
+    g.translate(x, groundY(x, z) + (shape?.y ?? k * 0.2), z);
     rockGeos.push(g);
     if (solid) o.addCollider({ x, z, r: k * 0.85 });
   }

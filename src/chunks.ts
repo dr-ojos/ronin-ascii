@@ -6,7 +6,7 @@ import { scene } from './renderer';
 import { createKit, rng, type KitMesh } from './nature';
 import { removeSurfaceVariant } from './surfaces';
 import { addCollider, removeColliders, isFree } from './physics';
-import { biomeAt, treeBlocked, groundAt, seeded, WORLD_R, HALF } from './map';
+import { biomeAt, treeBlocked, groundAt, seeded, rockZone, hillsAt, WORLD_R, HALF } from './map';
 
 const CH = 48, LOAD = 150, UNLOAD = 240, DRAW = 140, CLEARING = 56;
 interface Chunk { i: number; j: number; cx: number; cz: number; group: THREE.Group; meshes: KitMesh[]; owner: object }
@@ -45,6 +45,29 @@ function buildChunk(i: number, j: number): Chunk {
   for (let k = 0; k < Math.round(mid.rock * 6); k++) {
     const x = x0 + rnd(0, CH), z = z0 + rnd(0, CH);
     if (usable(x, z) && isFree(x, z, 1.5)) kit.rock(x, z, rnd(0.35, 1.5));
+  }
+  // the rocky country: big boulders and needles of rock, thick enough to wind your way between them
+  const rz = Math.max(rockZone(x0 + CH / 2, z0 + CH / 2), rockZone(x0 + CH * 0.2, z0 + CH * 0.2), rockZone(x0 + CH * 0.8, z0 + CH * 0.8));
+  if (rz > 0.05) {
+    for (let k = 0; k < Math.round(rz * 18); k++) {
+      const x = x0 + rnd(0, CH), z = z0 + rnd(0, CH), b = rnd(1.2, 3.8);
+      if (rockZone(x, z) > 0.2 && usable(x, z) && isFree(x, z, b * 0.5 + 1.2)) kit.rock(x, z, b);
+    }
+    for (let k = 0; k < Math.round(rz * 6); k++) {
+      const x = x0 + rnd(0, CH), z = z0 + rnd(0, CH), b = rnd(1.1, 2.2), sy = rnd(2.2, 3.8);
+      if (rockZone(x, z) > 0.3 && usable(x, z) && isFree(x, z, b + 1)) kit.rock(x, z, b, true, { sx: rnd(0.6, 0.95), sy, sz: rnd(0.6, 0.95), y: b * sy * 0.55 });
+    }
+  }
+  // crags crowning the rocky hills whose top is in this chunk
+  for (const h of hillsAt(x0 + CH / 2, z0 + CH / 2)) {
+    if (!h.rocky || h.x < x0 || h.x >= x0 + CH || h.z < z0 || h.z >= z0 + CH || !usable(h.x, h.z)) continue;
+    const n = 3 + Math.floor(R() * 4);
+    for (let k = 0; k < n; k++) {
+      const a = rnd(0, Math.PI * 2), d = rnd(0, h.R * 0.35), x = h.x + Math.cos(a) * d, z = h.z + Math.sin(a) * d;
+      if (isFree(x, z, 0.5)) kit.rock(x, z, rnd(1.4, 3.4));
+    }
+    const b = rnd(1.4, 2.4), sy = rnd(2.6, 4);
+    if (isFree(h.x, h.z, 0)) kit.rock(h.x, h.z, b, true, { sx: rnd(0.7, 1), sy, sz: rnd(0.7, 1), y: b * sy * 0.5 });
   }
   // wildflowers drift over the open meadows
   const flowers = Math.round(520 * (1 - mid.density));
