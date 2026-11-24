@@ -57,6 +57,11 @@ export const PLACES: Place[] = [
   { id: 'desfiladero-viento', name: 'DESFILADERO DEL VIENTO', x: -960, z: 180, r: 120, flat: 0, blend: 0, glyph: 'D' },
   { id: 'desfiladero-ecos', name: 'DESFILADERO DE LOS ECOS', x: 300, z: -960, r: 120, flat: 0, blend: 0, glyph: 'D' },
   { id: 'desfiladero-zorros', name: 'SENDA DE LOS ZORROS', x: -430, z: 430, r: 95, flat: 0, blend: 0, glyph: 'D' },
+  // broken country of plateaus: cliffs you have to walk round, and a few stone ramps up to the top (mesas.ts)
+  { id: 'mesetas-ceniza', name: 'MESETAS DE CENIZA', x: 660, z: 330, r: 170, flat: 0, blend: 0, glyph: 'M' },
+  { id: 'mesetas-escalones', name: 'ESCALONES DEL SUR', x: -260, z: 860, r: 170, flat: 0, blend: 0, glyph: 'M' },
+  { id: 'mesetas-bruma', name: 'TERRAZAS DE BRUMA', x: -700, z: -160, r: 160, flat: 0, blend: 0, glyph: 'M' },
+  { id: 'mesetas-halcon', name: 'ALTIPLANO DEL HALCON', x: -170, z: -800, r: 160, flat: 0, blend: 0, glyph: 'M' },
   ...TEMPLES
 ];
 export const place = (id: string) => PLACES.find(p => p.id === id)!;
@@ -277,6 +282,90 @@ export const HILLS: Hill[] = [];
     const r = rocky ? 16 + R() * 20 : 24 + R() * 34, H = rocky ? 9 + R() * 14 : 5 + R() * 9;
     if (d < 90 || PLACES.some(p => p.flat > 0 && Math.hypot(x - p.x, z - p.z) < p.flat + p.blend + r)) continue;
     if (HILLS.some(h => Math.hypot(h.x - x, h.z - z) < (h.R + r) * 0.85)) continue;
+/** plateaus with cliffs all round (a mesa): some have a stone ramp up to the top (and the big ones a
+ *  second level with its own ramp), the rest can only be walked round. ramp: angle the ramp leaves at */
+export interface Mesa { x: number; z: number; R: number; H: number; ph: number; ph2: number; ramp: number | null; L: number; W: number; base: number }
+export const MESAS: Mesa[] = [];
+export const mesaRadius = (m: Mesa, a: number) => m.R * (1 + 0.16 * Math.sin(3 * a + m.ph) + 0.09 * Math.sin(5 * a + m.ph2));
+{
+  const R = seeded(7777);
+  const fits = (x: number, z: number, reach: number) => {
+    const d = Math.hypot(x, z);
+    if (d < 150 || d > WORLD_R - 110) return false;
+    if (PLACES.some(p => p.flat > 0 && Math.hypot(x - p.x, z - p.z) < p.flat + p.blend + reach + 8)) return false;
+    if (MESAS.some(m => m.base === 0 && Math.hypot(m.x - x, m.z - z) < m.R * 1.3 + m.L + reach + 10)) return false;
+    return !(inLake(x, z, reach + 15) || lineDist(x, z, RIVER) < reach + 16 || ROADS.some(rd => lineDist(x, z, rd) < reach + 12));
+  };
+  const add = (x: number, z: number, big: boolean) => {
+    const Rr = big ? 24 + R() * 14 : 12 + R() * 14, H = 4 + R() * (big ? 5 : 4), climb = big || R() < 0.4;
+    const L = H * 3.4, W = 6.5;
+    if (!fits(x, z, Rr * 1.3 + (climb ? L : 0))) return false;
+    const m: Mesa = { x, z, R: Rr, H, ph: R() * 6.28, ph2: R() * 6.28, ramp: climb ? R() * 6.28 : null, L, W, base: 0 };
+    MESAS.push(m);
+    // a second level on the big ones you can climb, with its own ramp starting on the first
+    if (big && Rr > 28 && R() < 0.7) {
+      const H2 = 3 + R() * 2.5, R2 = Rr * 0.32;
+      MESAS.push({ x, z, R: R2, H: H2, ph: R() * 6.28, ph2: R() * 6.28, ramp: R() * 6.28, L: H2 * 3.2, W: 5.5, base: H });
+    }
+    return true;
+  };
+  // the four zones of broken country
+  for (const id of ['mesetas-ceniza', 'mesetas-escalones', 'mesetas-bruma', 'mesetas-halcon']) {
+    const p = place(id);
+    for (let t = 0, n = 0; n < 8 && t < 400; t++) {
+      const a = R() * Math.PI * 2, d = Math.sqrt(R()) * p.r;
+      if (add(p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, n < 3)) n++;
+    }
+  }
+  // and some lone ones anywhere
+  for (let t = 0, n = 0; n < 24 && t < 3000; t++) {
+    const a = R() * Math.PI * 2, d = Math.sqrt(R()) * WORLD_R;
+    if (add(Math.cos(a) * d, Math.sin(a) * d, R() < 0.3)) n++;
+  }
+}
+const MB = 120, mesaBuckets = new Map<number, Mesa[]>();
+for (const m of MESAS) {
+  const reach = m.R * 1.3 + m.L + 8;
+  for (let i = Math.floor((m.x - reach) / MB); i <= Math.floor((m.x + reach) / MB); i++)
+    for (let j = Math.floor((m.z - reach) / MB); j <= Math.floor((m.z + reach) / MB); j++) {
+      const k = (i + 64) * 128 + (j + 64); let l = mesaBuckets.get(k); if (!l) mesaBuckets.set(k, l = []); l.push(m);
+    }
+}
+const mesasAt = (x: number, z: number) => mesaBuckets.get((Math.floor(x / MB) + 64) * 128 + Math.floor(z / MB) + 64) ?? [];
+/** the ramp of a mesa: unit direction out of the mesa, and the point on the rim where it starts */
+export function mesaRamp(m: Mesa) {
+  const a = m.ramp!, ux = Math.cos(a), uz = Math.sin(a), rim = mesaRadius(m, a);
+  return { ux, uz, rim, x0: m.x + ux * rim, z0: m.z + uz * rim };
+}
+/** height the plateaus add here: a cliff 5 m wide round the rim, and the ramp down from it */
+export function mesaHeight(x: number, z: number) {
+  let v = 0;
+  for (const m of mesasAt(x, z)) {
+    const dx = x - m.x, dz = z - m.z, d = Math.hypot(dx, dz);
+    if (d > m.R * 1.3 + m.L + 6) continue;
+    const rr = mesaRadius(m, Math.atan2(dz, dx));
+    let p = m.H * (1 - THREE.MathUtils.smoothstep(d, rr, rr + 5));
+    if (d < rr) p += m.H * 0.1 * (1 - (d / rr) ** 2);                          // a slight dome on top
+    if (m.ramp !== null) {
+      const { ux, uz, rim } = mesaRamp(m), s = dx * ux + dz * uz - rim, lat = Math.abs(-dx * uz + dz * ux);
+      if (s > -4 && s < m.L + 5 && lat < m.W / 2 + 5) {
+        const t = Math.min(1, Math.max(0, s / m.L)), fade = 1 - THREE.MathUtils.smoothstep(lat, m.W / 2, m.W / 2 + 4);
+        p = Math.max(p, m.H * (1 - t) * fade);
+      }
+    }
+    if (p > 0.001) v = Math.max(v, m.base + p);
+  }
+  return v;
+}
+/** on the cliff of a plateau (for the minimap) */
+export function onMesaCliff(x: number, z: number) {
+  for (const m of mesasAt(x, z)) {
+    const d = Math.hypot(x - m.x, z - m.z), rr = mesaRadius(m, Math.atan2(z - m.z, x - m.x));
+    if (Math.abs(d - rr - 2.5) < 3.5) return true;
+  }
+  return false;
+}
+
     if (inLake(x, z, r * 1.4 + 10) || lineDist(x, z, RIVER) < r * 1.4 + 10 || ROADS.some(rd => lineDist(x, z, rd) < r * 1.35 + 6)) continue;
     HILLS.push({ x, z, R: r, H, rocky });
   }
@@ -288,6 +377,7 @@ for (const h of HILLS) for (let i = Math.floor((h.x - h.R * 2) / HB); i <= Math.
   }
 /** hills whose slopes reach this point */
 export const hillsAt = (x: number, z: number) => hillBuckets.get((Math.floor(x / HB) + 64) * 128 + Math.floor(z / HB) + 64) ?? [];
+    if (MESAS.some(m => Math.hypot(m.x - x, m.z - z) < m.R * 1.3 + m.L + r + 6)) continue;
 
 // ------------------------------------------------------------ masks
 // ground mask (3072², ~0.9 m / px): R = road, G = water, B = built (plazas, floors). No grass on any of them.

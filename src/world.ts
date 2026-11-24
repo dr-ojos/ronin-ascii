@@ -15,6 +15,7 @@ import { buildMasks } from './map';
 import { buildLandmarks } from './landmarks';
 import { buildSettlements } from './settlements';
 import { buildCanyons } from './canyons';
+import { buildMesas } from './mesas';
 import { buildTemples } from './temple-grounds';
 import { player, state } from './state';
 import { rnd } from './utils';
@@ -102,6 +103,7 @@ scene.add(buildTerrainMesh());
 buildStructures();
 buildSettlements();   // the town of Asagiri and the ruins of Takamori
 buildCanyons();       // winding paths between walls of rock in the rocky country
+buildMesas();         // plateaus with cliffs, some with a stone ramp up
 buildTemples();
 buildLandmarks();   // oni camps and corners of the wilds
 buildDrift();       // leaves riding the river, petals on the lake

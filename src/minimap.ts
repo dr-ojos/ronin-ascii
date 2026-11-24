@@ -4,7 +4,7 @@
 // dim shaded relief (2 m per pixel), painted lazily the first time each patch is uncovered.
 // Both maps are drawn at the screen's device pixel ratio so the characters stay crisp.
 // Also announces each place as you walk into it (the first time, it counts as discovered and gives points).
-import { HALF, SIZE, WORLD_R, PLACES, ROADS, RIVER, TEMPLE_GLYPH, TORII_PATH, BRIDGES, biomeAt, groundAt, treeBlocked, rockZone, rockyGround, type Place } from './map';
+import { HALF, SIZE, WORLD_R, PLACES, ROADS, RIVER, TEMPLE_GLYPH, TORII_PATH, BRIDGES, biomeAt, groundAt, treeBlocked, rockZone, rockyGround, onMesaCliff, type Place } from './map';
 import { groundY } from './terrain';
 import { enemies, KINDS } from './enemies';
 import { showMsg } from './hud';
@@ -144,7 +144,7 @@ function classify(x: number, z: number, step: number): number {
   if (water > 120) return gid(hash(x, z) < 0.5 ? '~' : '≈', COL.water);
   if (built > 120) {
     // in the rocky country, "built" is bare stone or the rock walls of a canyon
-    if (rockZone(x, z) > 0.3 || PLACES.some(p => p.id.startsWith('desfiladero') && Math.hypot(x - p.x, z - p.z) < p.r)) return gid(rockyGround(x, z) ? ':' : '#', COL.rock);
+    if (rockZone(x, z) > 0.3 || PLACES.some(p => p.id.startsWith('desfiladero') && Math.hypot(x - p.x, z - p.z) < p.r) || onMesaCliff(x, z)) return gid(rockyGround(x, z) ? ':' : '#', COL.rock);
     return gid('#', COL.built);
   }
   if (road > 120) return gid('=', COL.road);

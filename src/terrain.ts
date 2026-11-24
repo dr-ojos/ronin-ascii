@@ -2,7 +2,7 @@
 // that closes the world. One height grid feeds the CPU (groundY: feet, trees, buildings) and the GPU
 // (grass, wind and the ground mesh) with the same bilinear filter, so everything sits on the same ground.
 import * as THREE from 'three';
-import { HALF, SIZE, WORLD_R, PLACES, LAKES, lakeRadius, fbm, vnoise, place, rockZone, rockyGround, hillsAt } from './map';
+import { HALF, SIZE, WORLD_R, PLACES, LAKES, lakeRadius, fbm, vnoise, place, rockZone, rockyGround, hillsAt, mesaHeight } from './map';
 import { surfaceMaterial } from './surfaces';
 
 export const HN = 449;                       // vertices per side
@@ -28,6 +28,7 @@ function rawHeight(x: number, z: number) {
   // rugged, broken ground in the rocky country: short ridges and hollows
   const rz = rockZone(x, z);
   if (rz > 0) { const rg = 1 - Math.abs(2 * fbm(x * 0.022 + 7, z * 0.022 - 3, 2) - 1); h += rz * (rg * rg * 9 - 2.5); }
+  h += mesaHeight(x, z);                                                     // plateaus and their cliffs
   const r = Math.hypot(x, z), m = sm(r, WORLD_R - 80, WORLD_R + 100);
   h += m * m * (75 + 45 * fbm(x * 0.012, z * 0.012, 3));                   // mountains around the world
   return h;
