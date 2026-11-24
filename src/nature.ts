@@ -4,10 +4,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tagMat, CLS, asciiGrid, FLOWER_GLYPHS } from './materials';
-import { addRoundedSurface, addSurfaceVariant, detailedSurfaces, showSurfaceDetail, surfaceMaterial } from './surfaces';
-import { bambooBlade, canopySprays, canopyTexture, GRASS_COLOUR, GRASS_SHAPE } from './vegetation-art';
+import { addRoundedSurface, addSurfaceVariant, showSurfaceDetail, surfaceMaterial } from './surfaces';
+import { bambooBlade, canopySprays, canopyTexture, grassTuft, lowShrubGeometry } from './vegetation-art';
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
-import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, treeBlocked } from './map';
+import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, seeded, treeBlocked } from './map';
 import type { Collider, XZ } from './types';
 import { waterMaterial } from './water';
 
@@ -213,6 +213,7 @@ const MAT = (() => {
   const culm = new THREE.MeshStandardMaterial({ color: 0x5d8a35, roughness: 0.5 });
   const leaf = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, side: THREE.DoubleSide });
   const bush = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+  const lowShrub = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   const flower = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, emissive: 0x181018 });
   const wild = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, emissive: 0x101010 });
   const rock = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
@@ -224,6 +225,7 @@ const MAT = (() => {
     needle: addWind(needle, { height: 12, amp: 0.28, flutter: 0.012 }),
     leaf: addWind(leaf, { height: 10, amp: 0.55, flutter: 0.05 }),
     bush: addWind(bush, { height: 1.6, amp: 0.08, flutter: 0.012 }),
+    lowShrub: addWind(lowShrub, { height: 0.7, amp: 0.07, flutter: 0.003 }),
     flower: addWind(flower, { height: 1.6, amp: 0.08, flutter: 0.015 }),
     wild: addWind(wild, { height: 0.8, amp: 0.32, flutter: 0.01 })
   };
@@ -234,7 +236,8 @@ const MAT = (() => {
   tagMat(bark, CLS.wood); tagMat(culm, CLS.foliage); tagMat(blossom, CLS.foliage); tagMat(needle, CLS.foliage);
   tagMat(leaf, CLS.foliage); tagMat(petal, CLS.foliage); tagMat(bush, CLS.foliage); tagMat(flower, CLS.light);
   tagMat(wild, CLS.light); tagMat(rock, CLS.ground);
-  return { bark, blossom, needle, petal, culm, leaf, bush, flower, wild, rock, depth };
+  tagMat(lowShrub, CLS.foliage);
+  return { bark, blossom, needle, petal, culm, leaf, bush, lowShrub, flower, wild, rock, depth };
 })();
 const SPRAYS = {
   blossoms: sprayMaterial('blossom', 7, 0.3, 0.03, 1.12),
@@ -255,6 +258,7 @@ const GEO = (() => {
     flowerSpray: canopySprays(0.26),
     needleSpray: canopySprays(0.34),
     shrubSpray: canopySprays(0.39),
+    lowShrub: lowShrubGeometry(),
     bambooBlade: bambooBlade(),
   };
 })();
@@ -274,6 +278,7 @@ export function createKit(o: KitOpts) {
   const bark: THREE.BufferGeometry[] = [], culms: THREE.BufferGeometry[] = [], rockGeos: THREE.BufferGeometry[] = [];
   const blossoms = new Batch(blob, MAT.blossom), needles = new Batch(blob, MAT.needle), petals = new Batch(GEO.petal, MAT.petal);
   const leaves = new Batch(GEO.leaf, MAT.leaf), bushes = new Batch(GEO.bush, MAT.bush), blooms = new Batch(GEO.bloom, MAT.flower), wild = new Batch(GEO.wild, MAT.wild);
+  const lowShrubs = new Batch(GEO.lowShrub, MAT.lowShrub);
   const petalSources: THREE.Vector3[] = [];   // canopy points that shed falling petals
   let gy = 0;   // ground height under the tree being grown
 
@@ -442,6 +447,10 @@ export function createKit(o: KitOpts) {
   function wildflower(x: number, z: number) {
     wild.add(new V(x, groundY(x, z) + rnd(0.45, 0.8), z), rnd(0.8, 1.4), undefined, pick([0x6f8dff, 0x8aa6ff, 0xffffff, 0xf2e27a, 0x9a7bff]));
   }
+  function lowShrub(x: number, z: number, spread: number, height: number, angle: number, color: THREE.Color) {
+    const rotation = new THREE.Quaternion().setFromAxisAngle(UP, angle);
+    lowShrubs.add(new V(x, groundY(x, z), z), new V(spread, height, spread), angle, color, rotation);
+  }
 
   /** emit the meshes (shadow + class + wind depth already set up) */
   function build(): KitMesh[] {
@@ -475,11 +484,12 @@ export function createKit(o: KitOpts) {
     if (bamboo) addRoundedSurface(bamboo, GEO.bambooBlade);
     inst(petals, null, false, false);
     spray(bushes, MAT.depth.bush, GEO.shrubSpray, SPRAYS.bushes, false);
+    inst(lowShrubs, MAT.depth.lowShrub, false);
     inst(blooms, MAT.depth.flower, false, false);
     inst(wild, MAT.depth.wild, false, false);
     return out;
   }
-  return { sakura, pine, cypress, bamboo, rock, bush, wildflower, build, petalSources };
+  return { sakura, pine, cypress, bamboo, rock, bush, lowShrub, wildflower, build, petalSources };
 }
 export type Kit = ReturnType<typeof createKit>;
 
@@ -632,99 +642,84 @@ function grassMask() {
   maskTexture.minFilter = maskTexture.magFilter = THREE.LinearFilter; maskTexture.needsUpdate = true;
   return maskTexture;
 }
+// A shared height field keeps flower heads nestled among the leaves in the low clearings.
+const MEADOW_HEIGHT = /* glsl */`
+  float meadowHeight(vec2 p, float meadow) {
+    float growth = 0.80 * wNoise(p * 0.083 + vec2(4.8, -8.1)) + 0.20 * meadow;
+    return smoothstep(0.36, 0.57, growth);
+  }
+`;
 function buildGrass(scene: THREE.Scene) {
-  const TILE = 84, N = 210000;
-  const geo = new THREE.PlaneGeometry(0.075, 0.7, 1, 4);
-  geo.translate(0, 0.35, 0);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) pos.setX(i, pos.getX(i) * Math.pow(1 - pos.getY(i) / 0.72, 0.8));
-  const nrm = geo.attributes.normal; for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, 0, 1, 0);
-  // roads, water and built ground (map.ts) have no grass
-  const maskTex = grassMask();
-  const mat = new THREE.MeshLambertMaterial({ color: 0x5f9a72, side: THREE.DoubleSide });
+  const TILE = 84, tufts = 24000;
+  const geo = grassTuft();
+  const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
   mat.onBeforeCompile = sh => {
-    sh.uniforms.uTime = wind.uTime; sh.uniforms.uCenter = wind.uCenter; sh.uniforms.uPush = wind.uPush;
-    sh.uniforms.uHeight = terrainUniforms.uHeight; sh.uniforms.uMask = { value: maskTex };
-    sh.uniforms.uDetailedSurfaces = detailedSurfaces;
+    Object.assign(sh.uniforms, wind, terrainUniforms, { uMask: { value: grassMask() } });
     sh.vertexShader = WIND_GLSL + `
-      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask; uniform float uDetailedSurfaces;
-      varying float vH; varying float vVar; varying float vSheen; varying vec3 vPlant; varying vec2 vGp;
+      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask;
+      attribute vec4 aGrassOffsets;
+      varying vec3 vGrassTint;
+      varying float vAcross;
       ${GRASS_KEEP}
+      ${MEADOW_HEIGHT}
     ` + sh.vertexShader
       .replace('#include <project_vertex>', /* glsl */`
-        vH = uv.y;
-        vec3 o = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-        vec2 base = uCenter + mod(o.xz - uCenter + ${(TILE / 2).toFixed(1)}, ${TILE.toFixed(1)}) - ${(TILE / 2).toFixed(1)};
-        vVar = fract(sin(dot(o.xz, vec2(12.9898, 78.233))) * 43758.5453);
-        // clumps: taller, lusher patches
-        float clump = 0.65 + 0.55 * (0.5 + 0.5 * sin(base.x * 0.33 + sin(base.y * 0.21) * 2.0) * sin(base.y * 0.29 + 1.7));
-        vec3 lp = transformed;
-        lp.y *= clump;
-        lp.z += (vVar - 0.35) * 0.32 * vH * vH;                                    // natural curl
-        ${GRASS_SHAPE}
-        vec3 local = mat3(instanceMatrix) * lp * grassKeep(base);
-        vec4 wPos = vec4(base.x + local.x, terrainH(base) + local.y, base.y + local.z, 1.0);
-        float sway = 0.42 * (0.7 + vVar * 0.6);
-        if (uDetailedSurfaces > 0.5) sway *= 0.65 + 0.28 * vPlant.y + 0.16 * vPlant.z;
-        vec3 w = windAt(wPos.xyz, vH, sway, 0.006);
-        wPos.xyz += w;
-        vSheen = clamp(length(w.xz) * 2.2, 0.0, 1.0);
+        vec2 anchor = instanceMatrix[3].xz;
+        vec2 tuft = anchor + ${TILE.toFixed(1)} * floor((uCenter - anchor) / ${TILE.toFixed(1)} + 0.5);
+        vec2 offset = tuft - uCenter;
+        mat3 basis = mat3(instanceMatrix);
+        vec2 root = tuft + (basis * vec3(aGrassOffsets.x, 0.0, aGrassOffsets.y)).xz;
+        float meadow = wNoise(tuft * 0.23);
+        // Broad low clearings with smaller variations along their edges, fixed to the terrain.
+        float tall = meadowHeight(tuft, meadow);
+        float lengthScale = mix(0.34, 1.0, tall);
+        float stand = 0.74 * wNoise(tuft * 0.61 + 13.2) + 0.26 * meadow;
+        float sage = smoothstep(0.67, 0.78, stand) * mix(0.32, 1.0, tall);
+        float variation = wHash(root * 19.7);
+        float tip = uv.y;
+        // The pale stands have wider, straighter leaves and catch the light as one group.
+        vec3 leaf = transformed * lengthScale;
+        // Short leaves still have a readable width at the normal play camera distance.
+        leaf.xz += aGrassOffsets.zw * (0.58 * (1.0 - tall) + 1.8 * sage);
+        vec3 local = basis * leaf;
+        local.y *= (0.68 + 0.56 * meadow) * (1.0 + 0.28 * sage);
+        vec3 base = vec3(root.x, terrainH(root) - 0.13, root.y);
+        vec3 windBend = windAt(base, tip, (0.18 + variation * 0.14) * (1.0 - sage * 0.20), 0.006 * tip);
+        local += windBend * lengthScale;
         for (int i = 0; i < 8; i++) {
-          vec2 d = wPos.xz - uPush[i].xy;
-          float push = smoothstep(uPush[i].z, 0.0, length(d)) * vH;
-          wPos.xz += normalize(d + 1e-4) * push * 0.75;
-          wPos.y -= push * 0.42;
+          vec2 d = root - uPush[i].xy;
+          float push = (1.0 - smoothstep(0.0, uPush[i].z, length(d))) * tip;
+          local.xz += normalize(d + 1e-4) * push * (0.48 * lengthScale);
+          local.y *= 1.0 - 0.65 * push;
         }
-        vGp = wPos.xz;
+        // Fade before a tuft wraps to the opposite edge of the player-centred tile.
+        float edge = 1.0 - smoothstep(33.0, 41.0, max(abs(offset.x), abs(offset.y)));
+        vec4 wPos = vec4(base + local * (grassKeep(root) * edge), 1.0);
+        vAcross = uv.x;
+        vec3 cool = mix(vec3(0.029, 0.044, 0.029), vec3(0.077, 0.101, 0.058), meadow);
+        vGrassTint = mix(cool, vec3(0.182, 0.168, 0.055), sage);
+        vGrassTint *= (0.58 + 0.56 * variation) * (0.38 + 0.62 * tip);
         vec4 mvPosition = viewMatrix * wPos;
         gl_Position = projectionMatrix * mvPosition;`)
       .replace('#include <worldpos_vertex>', 'vec4 worldPosition = wPos;');
-    sh.fragmentShader = `uniform float uDetailedSurfaces, uTime; varying float vH; varying float vVar; varying float vSheen; varying vec3 vPlant; varying vec2 vGp;
-      float gHash(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
-      float gNoise(vec2 p) {
-        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y);
-      }
-` + sh.fragmentShader
-      .replace('#include <opaque_fragment>', `
-        { // light play: where the moon or a lantern catches the tips, in patches of fresh growth, and where a
-          // gust rolls the blades over, the grass flashes a vivid young green
-          float lit = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
-          float tip = smoothstep(0.3, 1.0, vH);
-          float fresh = smoothstep(0.55, 0.8, gNoise(vGp * 0.21) * 0.7 + gNoise(vGp * 0.9 + 5.0) * 0.3);
-          float shimmer = smoothstep(0.7, 0.97, gNoise(vGp * 0.6 + vec2(uTime * 0.7, -uTime * 0.4)));   // light sliding over the blades
-          float glow = clamp(fresh * 0.6 + step(0.93, vVar) * 0.5 + smoothstep(0.35, 0.9, vSheen) * 0.8 + shimmer * 0.4, 0.0, 1.0) * tip;
-          glow *= smoothstep(0.0008, 0.008, lit);                                   // only where light actually falls
-          vec3 young = vec3(0.3, 0.95, 0.1) * (lit * 3.2 + 0.004);
-          outgoingLight = mix(outgoingLight, young, glow * 0.85);
-        }
-        #include <opaque_fragment>`)
+    sh.fragmentShader = 'varying vec3 vGrassTint; varying float vAcross;\n' + sh.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
-        diffuseColor.rgb *= mix(0.07, 1.0, vH) * (0.55 + 0.8 * vVar);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.6, 0.36) * vH, step(0.94, vVar) * 0.55);   // dry tips
-        diffuseColor.rgb += vec3(0.05, 0.09, 0.07) * vSheen * vH;                                         // wind sheen
-        if (uDetailedSurfaces > 0.5) {
-          ${GRASS_COLOUR}
-        }`)
-      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
-        normal = normalize(vNormal);
-        if (uDetailedSurfaces > 0.5) {
-          vec3 blade = cross(dFdx(vViewPosition), dFdy(vViewPosition));
-          if (dot(blade, blade) > 1e-14) {
-            blade = normalize(blade) * (dot(blade, normal) < 0.0 ? -1.0 : 1.0);
-            normal = normalize(mix(normal, blade, 0.31));
-          }
-        }`);
+        // A narrow folded face reads as a stroke even seen from above.
+        diffuseColor.rgb = vGrassTint * mix(0.78, 1.10, smoothstep(0.40, 0.65, vAcross));
+        diffuseColor.rgb *= 1.0 - 0.40 * smoothstep(0.5, 1.8, fwidth(vAcross));`)
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');
   };
-  mat.customProgramCacheKey = () => 'grass-infinite';
-  tagMat(mat, CLS.grass);
-  const grass = new THREE.InstancedMesh(geo, mat, N);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new V(), p = new V(), e = new THREE.Euler();
-  for (let i = 0; i < N; i++) {
-    p.set(rnd(-TILE / 2, TILE / 2), 0, rnd(-TILE / 2, TILE / 2));
-    e.set(rnd(-0.25, 0.25), R() * TAU, rnd(-0.25, 0.25)); q.setFromEuler(e);
-    const sc = rnd(0.7, 1.3); s.set(sc * rnd(0.8, 1.3), sc * rnd(0.6, 1.5), sc);
-    grass.setMatrixAt(i, m4.compose(p, q, s));
+  mat.customProgramCacheKey = () => 'grass-tufts';
+  tagMat(mat, CLS.grassBlade);
+  const grass = new THREE.InstancedMesh(geo, mat, tufts);
+  const random = seeded(18023), instance = new THREE.Object3D();
+  for (let i = 0; i < tufts; i++) {
+    instance.position.set((random() - 0.5) * TILE, 0, (random() - 0.5) * TILE);
+    instance.rotation.y = random() * TAU;
+    const spread = 0.70 + random() * 0.65;
+    instance.scale.set(spread, 0.72 + random() * 0.59, spread);
+    instance.updateMatrix();
+    grass.setMatrixAt(i, instance.matrix);
   }
   grass.frustumCulled = false; grass.receiveShadow = true;
   scene.add(grass);
@@ -753,6 +748,7 @@ function buildMeadowFlowers(scene: THREE.Scene) {
       attribute float aSeed;
       varying vec2 vHeadCell; varying vec3 vPetal; varying float vBud;
       ${GRASS_KEEP}
+      ${MEADOW_HEIGHT}
     ` + sh.vertexShader
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')   // lit from above, like the grass round it
       .replace('#include <project_vertex>', /* glsl */`
@@ -772,12 +768,13 @@ function buildMeadowFlowers(scene: THREE.Scene) {
         vPetal = c * (0.85 + 0.3 * fract(aSeed * 91.3));
         vBud = step(0.72, fract(aSeed * 5.31));
         vec3 root = vec3(base.x, terrainH(base), base.y);
-        vec3 head = root + vec3(0.0, 0.32 + 0.2 * fract(aSeed * 3.7), 0.0);
-        head += windAt(head, 1.0, 0.4, 0.01);
+        float stem = mix(0.48, 1.0, meadowHeight(base, wNoise(base * 0.23)));
+        vec3 head = root + vec3(0.0, stem * (0.32 + 0.2 * fract(aSeed * 3.7)), 0.0);
+        head += windAt(head, 1.0, 0.4, 0.01) * stem;
         for (int i = 0; i < 8; i++) {                                       // lean away from feet
           vec2 d = base - uPush[i].xy;
           float push = smoothstep(uPush[i].z * 1.3, 0.0, length(d));
-          head.xz += normalize(d + 1e-4) * push * 0.35; head.y -= push * 0.15;
+          head.xz += normalize(d + 1e-4) * push * 0.35 * stem; head.y -= push * 0.15 * stem;
         }
         vec4 mvPosition = viewMatrix * vec4(head, 1.0);
         float dist = length(mvPosition.xyz);

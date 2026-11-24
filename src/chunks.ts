@@ -3,7 +3,7 @@
 // Every chunk has its own seed, so walking back finds exactly the same trees.
 import * as THREE from 'three';
 import { scene } from './renderer';
-import { createKit, rng, type KitMesh } from './nature';
+import { createKit, POND, rng, type Kit, type KitMesh } from './nature';
 import { removeSurfaceVariant } from './surfaces';
 import { addCollider, removeColliders, isFree } from './physics';
 import { biomeAt, treeBlocked, groundAt, seeded, rockZone, hillsAt, WORLD_R, HALF } from './map';
@@ -12,6 +12,37 @@ const CH = 48, LOAD = 150, UNLOAD = 240, DRAW = 140, CLEARING = 56;
 interface Chunk { i: number; j: number; cx: number; cz: number; group: THREE.Group; meshes: KitMesh[]; owner: object }
 const chunks = new Map<number, Chunk>();
 const ckey = (i: number, j: number) => (i + 512) * 1024 + (j + 512);
+
+// Myrtle, fern, olive and honey. A whole thicket draws its leaf tints from the same pair.
+const SHRUB_TINTS = [
+  [0x215331, 0x517c51], [0x50712a, 0x91a84b],
+  [0x8b782c, 0xc9b542], [0xa76d20, 0xe1b543]
+].map(pair => pair.map(hex => new THREE.Color(hex)));
+
+function growLowShrubs(kit: Kit, i: number, j: number, abundance: number) {
+  const cell = CH / 3;
+  for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) {
+    const gx = i * 3 + a, gz = j * 3 + b;
+    const random = seeded(Math.imul(gx, 73856093) ^ Math.imul(gz, 19349663) ^ 1692);
+    if (random() > 0.54 + 0.14 * abundance) continue;
+    const [shade, sun] = SHRUB_TINTS[Math.floor(random() * SHRUB_TINTS.length)];
+    const cx = (gx + 0.25 + random() * 0.50) * cell, cz = (gz + 0.25 + random() * 0.50) * cell;
+    const axis = random() * Math.PI, dx = Math.cos(axis), dz = Math.sin(axis);
+    const length = 2.3 + random() * 1.6, width = 1.0 + random() * 1.4, count = 5 + Math.floor(random() * 7);
+    for (let n = 0; n < count; n++) {
+      const radius = Math.sqrt(n / count), angle = n * 2.40 + random() * 0.75;
+      const u = radius * length * Math.cos(angle), v = radius * width * Math.sin(angle);
+      const x = cx + dx * u - dz * v, z = cz + dz * u + dx * v;
+      const spread = 0.79 + random() * 0.57, height = 0.74 + random() * 0.30;
+      const turn = random() * Math.PI * 2, tint = random();
+      if (Math.hypot(x, z) > WORLD_R || treeBlocked(x, z) || Math.max(...groundAt(x, z)) > 40) continue;
+      // The starting shrine's flagstones, courtyard and wading pond also have hand-laid footprints.
+      if (Math.abs(x) < 2.6 && z > -17 && z < 8 || Math.abs(x) < 13 && z > -32 && z < -14) continue;
+      if (Math.hypot(x - POND.x, z - POND.z) < POND.r * 1.15 + 1 || !isFree(x, z, spread * 0.65)) continue;
+      kit.lowShrub(x, z, spread, height, turn, shade.clone().lerp(sun, tint));
+    }
+  }
+}
 
 function buildChunk(i: number, j: number): Chunk {
   const owner = {}, x0 = i * CH, z0 = j * CH;
@@ -78,6 +109,7 @@ function buildChunk(i: number, j: number): Chunk {
     const g = groundAt(x, z); if (g[0] + g[1] + g[2] > 60) continue;
     kit.wildflower(x, z);
   }
+  growLowShrubs(kit, i, j, mid.bush);
   const group = new THREE.Group(), meshes = kit.build();
   for (const m of meshes) group.add(m.mesh);
   scene.add(group);

@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { BLADE_PROFILE, MAT, bladeGeometry, grp, mesh } from './samurai';
+import { BLADE_PROFILE, DUAL_PROFILE, MAT, bladeGeometry, grp, mesh, type BladeProfile } from './samurai';
 import type { Avatar, WeaponForm } from './types';
 
-export const BLADE_LAYOUT: Record<WeaponForm, { base: number; width: number }> = {
-  katana: { base: BLADE_PROFILE.base, width: 1 },
-  spear: { base: 0.91, width: 2.3 },
-  broad: { base: 0.19, width: 4.25 },
-  dual: { base: 0.113, width: 1.35 },
+export const BLADE_LAYOUT: Record<WeaponForm, { base: number; width: number; profile: BladeProfile }> = {
+  katana: { base: BLADE_PROFILE.base, width: 1, profile: BLADE_PROFILE },
+  spear: { base: 0.91, width: 2.3, profile: BLADE_PROFILE },
+  broad: { base: 0.19, width: 4.25, profile: BLADE_PROFILE },
+  // the twin blades carry their own curved, broad-bellied shape (DUAL_PROFILE) at full size
+  dual: { base: 0.113, width: 1, profile: DUAL_PROFILE },
   // the staff has no blade: its upper half (the striking end, with the bronze cap) carries the trail and sparks
-  staff: { base: 0.3, width: 1 }
+  staff: { base: 0.3, width: 1, profile: BLADE_PROFILE }
 };
 
 export function createWeaponModels(sam: Avatar, steel: THREE.MeshStandardMaterial) {
@@ -60,7 +61,7 @@ export function createWeaponModels(sam: Avatar, steel: THREE.MeshStandardMateria
     for (const z of [-0.056, -0.018, 0.020, 0.059]) cylinder(group, z, z + 0.009, 0.018, 0.018, MAT.cord);
     cylinder(group, 0.076, 0.093, 0.041, 0.040, MAT.iron, 10);
     cylinder(group, 0.089, 0.111, 0.020, 0.022, MAT.gold, 8);
-    const blade = mesh(bladeGeometry(), steel, group);
+    const blade = mesh(bladeGeometry('dual'), steel, group);
     blade.name = 'short-blade';
     return { group, blade };
   }

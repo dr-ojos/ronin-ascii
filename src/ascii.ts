@@ -2,7 +2,7 @@
 // character per cell), with a finer character grid for the actors and light-aware contours.
 import * as THREE from 'three';
 import { renderer, DPR } from './renderer';
-import { asciiGrid, BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, FLOWER_GLYPHS } from './materials';
+import { asciiGrid, BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, FLOWER_GLYPHS } from './materials';
 import { flareUniforms, MAX_FLARES, projectFlares } from './flare';
 import { surfaceGlyphs } from './surface-glyphs';
 
@@ -14,8 +14,8 @@ const rt = new THREE.WebGLRenderTarget(bufSize.x * RT_SCALE, bufSize.y * RT_SCAL
 
 // Real text-mode output: the screen is a grid of small cells and every cell holds ONE printable
 // ASCII character (0x20-0x7E) in ONE colour, on black. Glyphs are drawn larger than their cell
-// (OVERLAP) so neighbouring characters overlap and weave denser textures, but everything on
-// screen is still made of characters: no image shows through between the strokes.
+// (OVERLAP) so neighbouring characters overlap and weave denser textures. Meadow blades
+// keep their individual strokes from the scene render, even when a leaf spans several cells.
 //
 // pass 1 (cellMat): one texel per cell -> which character + colour
 // pass 2 (postMat): every pixel adds up the glyphs of the nearby cells that cover it
@@ -264,6 +264,9 @@ export const cellMat = new THREE.ShaderMaterial({
           c = mix(c, steel * (0.30 + 0.95 * sqrt(min(1.0, peak))), 0.86);
         }
         c = modeCol(c, al);
+      } else if (abs(surface.a - ${CLS.grassBlade.toFixed(2)}) < 0.002) {
+        // The final pass draws the leaf. A technique flare can still write its glyph here.
+        row = 0.0; idx = 0.0; c = vec3(0.0);
       } else {
         if (coverage / 6.0 > 0.35) { gl_FragColor = vec4(0.0); return; }
         // ---- environment: glyph ramp chosen per material class (stored in alpha)
@@ -521,9 +524,8 @@ const postMat = new THREE.ShaderMaterial({
       else if (uMode > 0.5) b = vec3(0.25, 1.0, 0.45) * band;
       return mix(b, vec3(1.0, 0.12, 0.08) * max(band, 0.3), uHit * 0.5) * 0.4;   // under the characters: the figure reads as one coloured mass
     }
-    // surface letters: the figure as rendered (its material already drew the letters on it), graded like the grid's
-    vec3 actorSurface(vec2 fc){
-      vec3 c = grade(1.8 * texture2D(tScene, fc / uRes).rgb);
+    // Palette and hit tint for strokes already drawn on a surface in the scene render.
+    vec3 surfaceInk(vec3 c){
       float l = luma(c);
       if (uMode > 2.5) c = vec3(0.93) * l;
       else if (uMode > 1.5) c = vec3(1.0, 0.68, 0.22) * l * 1.3;
@@ -561,10 +563,14 @@ const postMat = new THREE.ShaderMaterial({
       vec3 col;
       if (mask(fc) > 0.5) {
         // inside a silhouette: the surface letters, or small grid characters over a solid cel-shaded backing
-        col = uSurf > 0.5 ? actorSurface(fc) : max(actor, actorBacking(fc));
+        col = uSurf > 0.5 ? surfaceInk(grade(1.8 * texture2D(tScene, fc / uRes).rgb)) : max(actor, actorBacking(fc));
       } else {
         layer(tCells, tFont, uCell, uGlyph, uGrid, fc, true, et, es);
         col = max(mix(et, es, 0.25), actor);
+        vec4 surface = texelFetch(tScene, ivec2(fc / uRes * vec2(textureSize(tScene, 0))), 0);
+        if (abs(surface.a - ${CLS.grassBlade.toFixed(2)}) < 0.002) {
+          col = max(col, surfaceInk(grade(surface.rgb) * 0.70));
+        }
         // dark contour just outside the silhouette
         // a wide dark moat round every figure, so its letters never merge with the ground's
         float r = uRim * 3.6, d = r * 0.7;

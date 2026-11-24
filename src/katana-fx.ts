@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { scene } from './renderer';
 import { BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, tagMat } from './materials';
 import { sam, bladeMat } from './avatar';
-import { BLADE_PROFILE } from './samurai';
+import { BELLY_POW, BLADE_PROFILE, bladeSection } from './samurai';
 import { BLADE_LAYOUT } from './weapon-models';
 import { displayedWeapon, tipZ, type Weapon } from './weapons';
 import { player, state } from './state';
@@ -20,6 +20,9 @@ scene.add(samGlow, bladeLight);
 const bladeSheen = {
   uBladeStrength: { value: 0 },
   uBladeCurve: new THREE.Uniform<number>(BLADE_PROFILE.curve),
+  uBladeWidth: new THREE.Uniform<number>(BLADE_PROFILE.width),
+  uBladeTaper: new THREE.Uniform<number>(BLADE_PROFILE.taper),
+  uBladeBelly: new THREE.Uniform<number>(BLADE_PROFILE.belly),
   uBladeGlints: { value: new THREE.Vector3() },
   uBladeColors: { value: [new THREE.Color(), new THREE.Color(), new THREE.Color()] }
 };
@@ -36,14 +39,18 @@ const bladeSheen = {
       varying vec2 vBlade;
       uniform float uBladeStrength;
       uniform float uBladeCurve;
+      uniform float uBladeWidth;
+      uniform float uBladeTaper;
+      uniform float uBladeBelly;
       uniform vec3 uBladeGlints;
       uniform vec3 uBladeColors[3];
     ` + shader.fragmentShader.replace('#include <emissivemap_fragment>', /* glsl */`
       #include <emissivemap_fragment>
       if (uBladeStrength > 0.0) {
         float along = clamp((vBlade.y - ${BLADE_PROFILE.base.toFixed(3)}) / ${BLADE_PROFILE.length.toFixed(3)}, 0.0, 1.0);
-        float width = ${BLADE_PROFILE.width.toFixed(3)} - ${BLADE_PROFILE.taper.toFixed(3)} * along;
-        float center = uBladeCurve * along * along;
+        float belly = uBladeBelly * sin(3.14159265 * pow(along, ${BELLY_POW.toFixed(2)}));
+        float width = uBladeWidth - uBladeTaper * along + belly;
+        float center = uBladeCurve * along * along - belly * 0.5;
         float across = (vBlade.x - center) / width + 0.5;
         float bevel = 1.0 - smoothstep(0.08, 0.59, across);
         vec3 d = abs(vec3(along + across * 0.027) - uBladeGlints);
@@ -87,14 +94,22 @@ function setWeaponFx(w: Weapon) {
   fxWeapon = w;
   CG.set(w.fx.glow); C1.set(w.fx.hot); C2.set(w.fx.cool);
   haloMat.color.copy(CG); haloCore.color.copy(CG).lerp(WHITE, 0.35); bladeLight.color.copy(CG);
-  const { base, width } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const { base, width: scale, profile } = BLADE_LAYOUT[w.form ?? 'katana'];
   const len = tipZ(w) - base, r = 0.027 * w.fx.halo;
+  // the halo is a straight sleeve laid along the chord from the blade's root to its point;
+  // the broad-bellied twin blades get a fatter one
+  const width = w.form === 'dual' ? scale * bladeSection(profile, 0.6).width / BLADE_PROFILE.width : scale;
+  const rise = bladeRise(w, 1);
   for (const glow of [halo, offhandHalo]) {
     const outer = glow.getObjectByName('outer')!, inner = glow.getObjectByName('inner')!;
     outer.scale.set(r, r * 0.55 * width, len / 3); inner.scale.set(r * 0.35, r * 0.2 * width, len / 3);
-    glow.position.set(0, 0.004 * width, base + len / 2);
+    glow.position.set(0, 0.004 * width + rise / 2, base + len / 2);
+    glow.rotation.x = -Math.atan2(rise, len);
   }
-  bladeSheen.uBladeCurve.value = w.form === 'spear' ? 0 : BLADE_PROFILE.curve;
+  bladeSheen.uBladeCurve.value = w.form === 'spear' ? 0 : profile.curve;
+  bladeSheen.uBladeWidth.value = profile.width;
+  bladeSheen.uBladeTaper.value = profile.taper;
+  bladeSheen.uBladeBelly.value = profile.belly;
   const palette = w.fx.sparks;
   if (palette) {
     bladeSheen.uBladeColors.value.forEach((color, i) => color.set(palette[i]));
@@ -167,9 +182,15 @@ offhandSparks.name = 'offhand-sparks';
 offhandSparks.onBeforeRender = edgeSparks.onBeforeRender;
 sam.offhand.add(offhandSparks);
 function cuttingEdge(w: Weapon, t: number) {
-  const { curve, width, taper } = BLADE_PROFILE;
-  const y = w.form === 'spear' ? -width * 0.52 * Math.pow(Math.sin(Math.PI * t), 0.72) : curve * t * t - (width - taper * t) * 0.5;
-  return y * BLADE_LAYOUT[w.form ?? 'katana'].width;
+  const { width: scale, profile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  if (w.form === 'spear') return -BLADE_PROFILE.width * 0.52 * Math.pow(Math.sin(Math.PI * t), 0.72) * scale;
+  const { center, width } = bladeSection(profile, t);
+  return (center - width * 0.5) * scale;
+}
+/** height of the blade's centre line at `t` (0 root … 1 point): the curved twin blades rise well off the hilt's axis */
+function bladeRise(w: Weapon, t: number) {
+  const { width: scale, profile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  return w.form === 'dual' ? bladeSection(profile, t).center * scale : 0;
 }
 function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
   edgeSparks.visible = Boolean(w.fx.sparks) && !state.dead;
@@ -352,9 +373,9 @@ export function updateSparks(dt: number, emit: boolean) {
   trailK = w.fx.trail;
   sam.katana.updateMatrixWorld(true);
   const end = tipZ(w), base = BLADE_LAYOUT[w.form ?? 'katana'].base;
-  const from = base + (end - base) * 0.12;
-  sam.katana.localToWorld(bladeBase.set(0, 0, from));
-  sam.katana.localToWorld(bladeTip.set(0, 0, end));
+  const from = base + (end - base) * 0.12, fromY = bladeRise(w, 0.12), endY = bladeRise(w, 1);
+  sam.katana.localToWorld(bladeBase.set(0, fromY, from));
+  sam.katana.localToWorld(bladeTip.set(0, endY, end));
   tipVel.subVectors(bladeTip, prevTip).divideScalar(dt);
   if (staged || changed) tipVel.setScalar(0);
   if (tipVel.lengthSq() > 900) tipVel.setLength(30); // teleports (reset, first frame)
@@ -372,8 +393,8 @@ export function updateSparks(dt: number, emit: boolean) {
   prevTip.copy(bladeTip); prevBase.copy(bladeBase);
   if (displaying || changed || !dual) leftTrail.points.length = 0;
   if (dual) {
-    sam.offhand.localToWorld(leftBase.set(0, 0, from));
-    sam.offhand.localToWorld(leftTip.set(0, 0, end));
+    sam.offhand.localToWorld(leftBase.set(0, fromY, from));
+    sam.offhand.localToWorld(leftTip.set(0, endY, end));
   }
   const leftSwing = dual && !staged && !changed ? Math.min(1, leftTip.distanceTo(leftPrevTip) / (12 * dt)) : 0;
   updateTrail(leftTrail, dt, emit && dual, leftSwing, leftBase, leftTip, leftPrevBase, leftPrevTip);

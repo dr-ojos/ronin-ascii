@@ -156,13 +156,33 @@ function curvedPanel(w: number, h: number, curve: number, m: THREE.Material, sx 
 }
 const openCyl = (rt: number, rb: number, h: number, ts: number, tl: number, seg = 24) => new THREE.CylinderGeometry(rt, rb, h, seg, 1, true, ts, tl);
 
-export const BLADE_PROFILE = { base: 0.162, length: 0.72, curve: 0.022, width: 0.031, taper: 0.008 } as const;
-function bladeGeometry(shape: 'katana' | 'spear' | 'broad' = 'katana') {
+export interface BladeProfile { base: number; length: number; curve: number; width: number; taper: number; belly: number }
+export const BLADE_PROFILE = { base: 0.162, length: 0.72, curve: 0.022, width: 0.031, taper: 0.008, belly: 0 } as const;
+// the twin short blades: a deep sabre sweep and a broad belly bulging out of the cutting edge,
+// widest about two thirds up and sweeping into a clipped point
+export const DUAL_PROFILE: BladeProfile = { ...BLADE_PROFILE, curve: 0.085, width: 0.04, taper: 0.006, belly: 0.028 };
+export const BELLY_POW = 1.6;
+/** across the blade at `t` (0 base … 1 tip): its centre line and full width, in blade units */
+export function bladeSection(p: BladeProfile, t: number) {
+  const belly = p.belly * Math.sin(Math.PI * Math.pow(t, BELLY_POW));
+  return { center: p.curve * t * t - belly / 2, width: p.width - p.taper * t + belly };
+}
+function bladeGeometry(shape: 'katana' | 'spear' | 'broad' | 'dual' = 'katana') {
   const { base, length: L, curve, width, taper } = BLADE_PROFILE;
   const sh = new THREE.Shape(), N = 24;
   const w = (s: number) => width - taper * (s / L);
   const c = (s: number) => curve * Math.pow(s / L, 2);
-  if (shape === 'spear') {
+  if (shape === 'dual') {
+    const spine = (s: number) => { const { center, width } = bladeSection(DUAL_PROFILE, s / L); return center + width / 2; };
+    const edge = (s: number) => { const { center, width } = bladeSection(DUAL_PROFILE, s / L); return center - width / 2; };
+    sh.moveTo(0, edge(0));
+    for (let i = 1; i <= N; i++) { const s = (i / N) * L * 0.86; sh.lineTo(s, edge(s)); }
+    // the belly sweeps up into the point, which sits high, near the spine
+    sh.quadraticCurveTo(L * 0.975, edge(L * 0.95), L, spine(L) - DUAL_PROFILE.width * 0.3);
+    // a short straight clip back down to the spine
+    sh.lineTo(L * 0.84, spine(L * 0.84));
+    for (let i = N; i >= 0; i--) { const s = (i / N) * L * 0.84; sh.lineTo(s, spine(s)); }
+  } else if (shape === 'spear') {
     sh.moveTo(0, -width * 0.21);
     sh.quadraticCurveTo(L * 0.26, -width * 0.83, L * 0.48, -width * 0.43);
     sh.quadraticCurveTo(L * 0.73, -width * 0.29, L, 0);
