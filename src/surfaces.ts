@@ -250,8 +250,9 @@ ${ascii ? ASCII_HELPERS : ''}
       ${style === 'boulder' ? `float moss = smoothstep(0.44, 0.92, worldNormal.y * 0.76 + stain * 0.50);
         diffuseColor.rgb = mix(vec3(0.108, 0.115, 0.132), vec3(0.042, 0.084, 0.029), moss);` : ''}
       ${finish.color ? `diffuseColor.rgb *= ${finish.color};` : ''}
-      ${style === 'terrain' ? `vec3 soil = mix(vec3(0.019, 0.013, 0.007), vec3(0.049, 0.036, 0.017), stain);
-        diffuseColor.rgb = mix(soil * (0.76 + 0.51 * grit), diffuseColor.rgb, smoothstep(0.1, 0.75, vRock));` : ''}
+      ${style === 'terrain' ? `vec3 turf = mix(vec3(0.022, 0.056, 0.016), vec3(0.058, 0.112, 0.030), stain);
+        turf = mix(turf, vec3(0.034, 0.050, 0.018), smoothstep(0.55, 0.92, 1.0 - grit) * 0.35);
+        diffuseColor.rgb = mix(turf * (0.76 + 0.48 * grit), diffuseColor.rgb, smoothstep(0.1, 0.75, vRock));` : ''}
       ${style === 'boards' ? `float joint = abs(fract(board + 0.5) - 0.5);
         float seam = smoothstep(0.013, 0.020 + fwidth(board), joint);
         diffuseColor.rgb *= mix(0.36, 0.86 + offset * 0.22, mix(1.0, seam, abs(worldNormal.y)));` : ''}

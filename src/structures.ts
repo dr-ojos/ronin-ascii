@@ -13,7 +13,7 @@ import { tent } from './tents';
 import { banner, bannerMat } from './banner';
 import { groundY, lakeLevel } from './terrain';
 import { riverDepth, lakeWater, ribbonWater, RIVER_FLOW, WATER_GLSL, rippleUniforms, weatherUniforms } from './water';
-import { ROADS, RIVER, LAKES, BRIDGES, TORII_PATH, FOOTPRINTS, lakeRadius, lineDist, place, seeded, type P2, type Line } from './map';
+import { ROADS, RIVER, RIVER_BANK_PAD, riverBankOffset, LAKES, BRIDGES, TORII_PATH, FOOTPRINTS, lakeRadius, lineDist, place, seeded, type P2, type Line } from './map';
 
 const TAU = Math.PI * 2;
 let R = seeded(7331);
@@ -43,7 +43,7 @@ export const MT = {
   cloth: tagMat(surfaceMaterial(M(0xd8d0b8, { roughness: 1, side: THREE.DoubleSide }), 'cloth'), CLS.wood),
   banner: [0xb3261e, 0xe8e0cc, 0x1c2a4a].map(c => tagMat(M(c, { roughness: 1, side: THREE.DoubleSide }), CLS.wood)),
   water: lakeWater(),
-  river: ribbonWater('river', RIVER.width, RIVER_FLOW),
+  river: ribbonWater('river', RIVER.width, RIVER_FLOW, {}, RIVER_BANK_PAD),
   moat: ribbonWater('moat', 9, 0, { colour: 0x07120f, clear: 1.2 }),
   road: roadMaterial(),
   lily: tagMat(M(0x2f5a2a, { roughness: 0.7, side: THREE.DoubleSide }), CLS.foliage),
@@ -237,19 +237,27 @@ export function miniShrine(p: Obj, x: number, y: number, z: number, ry: number, 
 }
 
 // ------------------------------------------------------------ roads (draped ribbons) + lanterns along them
-export function ribbon(line: Line, width: number, mat: THREE.Material, lift: number, colorAt?: (x: number, z: number, side: number) => THREE.Color) {
-  const pts = line.pts, n = pts.length, pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2), idx: number[] = [];
+export function ribbon(line: Line, width: number, mat: THREE.Material, lift: number, colorAt?: (x: number, z: number, side: number) => THREE.Color, cols = 1) {
+  const pts = line.pts, n = pts.length, stride = cols + 1;
+  const pos = new Float32Array(n * stride * 3), col = new Float32Array(n * stride * 3), uv = new Float32Array(n * stride * 2), idx: number[] = [];
   let along = 0;
   for (let i = 0; i < n; i++) {
     const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
     let dx = b[0] - a[0], dz = b[1] - a[1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
-    for (let s = 0; s < 2; s++) {
-      const side = s ? 1 : -1, x = pts[i][0] - dz * side * width / 2, z = pts[i][1] + dx * side * width / 2;
-      pos.set([x, groundY(x, z) + lift, z], (i * 2 + s) * 3);
-      uv.set([s, along / width], (i * 2 + s) * 2);
-      if (colorAt) { const c = colorAt(x, z, side); col.set([c.r, c.g, c.b], (i * 2 + s) * 3); }
+    for (let s = 0; s < stride; s++) {
+      const u = s / cols, side = u * 2 - 1;
+      const x = pts[i][0] - dz * side * width / 2, z = pts[i][1] + dx * side * width / 2;
+      pos.set([x, groundY(x, z) + lift, z], (i * stride + s) * 3);
+      uv.set([u, along / width], (i * stride + s) * 2);
+      if (colorAt) { const c = colorAt(x, z, side); col.set([c.r, c.g, c.b], (i * stride + s) * 3); }
     }
-    if (i < n - 1) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); along += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); }
+    if (i < n - 1) {
+      for (let s = 0; s < cols; s++) {
+        const k = i * stride + s;
+        idx.push(k, k + 1, k + stride, k + 1, k + stride + 1, k + stride);
+      }
+      along += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+    }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -331,19 +339,21 @@ function buildWater() {
   });
 
   // the river: a dark ribbon following the valley. Shallow enough to wade (water.ts), or cross dry over the bridges
-  ribbon(RIVER, RIVER.width, MT.river, 0.12);
-  // reeds along the banks
+  ribbon(RIVER, RIVER.width + RIVER_BANK_PAD * 2, MT.river, 0.12, undefined, 4);
+  // reeds along the irregular banks
   const reeds = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.07, 1.6, 4).translate(0, 0.8, 0), MT.reed, 2400);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(); let n = 0;
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(); let n = 0, along = 0;
   for (let i = 0; i < RIVER.pts.length - 1 && n < 2400; i += 1) {
     const [x0, z0] = RIVER.pts[i], [x1, z1] = RIVER.pts[i + 1], dx = x1 - x0, dz = z1 - z0, l = Math.hypot(dx, dz) || 1;
-    for (let k = 0; k < 3 && n < 2400; k++) {
-      const side = R() < 0.5 ? -1 : 1, off = RIVER.width / 2 + rnd(-0.6, 0.8), t = R();
+    if (l <= 12) for (let k = 0; k < 3 && n < 2400; k++) {
+      const side = R() < 0.5 ? -1 : 1, t = R();
+      const off = RIVER.width / 2 + riverBankOffset(along + l * t, side) + rnd(-0.5, 0.8);
       const x = x0 + dx * t - dz / l * side * off, z = z0 + dz * t + dx / l * side * off;
       if (BRIDGES.some(b => Math.hypot(b.x - x, b.z - z) < 6)) continue;
       e.set(rnd(-0.25, 0.25), 0, rnd(-0.25, 0.25)); q.setFromEuler(e);
       reeds.setMatrixAt(n++, m4.compose(new THREE.Vector3(x, groundY(x, z) - 0.05, z), q, new THREE.Vector3(1, rnd(0.6, 1.3), 1)));
     }
+    along += l;
   }
   reeds.count = n; reeds.computeBoundingSphere(); scene.add(reeds);
 

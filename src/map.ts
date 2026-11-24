@@ -85,6 +85,17 @@ export const RIVER: Line = {
   pts: smoothLine([[-1420, -900], [-1150, -820], [-960, -700], [-820, -560], [-700, -420], [-600, -300], [-500, -170], [-440, -40], [-400, 70], [-365, 140], [-340, 165]], 4)
     .concat(smoothLine([[-292, 236], [-275, 300], [-240, 380], [-180, 470], [-120, 570], [-70, 720], [-20, 900], [60, 1100], [120, 1450]], 4))
 };
+/** Extra half-width of the river ribbon mesh so irregular banks never clip on the polygon edge. */
+export const RIVER_BANK_PAD = 2.6;
+/** Organic bank offset (metres, positive = wider) at distance `along` on `side` (-1 left, +1 right). */
+export function riverBankOffset(along: number, side: number): number {
+  const seed = side < 0 ? 1.7 : 4.9;
+  const o = Math.sin(along * 0.051 + seed) * 1.05
+    + Math.sin(along * 0.117 + seed * 1.7 + 1.3) * 0.72
+    + Math.sin(along * 0.273 + seed * 2.3 + 2.7) * 0.42
+    + Math.sin(along * 0.59 + seed * 3.1 + 0.9) * 0.20;
+  return THREE.MathUtils.clamp(o, -2.0, 2.0);
+}
 
 const ROAD_CTRL: P2[][] = [
   [[0, 7], [0, 40], [22, 110], [85, 195], [150, 255], [175, 350], [125, 455], [110, 470]],          // sur: cerezos y cementerio
@@ -391,6 +402,33 @@ function drawLine(ctx: CanvasRenderingContext2D, pts: P2[], w: number) {
   ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.beginPath(); pts.forEach(([x, z], i) => i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)); ctx.stroke();
 }
+function drawRiverMask(ctx: CanvasRenderingContext2D, pad: number) {
+  const pts = RIVER.pts, n = pts.length, half = RIVER.width / 2;
+  let along = 0, left: P2[] = [], right: P2[] = [];
+  const flush = () => {
+    if (left.length < 2) { left = []; right = []; return; }
+    ctx.beginPath();
+    ctx.moveTo(left[0][0], left[0][1]);
+    for (let k = 1; k < left.length; k++) ctx.lineTo(left[k][0], left[k][1]);
+    for (let k = right.length - 1; k >= 0; k--) ctx.lineTo(right[k][0], right[k][1]);
+    ctx.closePath(); ctx.fill();
+    left = []; right = [];
+  };
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+    let dx = b[0] - a[0], dz = b[1] - a[1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    const wl = half + riverBankOffset(along, -1) + pad;
+    const wr = half + riverBankOffset(along, 1) + pad;
+    left.push([pts[i][0] + dz * wl, pts[i][1] - dx * wl]);
+    right.push([pts[i][0] - dz * wr, pts[i][1] + dx * wr]);
+    if (i < n - 1) {
+      const step = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+      along += step;
+      if (step > 12) flush();
+    }
+  }
+  flush();
+}
 function drawLake(ctx: CanvasRenderingContext2D, l: Lake, m: number) {
   ctx.beginPath();
   for (let i = 0; i <= 128; i++) { const a = (i / 128) * Math.PI * 2, r = lakeRadius(l, a) + m; ctx.lineTo(l.x + Math.cos(a) * r, l.z + Math.sin(a) * r); }
@@ -411,7 +449,9 @@ export function buildMasks() {
   const g = canvasFor(MASK_RES);
   g.globalCompositeOperation = 'lighter';
   g.strokeStyle = '#ff0000'; for (const r of ROADS) drawLine(g, r.pts, r.width - 0.2);
-  g.strokeStyle = g.fillStyle = '#00ff00'; drawLine(g, RIVER.pts, RIVER.width + 0.8); for (const l of LAKES) drawLake(g, l, 0.8);
+  g.strokeStyle = g.fillStyle = '#00ff00';
+  drawRiverMask(g, 0.4);
+  for (const l of LAKES) drawLake(g, l, 0.8);
   g.fillStyle = '#0000ff';
   for (const [x, z, w, d, ry] of FOOTPRINTS.rects) { g.save(); g.translate(x, z); g.rotate(-ry); g.fillRect(-w / 2, -d / 2, w, d); g.restore(); }
   FOOTPRINTS.discs.forEach(([x, z], i) => { g.beginPath(); g.arc(x, z, FOOTPRINTS.discR[i], 0, Math.PI * 2); g.fill(); });

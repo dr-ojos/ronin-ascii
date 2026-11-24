@@ -200,13 +200,38 @@ export function waterMaterial(o: WaterLook) {
   return tagMat(m, CLS.water);
 }
 
-/** the river and the moat: a ribbon (uv.x across, uv.y along in widths); the river flows, the moat stands */
-export function ribbonWater(key: string, width: number, flow: number, look: Partial<WaterLook> = {}) {
+/** the river and the moat: a ribbon (uv.x across, uv.y along in widths); the river flows and carves organic banks, the moat stands straight */
+export function ribbonWater(key: string, width: number, flow: number, look: Partial<WaterLook> = {}, bankPad = 0) {
+  const meshW = width + bankPad * 2;
+  const head = bankPad > 0 ? /* glsl */`
+    float riverBankWave(float s, float seed) {
+      float o = sin(s * 0.051 + seed) * 1.05
+              + sin(s * 0.117 + seed * 1.7 + 1.3) * 0.72
+              + sin(s * 0.273 + seed * 2.3 + 2.7) * 0.42
+              + sin(s * 0.59 + seed * 3.1 + 0.9) * 0.20;
+      return clamp(o, -2.0, 2.0);
+    }
+    float riverBankRough(vec2 p, float seed) {
+      return (wNoise(p * 0.28 + vec2(seed, 1.7)) - 0.5) * 0.95
+           + (wNoise(p * 0.78 + vec2(3.1, seed)) - 0.5) * 0.45
+           + (wNoise(p * 1.95) - 0.5) * 0.20;
+    }
+  ` : '';
+  const bankShore = bankPad > 0 ? `
+      float halfW = ${(width * 0.5).toFixed(2)};
+      float leftOff = clamp(riverBankWave(along, 1.7) + riverBankRough(p, 1.7), -2.35, ${(bankPad - 0.15).toFixed(2)});
+      float rightOff = clamp(riverBankWave(along, 4.9) + riverBankRough(p, 4.9), -2.35, ${(bankPad - 0.15).toFixed(2)});
+      float leftEdge = -(halfW + leftOff), rightEdge = halfW + rightOff;
+      shore = min(across - leftEdge, rightEdge - across);
+      float centre = clamp(shore / max(0.5, (rightEdge - leftEdge) * 0.5), 0.0, 1.0);`
+    : `
+      shore = (0.5 - abs(vWUv.x - 0.5)) * W;
+      float centre = 1.0 - abs(vWUv.x - 0.5) * 2.0;`;
   return waterMaterial({
     key, swell: flow ? 1 : 0.6, foam: flow ? 1 : 0.4, clear: 1.6, ...look,
-    shore: `float W = ${width.toFixed(2)}, across = (vWUv.x - 0.5) * W, along = vWUv.y * W;
-      shore = (0.5 - abs(vWUv.x - 0.5)) * W;
-      float centre = 1.0 - abs(vWUv.x - 0.5) * 2.0;
+    head: (look.head ?? '') + head,
+    shore: `float W = ${meshW.toFixed(2)}, across = (vWUv.x - 0.5) * W, along = vWUv.y * W;
+      ${bankShore}
       q = vec2(across, along - t * ${flow.toFixed(2)});
       q2 = vec2(across, along - t * ${(flow * 1.3).toFixed(2)});
       flow = ${flow > 0 ? '0.35 + 0.65 * centre' : '0.0'};`

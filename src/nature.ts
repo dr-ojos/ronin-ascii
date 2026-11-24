@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tagMat, CLS, asciiGrid, FLOWER_GLYPHS } from './materials';
-import { addRoundedSurface, addSurfaceVariant, showSurfaceDetail, surfaceMaterial } from './surfaces';
+import { addRoundedSurface, addSurfaceVariant, detailedSurfaces, showSurfaceDetail, surfaceMaterial } from './surfaces';
 import { bambooBlade, canopySprays, canopyTexture, grassTuft, lowShrubGeometry } from './vegetation-art';
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
 import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, seeded, treeBlocked } from './map';
@@ -654,9 +654,9 @@ function buildGrass(scene: THREE.Scene) {
   const geo = grassTuft();
   const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
   mat.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, wind, terrainUniforms, { uMask: { value: grassMask() } });
+    Object.assign(sh.uniforms, wind, terrainUniforms, { uMask: { value: grassMask() }, uDetailedSurfaces: detailedSurfaces });
     sh.vertexShader = WIND_GLSL + `
-      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask;
+      uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask; uniform float uDetailedSurfaces;
       attribute vec4 aGrassOffsets;
       varying vec3 vGrassTint;
       varying float vAcross;
@@ -696,17 +696,25 @@ function buildGrass(scene: THREE.Scene) {
         float edge = 1.0 - smoothstep(33.0, 41.0, max(abs(offset.x), abs(offset.y)));
         vec4 wPos = vec4(base + local * (grassKeep(root) * edge), 1.0);
         vAcross = uv.x;
-        vec3 cool = mix(vec3(0.029, 0.044, 0.029), vec3(0.077, 0.101, 0.058), meadow);
-        vGrassTint = mix(cool, vec3(0.182, 0.168, 0.055), sage);
-        vGrassTint *= (0.58 + 0.56 * variation) * (0.38 + 0.62 * tip);
+        if (uDetailedSurfaces > 0.5) {
+          vec3 cool = mix(vec3(0.048, 0.118, 0.026), vec3(0.105, 0.215, 0.048), meadow);
+          cool = mix(cool, vec3(0.082, 0.178, 0.038), (1.0 - tall) * 0.35);
+          vGrassTint = mix(cool, vec3(0.195, 0.195, 0.058), sage);
+          vGrassTint *= (0.64 + 0.52 * variation) * (0.52 + 0.58 * tip);
+        } else {
+          vec3 cool = mix(vec3(0.029, 0.044, 0.029), vec3(0.077, 0.101, 0.058), meadow);
+          vGrassTint = mix(cool, vec3(0.182, 0.168, 0.055), sage);
+          vGrassTint *= (0.58 + 0.56 * variation) * (0.38 + 0.62 * tip);
+        }
         vec4 mvPosition = viewMatrix * wPos;
         gl_Position = projectionMatrix * mvPosition;`)
       .replace('#include <worldpos_vertex>', 'vec4 worldPosition = wPos;');
-    sh.fragmentShader = 'varying vec3 vGrassTint; varying float vAcross;\n' + sh.fragmentShader
+    sh.fragmentShader = 'uniform float uDetailedSurfaces; varying vec3 vGrassTint; varying float vAcross;\n' + sh.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
         // A narrow folded face reads as a stroke even seen from above.
         diffuseColor.rgb = vGrassTint * mix(0.78, 1.10, smoothstep(0.40, 0.65, vAcross));
-        diffuseColor.rgb *= 1.0 - 0.40 * smoothstep(0.5, 1.8, fwidth(vAcross));`)
+        float thinFade = uDetailedSurfaces > 0.5 ? 0.18 : 0.40;
+        diffuseColor.rgb *= 1.0 - thinFade * smoothstep(0.5, 1.8, fwidth(vAcross));`)
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');
   };
   mat.customProgramCacheKey = () => 'grass-tufts';
