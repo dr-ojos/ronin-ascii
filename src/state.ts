@@ -2,6 +2,7 @@
 // (an imported `let` can't be reassigned from another module, so loose variables live in `state`).
 import * as THREE from 'three';
 import type { TechniqueId } from './techniques';
+import type { ClassId } from './classes';
 
 export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory';
 
@@ -13,6 +14,8 @@ export const player = {
 };
 
 export const state = {
+  // who you play (classes.ts): the ronin or the sōhei, chosen on the title screen
+  cls: 'ronin' as ClassId,
   // camera
   yaw: 0, pitch: 0.92, camDistUser: 21, photoDist: 3.2,
   // match

@@ -22,7 +22,8 @@ import { angDiff } from './utils';
 
 import type { WeaponForm } from './types';
 
-interface Strike { at: number; arc: number; power: number; offset?: number; quake?: boolean }
+/** `daze`: seconds the oni struck stays dazed (the sōhei's staff), scaled by the weapon's own `daze` */
+interface Strike { at: number; arc: number; power: number; offset?: number; quake?: boolean; daze?: number }
 interface Move {
   duration: number; reach: number; strikes: readonly Strike[];
   /** forward speed (m/s) while the move carries you, and when (attack progress) */
@@ -64,6 +65,14 @@ const moves: Record<WeaponForm, readonly [Move, Move, Move, Move]> = {
     { duration: 1.05, lunge: 5, lungeAt: [0.16, 0.7], reach: 2.9, air: true, strikes: [
       { at: 0.34, arc: Math.PI, power: 0.55 }, { at: 0.5, arc: Math.PI, power: 0.55 }, { at: 0.66, arc: Math.PI, power: 0.55 },
       { at: 0.82, arc: Math.PI, power: 1.4, quake: true }] }
+  ],
+  // the bō: wide swings, an overhead blow and the wheel; every blow dazes the oni it lands on
+  staff: [
+    { duration: 0.46, lunge: 2.8, reach: 3.0, strikes: [{ at: 0.48, arc: 1.45, power: 0.95, daze: 0.45 }] },
+    { duration: 0.46, lunge: 2.8, reach: 3.0, strikes: [{ at: 0.48, arc: 1.45, power: 0.95, daze: 0.45 }] },
+    { duration: 0.62, lunge: 2.4, reach: 3.2, strikes: [{ at: 0.54, arc: 0.9, power: 1.7, daze: 1.2 }] },
+    { duration: 1.0, lunge: 4, lungeAt: [0.55, 0.7], reach: 3.3, strikes: [
+      { at: 0.3, arc: Math.PI, power: 0.8, daze: 0.5 }, { at: 0.72, arc: Math.PI, power: 2.2, quake: true, daze: 1.8 }] }
   ]
 };
 
@@ -205,6 +214,11 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
     } else if (parrying && blocked) {
       if (en.t > 0.24) showMsg('¡ EL DUELISTA CONTRAATACA !', 0.7);
       en.t = Math.min(en.t, 0.24);
+    } else if (strike.daze && !blocked && en.state !== 'return') {
+      // the staff rings the oni's head: big ones and bosses shake it off sooner
+      const daze = strike.daze * (w.daze ?? 1) * (en.big ? 0.35 : 1);
+      staggerEnemy(en, daze);
+      if (daze > 0.9) burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 2 * en.scale, en.g.position.z), 0xffe27a, 10, 1.6, 0.1);
     } else if ((en.state === 'windup' || en.state === 'charge') && !en.big) staggerEnemy(en, 0.5);
     burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.3 * en.scale, en.g.position.z), blocked ? 0xffd889 : 0xffffff, 18, 5, 0.12);
     sparkBurst(new THREE.Vector3(en.g.position.x, en.g.position.y + 1.25 * en.scale, en.g.position.z).lerp(player.pos.clone().setY(player.pos.y + 1.25), 0.35), heavy ? 14 : 9, heavy ? 5.5 : 4.5);
@@ -217,4 +231,5 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
   state.hitStop = heavy ? 0.09 : strike.power < 0.9 ? 0.035 : 0.06;
   state.shake = Math.max(state.shake, heavy ? 0.35 : strike.power < 0.9 ? 0.12 : 0.2);
   sfx.hit({ heavy, pan: hitPan / hits, count: hits });
+  if (w.form === 'staff') sfx.rings(hitPan / hits);
 }

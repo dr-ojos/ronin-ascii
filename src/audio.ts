@@ -302,6 +302,18 @@ export function createAudio() {
     notes.forEach((f, i) => bell(t + i * 0.09, f, 0.12, 1.6));
     if (big) taiko(0.8, 0);
   }
+  function templeBell() { // the sōhei's Campana del Templo: a big bronze bell, struck once, humming long after
+    if (!ok()) return; const t = ctx.currentTime;
+    bell(t, 98, 0.32, 5.5); bell(t, 147, 0.16, 4); bell(t + 0.005, 392, 0.06, 2.2);
+  }
+  function rings(pan = 0) { // the shakujō's loose rings jingling with a blow
+    if (!ok()) return; const t = ctx.currentTime;
+    for (let i = 0; i < 4; i++) {
+      const at = t + i * 0.035 + rnd(0, 0.02);
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 2600 + rnd(-300, 500);
+      const g = ctx.createGain(); env(g, at, 0.002, 0.03, 0.35); o.connect(g); out(g, { wet: 0.4, pan }); o.start(at); o.stop(at + 0.45);
+    }
+  }
   function coin(heal = false) {
     if (!ok()) return; const t = ctx.currentTime;
     if (heal) { bell(t, 440, 0.06, 0.5); bell(t + 0.07, 660, 0.05, 0.5); return; }
@@ -374,7 +386,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, splash, warn, chime, coin, anvil, arrow, thunder, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, splash, warn, chime, templeBell, rings, coin, anvil, arrow, thunder, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

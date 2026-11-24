@@ -38,7 +38,8 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyE' && !tryTalk() && !tryTalkTemple()) tryOpen();
   if (!e.repeat && e.code === 'KeyQ' && state.playing && !state.dead) {
     const w = cycleWeapon();
-    showMsg(w ? `— ${w.name} —` : 'solo tienes esta katana · Masa vende más en la casa del santuario', w ? 1.2 : 2.2);
+    const only = state.cls === 'sohei' ? 'solo tienes este bastón' : 'solo tienes esta katana';
+    showMsg(w ? `— ${w.name} —` : `${only} · Masa vende más en la casa del santuario`, w ? 1.2 : 2.2);
   }
   if (!e.repeat && e.code === 'KeyP') trySpecial();
   if (!e.repeat && e.code === 'KeyO' && state.playing && !state.dead && !state.photo) {

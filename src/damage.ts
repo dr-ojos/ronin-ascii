@@ -8,9 +8,11 @@ import { showDeathScreen } from './hud';
 import { player, state } from './state';
 import { breakStreak } from './score';
 import { hurtMult } from './upgrades';
+import { absorbHit } from './sutra-shield';
 
 export function hurtPlayer(dmg: number) {
   if (player.invuln > 0 || state.dead) return false;
+  if (absorbHit()) return false;   // a sutra of the sōhei's shield takes the blow
   player.hp -= dmg * hurtMult(); onPlayerHurt(); player.invuln = 0.5; state.lastHurt = state.time; breakStreak(); cellMat.uniforms.uHit.value = 1; state.shake = 0.5; sfx.hurt();
   if (player.hp <= 0) {
     player.hp = 0; state.dead = true;

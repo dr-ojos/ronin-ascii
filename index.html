@@ -36,6 +36,11 @@
   #inventory-btn[hidden],body[data-menu] #inventory-btn{display:none}
   #overlay .cbtn{margin-top:16px;color:#8fb4ff;border:1px solid #2a3348;padding:6px 14px;cursor:pointer;font-size:14px;letter-spacing:.08em}
   #overlay .cbtn:hover{color:#ffd27a;border-color:#ffd27a}
+  #overlay .classes{margin-top:18px;font-size:16px;letter-spacing:.06em;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  #overlay .classes .cls{cursor:pointer;color:#9aa3b5;padding:5px 10px;border:1px solid #2a3348}
+  #overlay .classes .cls:hover,#overlay .classes .cls:focus-visible{color:#ffd27a;outline:none}
+  #overlay .classes .cls.on{color:#ffd27a;border-color:#ffd27a;text-shadow:0 0 10px rgba(255,210,122,.45)}
+  #overlay .cdesc{margin-top:8px;color:#cfd6e6;font-size:13px;max-width:640px}
   #menu{position:fixed;right:24px;top:50%;transform:translateY(-50%);width:min(440px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow-y:auto;display:none;z-index:5;
     background:rgba(5,6,10,.9);border:1px solid #2a3348;box-shadow:0 0 30px #000;padding:14px 16px;box-sizing:border-box;font-size:14px;color:#cfd6e6}
   #menu[data-menu="shop"]{width:min(440px,41vw);flex-direction:column;overflow:hidden}
@@ -110,15 +115,17 @@ K tajo · L giro · T vista 3D · F foto · R lluvia · M sonido</div>
 |_| \_\\___/|_| \_|___|_| \_|</pre>
   <div class="k">浪人</div>
   <div class="sub">un samurái sin señor · un mundo bajo la luna · explora, limpia guaridas, abre cofres y hazte más fuerte</div>
+  <div class="classes" id="class-pick" role="radiogroup" aria-label="clase"></div>
+  <div class="cdesc" id="class-desc"></div>
   <div class="help">
     <b>WASD</b> moverse &nbsp;·&nbsp; <b>K</b> / clic combo &nbsp;·&nbsp; <b>L</b> golpe fuerte<br>
     <b>SHIFT</b> correr &nbsp;·&nbsp; <b>ESPACIO</b> esquivar &nbsp;·&nbsp; <b>E</b> / tajo abrir cofre &nbsp;·&nbsp; <b>N</b> mapa<br>
     <b>P</b> usar técnica cargada &nbsp;·&nbsp; <b>O</b> cambiar técnica &nbsp;·&nbsp; <b>◆ Templos</b> aprende técnicas con los sellos de jade de los cofres<br>
-    empiezas con la <b>Danza de los Mil Tajos</b> &nbsp;·&nbsp; el <b>Rayo</b> se gana venciendo al guardián del Templo del Rayo<br>
+    <span id="start-tech">empiezas con la <b>Danza de los Mil Tajos</b></span> &nbsp;·&nbsp; el <b>Rayo</b> se gana venciendo al guardián del Templo del Rayo<br>
     <b>E</b> hablar con los maestros o con Masa, el armero &nbsp;·&nbsp; <b>I</b> inventario &nbsp;·&nbsp; <b>Q</b> cambiar de arma<br>
     <b>C</b> paleta &nbsp;·&nbsp; <b>T</b> ver sin ASCII &nbsp;·&nbsp; <b>G</b> letras del ronin &nbsp;·&nbsp; <b>F</b> modo foto &nbsp;·&nbsp; <b>+ / -</b> densidad &nbsp;·&nbsp; <b>M</b> sonido
   </div>
-  <div class="cbtn" id="custom-btn">[ personalizar ronin ]</div>
+  <div class="cbtn" id="custom-btn">[ personalizar ]</div>
   <div class="go" id="go">[ clic para desenvainar ]</div>
 </div>
 

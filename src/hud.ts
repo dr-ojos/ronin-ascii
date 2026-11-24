@@ -11,6 +11,7 @@ import { threatLabel } from './equipment-threat';
 import { enemies, KINDS } from './enemies';
 import { sfx } from './sfx';
 import { TECHNIQUES } from './techniques';
+import { cls } from './classes';
 
 const hud = document.getElementById('hud')!, msgEl = document.getElementById('msg')!, promptEl = document.getElementById('prompt')!;
 export const overlay = document.getElementById('overlay')!;
@@ -53,7 +54,7 @@ export function updateHud(dt: number) {
     ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>${KINDS[foe.kind].boss ? ` · FASE ${foe.enraged ? 'II' : 'I'}` : ''}\n  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n${bossHud(foe)}`
     : '';
   hud.innerHTML =
-    `<span class="r">浪人</span> ${esc(look.name.toUpperCase() || 'RONIN')}\n` +
+    `<span class="r">${cls().kanji}</span> ${esc(look.name.toUpperCase() || cls().name.toUpperCase())}\n` +
     `VIDA  [<span class="${player.hp < 30 ? 'r' : 'y'}">${bar}</span>] ${Math.ceil(player.hp)}\n` +
     `${special}\n` +
     `PUNTOS <span class="y">${state.score}</span>${streak}   <span class="d">récord ${state.best}</span>\n` +

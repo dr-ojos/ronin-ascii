@@ -13,14 +13,20 @@ export const TECHNIQUES = {
     description: 'Una ola de 12 m golpea en abanico y recupera hasta 24 de vida al acertar.' },
   cuatroLlamas: { name: 'Cuatro Llamas', short: 'Cuatro Llamas', color: 0xff693b, cost: 5,
     description: 'Cuatro tajos simultáneos. Se reparten si hay 3 o más onis a 14 m y queman a cada alcanzado durante 2,4 s.' },
+  // the sōhei's own: the bell he starts with, the sutras taught to monks at the Templo del Viento
+  campana: { name: 'Campana del Templo', short: 'Campana', color: 0xffcf6e,
+    description: 'Golpeas el suelo con el bastón y suena una campana de bronce: la onda llega a 11 m, empuja y aturde a todos los onis durante 2,4 s.' },
+  sutras: { name: 'Escudo de Sutras', short: 'Sutras', color: 0xfff0b8, cost: 3,
+    description: 'Seis sutras de luz giran a tu alrededor durante 12 s. Cada una detiene un golpe y estalla contra los onis que te rodean.' },
 } as const;
 
 export type TechniqueId = keyof typeof TECHNIQUES;
-/** taught (or won) at a temple: everything but the sword dance you start with */
-export type TempleTechniqueId = Exclude<TechniqueId, 'tajos'>;
+/** taught (or won) at a temple: everything but the techniques a class starts with */
+export type TempleTechniqueId = Exclude<TechniqueId, 'tajos' | 'campana'>;
 /** bought from a master with jade seals */
 export type JadeTechniqueId = Exclude<TempleTechniqueId, 'rayo'>;
-export type WaveTechniqueId = Exclude<JadeTechniqueId, 'cuatroLlamas'>;
+/** the techniques that run out from you as a wave (technique-waves.ts) */
+export type WaveTechniqueId = 'viento' | 'fuego' | 'agua' | 'campana';
 
 export function cycleTechnique() {
   const index = state.learnedTechniques.indexOf(state.technique);

@@ -17,6 +17,8 @@ import { clearTechniqueWaves, startTechniqueWave, updateTechniqueWaves } from '.
 import { TECHNIQUES } from './techniques';
 import { rnd } from './utils';
 import { clearFlares, flare, updateFlares } from './flare';
+import { clearSutras, startSutras, updateSutras } from './sutra-shield';
+import { cls } from './classes';
 
 const CHARGE_TIME = 45;     // seconds to fill the charge from empty
 const KILL_BONUS = 0.04;    // each kill fills this much more
@@ -89,8 +91,13 @@ export function trySpecial() {
     startBladeDance();
     return;
   }
-  Object.assign(player, { combo: id === 'viento' ? 0 : id === 'agua' ? 1 : 2, attackT: 0, attackDur: 0.55,
+  Object.assign(player, { combo: id === 'viento' || id === 'sutras' ? 0 : id === 'agua' ? 1 : 2, attackT: 0, attackDur: id === 'campana' ? 0.62 : 0.55,
     hitDone: true, invuln: Math.max(player.invuln, id === 'rayo' ? 0.8 : 0.48) });
+  if (id === 'sutras') {
+    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
+    startSutras();
+    return;
+  }
   if (id !== 'rayo') {
     state.hitStop = 0.07;
     showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
@@ -136,6 +143,7 @@ export function updateSpecial(dt: number) {
   updateTechniqueWaves(dt);
   updateFourFlames(dt);
   updateFlares(dt);
+  updateSutras(dt);
   for (let i = pending.length - 1; i >= 0; i--) { const p = pending[i]; if ((p.t -= dt) <= 0) { pending.splice(i, 1); p.fn(); } }
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.life -= dt;
@@ -151,7 +159,9 @@ export function updateSpecial(dt: number) {
 function removeBolt(b: Bolt) { scene.remove(b.g); b.core.dispose(); b.glow.dispose(); }
 
 export function resetSpecial() {
-  Object.assign(state, { special: 0, jade: 0, technique: 'tajos', learnedTechniques: ['tajos'] });
+  const start = cls().technique;
+  Object.assign(state, { special: 0, jade: 0, technique: start, learnedTechniques: [start] });
+  clearSutras();
   clearBladeDance();
   clearTechniqueWaves();
   clearFourFlames();

@@ -18,6 +18,7 @@ import { state, player } from './state';
 import { setDetailedSurfaces } from './surfaces';
 import { fitGlyphs } from './surface-glyphs';
 import './input';
+import './class-select';
 
 const clock = new THREE.Clock();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();

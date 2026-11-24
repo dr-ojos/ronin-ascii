@@ -15,13 +15,15 @@ export type P2 = [number, number];
 export interface Place { id: string; name: string; x: number; z: number; r: number; flat: number; blend: number; level?: number; glyph: string }
 export interface TemplePlace extends Place {
   technique: TempleTechniqueId; lesson?: JadeTechniqueId; master: string; facing: number; crest: string;
+  /** a technique this master only teaches to the sōhei (classes.ts) */
+  monkLesson?: JadeTechniqueId;
   /** a temple whose technique is won, not bought: this guardian waits in its courtyard */
   guardian?: EnemyKind;
 }
 export const TEMPLE_GLYPH = '◆';
 export const TEMPLES: TemplePlace[] = [
   { id: 'templo-viento', name: 'TEMPLO DEL VIENTO', x: -181, z: -72, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'viento', master: 'Haru', facing: Math.PI / 2, crest: '風' },
+    technique: 'viento', monkLesson: 'sutras', master: 'Haru', facing: Math.PI / 2, crest: '風' },
   { id: 'templo-brasas', name: 'TEMPLO DE LAS BRASAS', x: 238, z: -21, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
     technique: 'fuego', lesson: 'cuatroLlamas', master: 'Enji', facing: -Math.PI / 2, crest: '火' },
   { id: 'templo-marea', name: 'TEMPLO DE LA MAREA', x: 97, z: 272, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
