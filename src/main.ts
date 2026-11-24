@@ -11,6 +11,7 @@ import { updateRain, updateWorld, updateSky } from './world';
 import { updateMinimap } from './minimap';
 import { updateCamera, updateLightDir } from './camera';
 import { updateHud } from './hud';
+import { updatePickupTags } from './loot';
 import { updateInventoryButton } from './inventory';
 import { update } from './game';
 import { state, player } from './state';
@@ -34,6 +35,7 @@ function frame() {
   updateSky(camera.position);
   updateLightDir();
   updateHud(dt);
+  updatePickupTags();
   updateInventoryButton();
   updateMinimap(dt);
   cellMat.uniforms.uMode.value = state.colorMode;

@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { scene } from './renderer';
+import { scene, camera } from './renderer';
 import { M, CLS, tagMat } from './materials';
 import { addCollider } from './physics';
 import { addLight, removeLights } from './lights';
@@ -207,8 +207,7 @@ export function unseal(c: Chest) {
 }
 export function resetChests() {
   for (const c of chests) { dropChest(c); c.openT = 0; c.state = c.kind === 'oculto' ? 'closed' : 'sealed'; }
-  for (const p of pickups) scene.remove(p.m);
-  pickups.length = 0;
+  while (pickups.length) removePickup(pickups.length - 1);
 }
 
 function openChest(c: Chest) {
@@ -237,7 +236,14 @@ const PM = {
   nori: tagMat(M(0x101418, { roughness: 0.8 }), CLS.wood)
 };
 const COIN = new THREE.CylinderGeometry(0.2, 0.2, 0.06, 12), RICE = new THREE.ConeGeometry(0.28, 0.42, 3);
-interface Pickup { m: THREE.Object3D; kind: 'mon' | 'onigiri'; value: number; life: number; vy: number; y: number }
+interface Pickup { m: THREE.Object3D; kind: 'mon' | 'onigiri'; value: number; life: number; vy: number; y: number; tag: HTMLDivElement }
+// a floating label over every drop still on the ground, so you know what it is before you walk over it
+const tagLayer = document.getElementById('tags')!;
+const TAG_TEXT: Record<Pickup['kind'], (v: number) => string> = {
+  mon: v => `<b>MON</b> <span class="y">+${v}</span><i>monedas · puntos y compras con Masa</i>`,
+  onigiri: v => `<b>ONIGIRI</b> <span class="g">+${v} vida</span><i>bola de arroz · cura al comerla</i>`
+};
+function removePickup(i: number) { const p = pickups[i]; scene.remove(p.m); p.tag.remove(); pickups.splice(i, 1); }
 const pickups: Pickup[] = [];
 function addPickup(kind: Pickup['kind'], value: number, x: number, z: number) {
   const m = new THREE.Group();
@@ -245,7 +251,8 @@ function addPickup(kind: Pickup['kind'], value: number, x: number, z: number) {
   else { const r = new THREE.Mesh(RICE, PM.rice); r.rotation.x = Math.PI / 2; r.rotation.z = Math.PI / 6; m.add(r); const n = new THREE.Mesh(GEO.box, PM.nori); n.scale.set(0.2, 0.18, 0.12); n.position.y = -0.1; m.add(n); }
   const y = surfaceY(x, z);
   m.position.set(x, y + 0.6, z); scene.add(m);
-  pickups.push({ m, kind, value, life: 45, vy: 4, y });
+  const tag = document.createElement('div'); tag.className = `tag ${kind}`; tag.innerHTML = TAG_TEXT[kind](value); tagLayer.appendChild(tag);
+  pickups.push({ m, kind, value, life: 45, vy: 4, y, tag });
 }
 /** what a slain oni leaves behind */
 export function dropLoot(x: number, z: number, tier: number, big: boolean) {
@@ -290,8 +297,42 @@ export function updateLoot(dt: number) {
     if (d < 1.1 && !state.dead) {
       if (p.kind === 'mon') { addPoints(p.value, 'mon', false, 1); sfx.coin(); }
       else { player.hp = Math.min(player.maxHp, player.hp + p.value); state.gain = `+${p.value} vida`; state.gainT = 1.6; sfx.coin(true); }
-      scene.remove(m); pickups.splice(i, 1);
-    } else if (p.life <= 0) { scene.remove(m); pickups.splice(i, 1); }
+      removePickup(i);
+    } else if (p.life <= 0) removePickup(i);
+  }
+}
+/** place the drops' labels on screen (after the camera has moved this frame) */
+const TAG_R = 14, _t = new THREE.Vector3();
+const placed: { x: number; y: number; w: number; h: number }[] = [];
+export function updatePickupTags() {
+  const show = state.playing && !state.dead && !state.photo && !state.menu;
+  if (pickups.length) camera.updateMatrixWorld();
+  const shown: { p: Pickup; x: number; y: number; d: number }[] = [];
+  for (const p of pickups) {
+    const d = Math.hypot(player.pos.x - p.m.position.x, player.pos.z - p.m.position.z);
+    _t.copy(p.m.position).y += 0.75;
+    _t.project(camera);
+    if (!show || d > TAG_R || _t.z > 1 || Math.abs(_t.x) > 1.1 || Math.abs(_t.y) > 1.1) { p.tag.style.display = 'none'; continue; }
+    p.tag.style.display = 'block';
+    shown.push({ p, x: (_t.x + 1) / 2 * innerWidth, y: (1 - _t.y) / 2 * innerHeight, d });
+  }
+  // drops of one oni land side by side: the closest keeps its place, the others climb above it instead of overlapping
+  shown.sort((a, b) => a.d - b.d);
+  placed.length = 0;
+  for (const s of shown) {
+    const w = s.p.tag.offsetWidth + 4, h = s.p.tag.offsetHeight + 3;
+    let y = s.y;
+    s.x = Math.min(innerWidth - w / 2, Math.max(w / 2, s.x));   // never cut off by the screen edge
+    for (let k = 0; k < 8; k++) {
+      const hit = placed.find(r => Math.abs(r.x - s.x) < (r.w + w) / 2 && y > r.y - r.h && y - h < r.y);
+      if (!hit) break;
+      y = hit.y - hit.h;
+    }
+    placed.push({ x: s.x, y, w, h });
+    s.p.tag.style.transform = `translate(${s.x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+    // fade in as you come closer, and blink with the drop when it is about to vanish
+    s.p.tag.style.opacity = (Math.min(1, (TAG_R - s.d) / 4) * (s.p.m.visible ? 1 : 0.25)).toFixed(2);
+    s.p.tag.classList.toggle('near', s.d < 4.5);
   }
 }
 let nearest: Chest | null = null;
