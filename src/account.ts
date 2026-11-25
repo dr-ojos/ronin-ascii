@@ -91,6 +91,7 @@ async function pull(user: User) {
     sessionStorage.setItem('ronin-ascii-sync-reloads', String(reloads + 1));
     holdVault(); holdFog();                            // what the game holds now must not overwrite the merge
     for (const k of changed) localStorage.setItem(k, merged[k]);
+    state.playing = false;   // no "leave the game?" prompt (input.ts) for our own reload
     location.reload();
     return;
   }
