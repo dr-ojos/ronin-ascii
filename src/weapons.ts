@@ -8,6 +8,7 @@ import { canWield, cls } from './classes';
 import { BLADE_LAYOUT } from './weapon-models';
 import type { WeaponForm } from './types';
 import type { BladeLook } from './blade-looks';
+import type { MangaBlade } from './manga-swords';
 import type { ClassId } from './classes';
 import { CLASS_ARSENAL } from './arsenal';
 import { LEVEL_REQ } from './progression';
@@ -16,9 +17,9 @@ import { readVault, vaultReady } from './vault';
 export interface Weapon {
   id: string; name: string; desc: string; price: number; tier: number;
   form?: WeaponForm;
-  /** a sword from across the sea in the katana's slot (blade-looks.ts), and the class it was forged for:
-   *  the xiákè's and the hwarang's weapons are theirs alone (classes.ts canWield) */
-  look?: BladeLook; cls?: ClassId;
+  /** a sword from across the sea in the katana's slot (blade-looks.ts), a bespoke Japanese manga broadsword
+   *  (manga-swords.ts), and the class it was forged for (classes.ts canWield) */
+  look?: BladeLook; mangaModel?: MangaBlade; cls?: ClassId;
   /** the level Masa asks before he sells it (folded into progression.ts LEVEL_REQ below) */
   lv?: number;
   /** damage multiplier, extra reach (m), attack duration multiplier (<1 = faster) */
@@ -102,6 +103,17 @@ export const WEAPONS: Weapon[] = [
     fx: { glow: 0xcf7eff, hot: 0xf4dcff, cool: 0x6a22d8, gravity: 2, halo: 2.1, trail: 2.5, sparks: [0xc266ff, 0xffd266, 0x70c6ff], extra: 'stars' } },
   { id: 'zanbato-sol', name: 'Hendedor del Sol Negro', desc: 'la hoja más ancha y temible: saltos sísmicos que aturden y cargan el rayo', form: 'cleaver', price: 25000, tier: 3, lv: 75, dmg: 3.35, reach: 1.05, speed: 1.18, len: 1.46, width: 1.18, glow: 0xffc636, steel: 0x1a1210, charge: 0.025, daze: 1.2,
     fx: { glow: 0xffd04a, hot: 0xfff5c0, cool: 0xd84414, gravity: 6, halo: 2.25, trail: 2.6, sparks: [0xffc636, 0xff6a2a, 0xffffff], extra: 'bolts' } },
+  // ---- bespoke Japanese manga broad-blade greatswords (manga-swords.ts)
+  { id: 'matadragones', name: 'Matadragones de Hierro', desc: 'espadón colosal de doble filo con doble hueco: golpes sísmicos y chispa eléctrica por toda la hoja', form: 'cleaver', mangaModel: 'buster', price: 3400, tier: 1.75, dmg: 1.78, reach: 0.85, speed: 1.22, len: 1.42, width: 1.1, glow: 0x5ec8ff, steel: 0x2e323c,
+    fx: { glow: 0x70d6ff, hot: 0xe6f8ff, cool: 0x2b6bff, gravity: 7, halo: 1.65, trail: 2.0, sparks: [0x70d6ff, 0xffffff, 0x5282ff], extra: 'bolts' } },
+  { id: 'carmesi-sangre', name: 'Lágrima Carmesí', desc: 'gran hoja ancha rojo sangre de diseño manga: sus chispas caen como gotas de sangre y cura 3 por golpe', form: 'broad', mangaModel: 'executioner', price: 4200, tier: 2.05, dmg: 1.92, reach: 0.9, speed: 1.16, len: 1.38, width: 1.08, glow: 0xff1024, steel: 0x7a0814, heal: 3,
+    fx: { glow: 0xff182e, hot: 0xff4c5c, cool: 0x8a0010, gravity: 18, halo: 1.8, trail: 2.2, sparks: [0xff1428, 0xb80014, 0xff4a58], extra: 'blood' } },
+  { id: 'colmillo-oni', name: 'Colmillo de Oni', desc: 'espadón demoníaco dentado de hoja ancha: desgarra la guardia y aturde con chispas violeta', form: 'cleaver', mangaModel: 'fang', price: 7600, tier: 2.45, dmg: 2.15, reach: 0.95, speed: 1.20, len: 1.40, width: 1.12, glow: 0xd440ff, steel: 0x341c44, daze: 1.3,
+    fx: { glow: 0xe054ff, hot: 0xffc8ff, cool: 0x6b14b8, gravity: 6, halo: 1.85, trail: 2.2, sparks: [0xe048ff, 0x8a38ff, 0xff70c8], extra: 'bolts' } },
+  { id: 'verdugo-luna', name: 'Cortadora de la Luna Llena', desc: 'hoja ancha con eclipse tallado en el acero: alcance enorme y carga la técnica al cortar', form: 'cleaver', mangaModel: 'executioner', price: 14800, tier: 3, lv: 25, dmg: 2.65, reach: 1.15, speed: 1.16, len: 1.50, width: 1.15, glow: 0x9ab4ff, steel: 0xdbe6ff, charge: 0.025,
+    fx: { glow: 0xb4c8ff, hot: 0xffffff, cool: 0x5c6eff, gravity: 2.5, halo: 2.0, trail: 2.4, sparks: [0xc8dcff, 0xffffff, 0x8c7aff], extra: 'stars' } },
+  { id: 'alas-eclipse', name: 'Espadón del Serafín Solar', desc: 'gran espada alada de doble filo y gema solar: cura 2 por golpe, carga la técnica y brilla como el sol', form: 'broad', mangaModel: 'winged', price: 19800, tier: 3, lv: 50, dmg: 2.95, reach: 1.1, speed: 1.08, len: 1.46, width: 1.15, glow: 0xffaa28, steel: 0xfff0c2, heal: 2, charge: 0.025,
+    fx: { glow: 0xffbe40, hot: 0xffffff, cool: 0xe05810, gravity: 1.5, halo: 2.15, trail: 2.5, sparks: [0xffd44a, 0xff7a1a, 0xffffff], extra: 'feathers' } },
   // ---- the xiákè's arms: the straight jian he starts with, a tiger dao, butterfly swords and a guandao
   { id: 'jian', name: 'Jian de jade', desc: 'espada recta de doble filo con borla roja: rápida y precisa', look: 'jian', cls: 'xia', price: 0, tier: 0, dmg: 1, reach: 0.05, speed: 0.92, len: 1, glow: 0x7dffc0, steel: 0xe6fff3,
     fx: { glow: 0x8affc8, hot: 0xeafff4, cool: 0x2fd08a, gravity: 4, halo: 1.1, trail: 1.25 } },
@@ -191,10 +203,10 @@ export function resetWeapons() {
 let displayed = WEAPONS[0];
 export const displayedWeapon = () => displayed;
 /** katana-space z of the blade's tip (the trail and sparks follow it) */
-export const tipZ = (w: Weapon) => BLADE_LAYOUT[w.form ?? 'katana'].base + BLADE_PROFILE.length * w.len;
+export const tipZ = (w: Weapon) => (w.mangaModel ? BLADE_PROFILE.base : BLADE_LAYOUT[w.form ?? 'katana'].base) + BLADE_PROFILE.length * w.len;
 export function applyWeapon(w = weapon()) {
   displayed = w;
-  showWeaponModel(w.form ?? 'katana', w.len, w.look, w.width ?? 1);
+  showWeaponModel(w.form ?? 'katana', w.len, w.look, w.width ?? 1, w.mangaModel);
   bladeMat.color.set(w.steel); bladeMat.emissive.set(w.glow);
 }
 applyWeapon();

@@ -1,5 +1,6 @@
 // Katana effects: blade light, sparks shed by the edge, and the vapour trail of each cut.
 import { LOOK_PROFILE } from './blade-looks';
+import { MANGA_PROFILE } from './manga-swords';
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, tagMat } from './materials';
@@ -90,18 +91,26 @@ offhandHalo.visible = false;
 sam.offhand.add(offhandHalo);
 const C1 = new THREE.Color(), C2 = new THREE.Color(), CG = new THREE.Color();
 let fxWeapon: Weapon | undefined;
+/** resolved blade metrics for the currently displayed weapon (handles manga models, looks & forms) */
+function bladeMetrics(w: Weapon) {
+  if (w.mangaModel) {
+    return { base: BLADE_PROFILE.base, scale: w.width ?? 1, profile: MANGA_PROFILE[w.mangaModel] };
+  }
+  const { base, width: baseScale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  return { base, scale: baseScale * (w.width ?? 1), profile: w.look ? LOOK_PROFILE[w.look] : formProfile };
+}
 /** the blade's colours changed (another weapon in hand) */
 function setWeaponFx(w: Weapon) {
   fxWeapon = w;
   CG.set(w.fx.glow); C1.set(w.fx.hot); C2.set(w.fx.cool);
   haloMat.color.copy(CG); haloCore.color.copy(CG).lerp(WHITE, 0.35); bladeLight.color.copy(CG);
-  const { base, width: baseScale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
-  const scale = baseScale * (w.width ?? 1);
-  const profile = w.look ? LOOK_PROFILE[w.look] : formProfile;   // a jian, dao or hwandu (blade-looks.ts)
+  const { base, scale, profile } = bladeMetrics(w);
   const len = tipZ(w) - base, r = 0.027 * w.fx.halo;
   // the halo is a straight sleeve laid along the chord from the blade's root to its point;
-  // the broad-bellied twin blades and heavy cleavers get a fatter one
-  const width = (w.form === 'dual' || w.form === 'cleaver') ? scale * bladeSection(profile, 0.6).width / BLADE_PROFILE.width : scale;
+  // broad-bellied twin blades, heavy cleavers and manga broadswords get a wider sleeve
+  const width = (w.form === 'dual' || w.form === 'cleaver' || w.mangaModel)
+    ? scale * bladeSection(profile, 0.6).width / BLADE_PROFILE.width
+    : scale;
   const rise = bladeRise(w, 1);
   for (const glow of [halo, offhandHalo]) {
     const outer = glow.getObjectByName('outer')!, inner = glow.getObjectByName('inner')!;
@@ -113,20 +122,19 @@ function setWeaponFx(w: Weapon) {
   bladeSheen.uBladeWidth.value = profile.width;
   bladeSheen.uBladeTaper.value = profile.taper;
   bladeSheen.uBladeBelly.value = profile.belly;
-  const palette = w.fx.sparks;
-  if (palette) {
-    bladeSheen.uBladeColors.value.forEach((color, i) => color.set(palette[i]));
-    for (let i = 0; i < edgeColors.count; i++) {
-      edgeColor.set(palette[i % palette.length]);
-      edgeColors.setXYZ(i, edgeColor.r, edgeColor.g, edgeColor.b);
-    }
-    edgeColors.needsUpdate = true;
+  // every sword gets a 3-colour spark palette so sparks travel the full blade even on starter blades
+  const palette: readonly [number, number, number] = w.fx.sparks ?? [w.fx.glow, w.fx.hot, w.fx.cool];
+  bladeSheen.uBladeColors.value.forEach((color, i) => color.set(palette[i]));
+  for (let i = 0; i < edgeColors.count; i++) {
+    edgeColor.set(palette[i % palette.length]);
+    edgeColors.setXYZ(i, edgeColor.r, edgeColor.g, edgeColor.b);
   }
+  edgeColors.needsUpdate = true;
 }
 
 // Travelling flashes live on the cutting edge in blade space. Loose sparks are emitted on contact and on cuts.
 const WHITE = new THREE.Color(0xffffff), edgeColor = new THREE.Color();
-const BLADE_GLINTS = 3, EDGE_SPARKS = BLADE_GLINTS + 8;
+const BLADE_GLINTS = 3, EDGE_SPARKS = BLADE_GLINTS + 18;
 const edgePositions = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3).setUsage(THREE.DynamicDrawUsage);
 const edgePulses = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS), 1).setUsage(THREE.DynamicDrawUsage);
 const edgeColors = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3);
@@ -185,46 +193,74 @@ offhandSparks.name = 'offhand-sparks';
 offhandSparks.onBeforeRender = edgeSparks.onBeforeRender;
 sam.offhand.add(offhandSparks);
 function cuttingEdge(w: Weapon, t: number) {
-  const { width: baseScale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
-  const scale = baseScale * (w.width ?? 1);
-  const profile = w.look ? LOOK_PROFILE[w.look] : formProfile;
+  const { scale, profile } = bladeMetrics(w);
   if (w.form === 'spear') return -BLADE_PROFILE.width * 0.52 * Math.pow(Math.sin(Math.PI * t), 0.72) * scale;
   const { center, width } = bladeSection(profile, t);
   return (center - width * 0.5) * scale;
 }
 /** height of the blade's centre line at `t` (0 root … 1 point): curved blades rise off the hilt's axis */
 function bladeRise(w: Weapon, t: number) {
-  const { width: baseScale, profile } = BLADE_LAYOUT[w.form ?? 'katana'];
-  const scale = baseScale * (w.width ?? 1);
+  const { scale, profile } = bladeMetrics(w);
   return (w.form === 'dual' || w.form === 'odachi') ? bladeSection(profile, t).center * scale : 0;
 }
+const katanaWorldQ = new THREE.Quaternion(), katanaInvQ = new THREE.Quaternion(), localDown = new THREE.Vector3();
 function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
-  edgeSparks.visible = Boolean(w.fx.sparks) && !state.dead;
+  const hasBlade = w.form !== 'staff' || Boolean(w.fx.sparks);
+  edgeSparks.visible = hasBlade && !state.dead;
   offhandSparks.visible = edgeSparks.visible && w.form === 'dual';
-  bladeSheen.uBladeStrength.value = edgeSparks.visible ? 1 + heat * 0.42 : 0;
+  bladeSheen.uBladeStrength.value = edgeSparks.visible ? (w.fx.sparks ? 1 : 0.65) + heat * 0.42 : 0;
   if (!edgeSparks.visible) return;
-  const layout = BLADE_LAYOUT[w.form ?? 'katana'];
-  const base = layout.base;
+  const { base, scale, profile } = bladeMetrics(w);
   const length = tipZ(w) - base;
   const time = state.time;
   const glints = bladeSheen.uBladeGlints.value;
+  const blood = w.fx.extra === 'blood';
+  if (blood) {
+    sam.katana.getWorldQuaternion(katanaWorldQ);
+    katanaInvQ.copy(katanaWorldQ).invert();
+    localDown.set(0, -1, 0).applyQuaternion(katanaInvQ);
+  }
   for (let i = 0; i < BLADE_GLINTS; i++) {
-    const cycle = (time * (0.70 + i * 0.08) + i * 0.34) % 1;
-    const travel = cycle * 1.21 - 0.10;
+    const cycle = (time * (0.72 + i * 0.09) + i * 0.34) % 1;
+    const travel = cycle * 1.18 - 0.08;
     glints.setComponent(i, travel);
-    const along = THREE.MathUtils.clamp(travel, 0.04, 0.96);
+    const along = THREE.MathUtils.clamp(travel, 0.02, 0.98);
     // Straddle the bevel so depth testing keeps the flash on the steel from either side.
     edgePositions.setXYZ(i, 0, cuttingEdge(w, along) - 0.004, base + along * length);
-    const fade = THREE.MathUtils.smoothstep(travel, 0.04, 0.16) * (1 - THREE.MathUtils.smoothstep(travel, 0.82, 0.96));
+    const fade = THREE.MathUtils.smoothstep(travel, 0.02, 0.14) * (1 - THREE.MathUtils.smoothstep(travel, 0.84, 0.98));
     edgePulses.setX(i, fade * (0.94 + 0.24 * Math.sin(time * 26 + i * 2)));
   }
-  for (let i = 0; i < EDGE_SPARKS - BLADE_GLINTS; i++) {
-    const cycle = time * (0.93 + (i % 4) * 0.24) + i * 0.618;
-    const t = cycle % 1, along = 0.045 + t * 0.90;
-    const blink = 0.40 + 0.24 * Math.sin(time * 23 + i * 2.39);
-    edgePositions.setXYZ(i + BLADE_GLINTS, Math.sin(i * 2.39) * 0.008, cuttingEdge(w, along) - 0.004 - blink * 0.012, base + along * length);
-    const fade = THREE.MathUtils.smoothstep(t, 0, 0.12) * (1 - THREE.MathUtils.smoothstep(t, 0.84, 1));
-    edgePulses.setX(i + BLADE_GLINTS, fade * blink * (displaying ? 1 : 0.83 + 0.17 * heat));
+  const count = EDGE_SPARKS - BLADE_GLINTS;
+  for (let i = 0; i < count; i++) {
+    const idx = i + BLADE_GLINTS;
+    if (blood && i % 2 === 0) {
+      // Blood-dripping sparks: form along the full blade, swell, then fall straight down like heavy drops of blood
+      const speed = 0.68 + (i % 5) * 0.14;
+      const dropT = (time * speed + i * 0.371) % 1;
+      const along = 0.05 + ((i * 0.618 + Math.floor(time * speed + i * 0.371) * 0.29) % 0.90);
+      const sec = bladeSection(profile, along);
+      const edgeY = (sec.center - sec.width * 0.5) * scale;
+      const fallPhase = Math.max(0, (dropT - 0.18) / 0.82);
+      const dropDist = 0.42 * fallPhase * fallPhase;
+      const px = Math.sin(i * 3.1) * 0.008 + localDown.x * dropDist;
+      const py = edgeY - 0.005 + localDown.y * dropDist;
+      const pz = base + along * length + localDown.z * dropDist;
+      edgePositions.setXYZ(idx, px, py, pz);
+      const pulse = THREE.MathUtils.smoothstep(dropT, 0, 0.16) * (1 - THREE.MathUtils.smoothstep(dropT, 0.72, 1));
+      edgePulses.setX(idx, pulse * (displaying ? 1.15 : 0.95 + 0.2 * heat));
+    } else {
+      // Travelling sparks racing along the entire length of the blade (edge, face and spine)
+      const cycle = time * (0.85 + (i % 5) * 0.22) + i * 0.618;
+      const t = cycle % 1, along = 0.02 + t * 0.96;
+      const blink = 0.48 + 0.28 * Math.sin(time * 23 + i * 2.39);
+      const sec = bladeSection(profile, along);
+      // alternate across the blade width so wide manga swords sparkle across their entire surface & edges
+      const lane = i % 3 === 0 ? -0.52 : i % 3 === 1 ? 0.0 : 0.48;
+      const y = (sec.center + sec.width * lane) * scale - (lane < 0 ? 0.005 + blink * 0.01 : 0);
+      edgePositions.setXYZ(idx, Math.sin(i * 2.39) * 0.009, y, base + along * length);
+      const fade = THREE.MathUtils.smoothstep(t, 0, 0.10) * (1 - THREE.MathUtils.smoothstep(t, 0.86, 1));
+      edgePulses.setX(idx, fade * blink * (displaying ? 1 : 0.86 + 0.18 * heat));
+    }
   }
   edgePositions.needsUpdate = true;
   edgePulses.needsUpdate = true;
@@ -255,7 +291,7 @@ sparkMat.onBeforeCompile = sh => {
 };
 const sparkPts = new THREE.Points(spGeo, sparkMat);
 sparkPts.frustumCulled = false; scene.add(sparkPts);
-let spNext = 0, sparkAcc = 0, moteAcc = 0, bladeHeat = 0, swingS = 0;
+let spNext = 0, sparkAcc = 0, moteAcc = 0, bloodAcc = 0, bladeHeat = 0, swingS = 0;
 // 0..1: how much the ronin is fighting right now. Running swings the blade too, but only a cut
 // (player.attackT >= 0) may draw the white trail, flare the halo or shower sparks.
 let fight = 0;
@@ -378,7 +414,7 @@ export function updateSparks(dt: number, emit: boolean) {
   sparkPts.visible = !displaying;
   trailK = w.fx.trail;
   sam.katana.updateMatrixWorld(true);
-  const end = tipZ(w), base = BLADE_LAYOUT[w.form ?? 'katana'].base;
+  const end = tipZ(w), base = bladeMetrics(w).base;
   const from = base + (end - base) * 0.12, fromY = bladeRise(w, 0.12), endY = bladeRise(w, 1);
   sam.katana.localToWorld(bladeBase.set(0, fromY, from));
   sam.katana.localToWorld(bladeTip.set(0, endY, end));
@@ -422,6 +458,20 @@ export function updateSparks(dt: number, emit: boolean) {
         tipVel.y * s * fling + rnd(0.2, 2.4),
         tipVel.z * s * fling + rnd(-1.4, 1.4),
         rnd(0.25, 0.55) + bladeHeat * 0.3);
+    }
+    // continuous falling blood drops off crimson blood blades (even at rest or walking!)
+    if (w.fx.extra === 'blood') {
+      bloodAcc += dt * (18 + bladeHeat * 45 + swing * fight * 30);
+      while (bloodAcc >= 1) {
+        bloodAcc -= 1;
+        const s = 0.04 + Math.random() * 0.94;
+        spTmp.lerpVectors(bladeBase, bladeTip, s);
+        spawnSpark(spTmp,
+          tipVel.x * s * 0.12 + rnd(-0.18, 0.18),
+          rnd(-0.65, -0.05),
+          tipVel.z * s * 0.12 + rnd(-0.18, 0.18),
+          rnd(0.45, 0.85), 1.45);
+      }
     }
     // motes: a few soft grains of light rising off the body and left behind as it runs
     moteAcc += dt * 7 * running;

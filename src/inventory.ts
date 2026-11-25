@@ -18,6 +18,8 @@ const IMAGE_KIN: Record<string, string> = {
   'estoque-plata': 'sakura', 'estoque-ambar': 'raiken', 'estoque-estrella': 'aurora',
   'odachi-niebla': 'nodachi', 'odachi-carmesi': 'muramasa', 'odachi-eclipse': 'susanoo',
   'zanbato-hierro': 'espada-forja', 'zanbato-jade': 'espada-montana', 'zanbato-sol': 'espada-montana',
+  matadragones: 'espada-montana', 'carmesi-sangre': 'muramasa', 'colmillo-oni': 'espada-forja',
+  'verdugo-luna': 'espada-montana', 'alas-eclipse': 'masamune',
   neon: 'kurogane'
 };
 const itemImage = (group: string, id: string) => `${import.meta.env.BASE_URL}inventory/${group}/${IMAGE_KIN[id] ?? id}.webp`;

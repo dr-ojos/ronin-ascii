@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BLADE_PROFILE, CLEAVER_PROFILE, DUAL_PROFILE, MAT, ODACHI_PROFILE, RAPIER_PROFILE, bladeGeometry, grp, mesh, type BladeProfile } from './samurai';
 import type { Avatar, WeaponForm } from './types';
 import { createBladeLooks, type BladeLook } from './blade-looks';
+import { createMangaSwords, type MangaBlade } from './manga-swords';
 
 export const BLADE_LAYOUT: Record<WeaponForm, { base: number; width: number; profile: BladeProfile }> = {
   katana: { base: BLADE_PROFILE.base, width: 1, profile: BLADE_PROFILE },
@@ -154,15 +155,21 @@ export function createWeaponModels(sam: Avatar, steel: THREE.MeshStandardMateria
   for (const model of [spear, broad, shortR.group, shortL.group, staff, odachi, rapier, cleaver]) model.traverse(o => {
     if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
-  // the jian, the dao and the hwandu ride in the katana's slot (blade-looks.ts)
+  // the jian, the dao and the hwandu ride in the katana's slot (blade-looks.ts);
+  // bespoke Japanese manga broadswords ride in broad / cleaver slots (manga-swords.ts)
   const showLook = createBladeLooks(sam.katana, steel);
+  const showManga = createMangaSwords(sam.katana, steel);
   const thickness: Partial<Record<WeaponForm, number>> = { broad: 1.9, odachi: 1.35, rapier: 0.85, cleaver: 2.35 };
-  return (form: WeaponForm, length: number, look?: BladeLook, widthMult = 1) => {
-    for (const key of Object.keys(models) as WeaponForm[]) models[key].visible = key === form && !(form === 'katana' && look);
-    showLook(form === 'katana' ? look : undefined, length);
+  return (form: WeaponForm, length: number, look?: BladeLook, widthMult = 1, manga?: MangaBlade) => {
+    for (const key of Object.keys(models) as WeaponForm[]) {
+      models[key].visible = key === form && !(form === 'katana' && look) && !manga;
+    }
+    showLook(form === 'katana' && !manga ? look : undefined, length);
+    showManga(manga, length, widthMult);
     // a longer staff: the shaft and its head stretch with the weapon's length
     if (form === 'staff') staff.scale.set(1, 1, length / 0.9);
     sam.offhand.visible = form === 'dual';
+    if (manga) return;
     const layout = BLADE_LAYOUT[form];
     const tx = thickness[form] ?? 1;
     for (const blade of blades[form]) {
