@@ -7,16 +7,19 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, camera } from './renderer';
 import { M, CLS, tagMat } from './materials';
 import { addCollider } from './physics';
-import { addLight, removeLights } from './lights';
+import { addLight, removeLights, type LightAnchor } from './lights';
 import { surfaceY } from './structures';
 import { burst } from './fx';
 import { sfx } from './sfx';
 import { showMsg } from './hud';
 import { addPoints } from './score';
 import { UPGRADES, grant, lvl, roman, rollUpgrade } from './upgrades';
+import { grantWeapon, owns, weaponById } from './weapons';
+import { armorById, grantArmor, ownsArmor } from './armor';
+import { dressUp } from './outfit';
 import { player, state } from './state';
 import { rnd } from './utils';
-import type { Chest } from './types';
+import type { Chest, EnemyKind } from './types';
 
 export const chests: Chest[] = [];
 export function makeChest(x: number, z: number, ry: number, kind: Chest['kind'], tier: number, sealed: boolean): Chest {
@@ -229,23 +232,61 @@ function openChest(c: Chest) {
   showMsg(`— ${c.kind === 'oculto' ? 'COFRE ESCONDIDO' : c.kind === 'jefe' ? 'TESORO DEL JEFE' : c.kind === 'guardian' ? 'TESORO DEL GUARDIÁN' : 'COFRE DE LA GUARIDA'} —\n${lines.join('\n')}`, up ? 3.4 : 2.4);
 }
 
-// ------------------------------------------------------------ drops: mon and onigiri
+// ------------------------------------------------------------ drops: mon, onigiri and boss relics
 const PM = {
   coin: tagMat(M(0xffd060, { emissive: 0xc08a10, emissiveIntensity: 1.4, metalness: 0.8, roughness: 0.25 }), CLS.light),
   rice: tagMat(M(0xf4f0e6, { roughness: 0.9, emissive: 0x302c28 }), CLS.wood),
   nori: tagMat(M(0x101418, { roughness: 0.8 }), CLS.wood)
 };
 const COIN = new THREE.CylinderGeometry(0.2, 0.2, 0.06, 12), RICE = new THREE.ConeGeometry(0.28, 0.42, 3);
-interface Pickup { m: THREE.Object3D; kind: 'mon' | 'onigiri'; value: number; life: number; vy: number; y: number; tag: HTMLDivElement }
+const RELIC_BEAM = new THREE.CylinderGeometry(0.14, 0.34, 3.6, 12, 1, true);
+const RELIC_RING = new THREE.TorusGeometry(0.42, 0.028, 8, 28);
+const RELIC_BLADE = new THREE.BoxGeometry(0.06, 0.92, 0.022);
+const RELIC_GUARD = new THREE.BoxGeometry(0.24, 0.045, 0.06);
+const RELIC_HILT = new THREE.CylinderGeometry(0.026, 0.026, 0.28, 8);
+const RELIC_SHIELD = new THREE.CylinderGeometry(0.26, 0.21, 0.44, 6);
+
+export interface BossRelic { kind: 'weapon' | 'armor'; id: string; color: number }
+/** signature special weapon or armor dropped by each major boss */
+export const BOSS_RELICS: Partial<Record<EnemyKind, BossRelic>> = {
+  kuro:         { kind: 'weapon', id: 'kuro-odachi',      color: 0xff3838 },
+  raijinMayor:  { kind: 'weapon', id: 'martillo-raijin',  color: 0x7ea6ff },
+  guardianRayo: { kind: 'weapon', id: 'filo-ikazuchi',    color: 0x7ad8ff },
+  enma:         { kind: 'weapon', id: 'hoja-enma',        color: 0xff6a1a },
+  senorBosque:  { kind: 'weapon', id: 'lanza-bosque',     color: 0x8cff52 },
+  jefe:         { kind: 'armor',  id: 'coraza-sepulcral', color: 0xffb353 },
+  tenguMayor:   { kind: 'armor',  id: 'manto-tengu',      color: 0x62d4b4 },
+  shuten:       { kind: 'armor',  id: 'yoroi-shuten',     color: 0xff3b24 },
+  yukiOnna:     { kind: 'armor',  id: 'coraza-escarcha',  color: 0x7fe6ff }
+};
+
+interface Pickup {
+  m: THREE.Object3D;
+  kind: 'mon' | 'onigiri' | 'weapon' | 'armor';
+  value: number;
+  itemId?: string;
+  color?: number;
+  light?: LightAnchor;
+  life: number;
+  vy: number;
+  y: number;
+  tag: HTMLDivElement;
+}
 // a floating label over every drop still on the ground, so you know what it is before you walk over it
 const tagLayer = document.getElementById('tags')!;
-const TAG_TEXT: Record<Pickup['kind'], (v: number) => string> = {
+const TAG_TEXT: Record<'mon' | 'onigiri', (v: number) => string> = {
   mon: v => `<b>MON</b> <span class="y">+${v}</span><i>monedas · puntos y compras con Masa</i>`,
   onigiri: v => `<b>ONIGIRI</b> <span class="g">+${v} vida</span><i>bola de arroz · cura al comerla</i>`
 };
-function removePickup(i: number) { const p = pickups[i]; scene.remove(p.m); p.tag.remove(); pickups.splice(i, 1); }
+function removePickup(i: number) {
+  const p = pickups[i];
+  scene.remove(p.m);
+  if (p.light) removeLights(p.m);
+  p.tag.remove();
+  pickups.splice(i, 1);
+}
 const pickups: Pickup[] = [];
-function addPickup(kind: Pickup['kind'], value: number, x: number, z: number) {
+function addPickup(kind: 'mon' | 'onigiri', value: number, x: number, z: number) {
   const m = new THREE.Group();
   if (kind === 'mon') for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(COIN, PM.coin); c.position.set(rnd(-0.12, 0.12), i * 0.07, rnd(-0.12, 0.12)); m.add(c); }
   else { const r = new THREE.Mesh(RICE, PM.rice); r.rotation.x = Math.PI / 2; r.rotation.z = Math.PI / 6; m.add(r); const n = new THREE.Mesh(GEO.box, PM.nori); n.scale.set(0.2, 0.18, 0.12); n.position.y = -0.1; m.add(n); }
@@ -254,6 +295,55 @@ function addPickup(kind: Pickup['kind'], value: number, x: number, z: number) {
   const tag = document.createElement('div'); tag.className = `tag ${kind}`; tag.innerHTML = TAG_TEXT[kind](value); tagLayer.appendChild(tag);
   pickups.push({ m, kind, value, life: 45, vy: 4, y, tag });
 }
+
+function addRelicPickup(relic: BossRelic, name: string, desc: string, x: number, z: number) {
+  const m = new THREE.Group();
+  const metalMat = tagMat(M(relic.color, { emissive: relic.color, emissiveIntensity: 1.15, metalness: 0.78, roughness: 0.22 }), CLS.light);
+  const trimMat = tagMat(M(0xfff2c6, { emissive: 0xffd27a, emissiveIntensity: 0.9, metalness: 0.85, roughness: 0.2 }), CLS.light);
+  const beamMat = tagMat(new THREE.MeshBasicMaterial({ color: relic.color, transparent: true, opacity: 0.24, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }), CLS.fx);
+  const beam = new THREE.Mesh(RELIC_BEAM, beamMat); beam.position.y = 1.65; m.add(beam);
+  const halo = new THREE.Mesh(RELIC_RING, trimMat); halo.position.y = 0.42; halo.rotation.x = Math.PI / 3; m.add(halo);
+  if (relic.kind === 'weapon') {
+    const sword = new THREE.Group();
+    const blade = new THREE.Mesh(RELIC_BLADE, metalMat); blade.position.y = 0.22; sword.add(blade);
+    const guard = new THREE.Mesh(RELIC_GUARD, trimMat); guard.position.y = -0.24; sword.add(guard);
+    const hilt = new THREE.Mesh(RELIC_HILT, CM.black); hilt.position.y = -0.4; sword.add(hilt);
+    sword.position.y = 0.56; sword.rotation.z = -0.35;
+    m.add(sword);
+  } else {
+    const crest = new THREE.Group();
+    const plate = new THREE.Mesh(RELIC_SHIELD, metalMat); plate.scale.z = 0.55; crest.add(plate);
+    const rim = new THREE.Mesh(RELIC_RING, trimMat); rim.scale.setScalar(0.55); crest.add(rim);
+    crest.position.y = 0.52;
+    m.add(crest);
+  }
+  const y = surfaceY(x, z);
+  m.position.set(x, y + 0.85, z); scene.add(m);
+  const light = addLight({ x, y: y + 1.4, z, color: relic.color, intensity: 4.5, distance: 10, decay: 1.4, owner: m });
+  const tag = document.createElement('div');
+  tag.className = `tag relic ${relic.kind}`;
+  tag.innerHTML = `<b>✦ ${relic.kind === 'weapon' ? 'ARMA ESPECIAL' : 'ARMADURA ESPECIAL'}</b> <span class="y">${name}</span><i>${desc}</i>`;
+  tagLayer.appendChild(tag);
+  burst(new THREE.Vector3(x, y + 1.0, z), relic.color, 90, 6, 0.16);
+  pickups.push({ m, kind: relic.kind, value: 0, itemId: relic.id, color: relic.color, light, life: 180, vy: 5.5, y, tag });
+}
+
+/** a major boss fell: drop its signature special weapon or armor if not yet owned */
+export function dropBossRelic(kind: EnemyKind, x: number, z: number): string | null {
+  const relic = BOSS_RELICS[kind];
+  if (!relic) return null;
+  const owned = relic.kind === 'weapon' ? owns(relic.id) : ownsArmor(relic.id);
+  const alreadyDropped = pickups.some(p => p.itemId === relic.id);
+  if (owned || alreadyDropped) {
+    addPickup('mon', 250, x + rnd(-0.7, 0.7), z + rnd(-0.7, 0.7));
+    return null;
+  }
+  const item = relic.kind === 'weapon' ? weaponById(relic.id) : armorById(relic.id);
+  if (!item) return null;
+  addRelicPickup(relic, item.name, item.desc, x, z);
+  return item.name;
+}
+
 /** what a slain oni leaves behind */
 export function dropLoot(x: number, z: number, tier: number, big: boolean) {
   const mon = Math.round((big ? 70 : rnd(10, 30)) * (1 + tier) / 5) * 5;
@@ -292,29 +382,47 @@ export function updateLoot(dt: number) {
     const dx = player.pos.x - m.position.x, dz = player.pos.z - m.position.z, d = Math.hypot(dx, dz);
     if (d < 4.5 && d > 1e-3 && !state.dead) { const k = Math.min(d, 9 * dt); m.position.x += dx / d * k; m.position.z += dz / d * k; p.y = surfaceY(m.position.x, m.position.z); }
     p.vy -= 14 * dt; m.position.y = Math.max(p.y + 0.45 + Math.sin(state.time * 4 + i) * 0.08, m.position.y + p.vy * dt);
-    m.rotation.y += dt * 2.5;
+    m.rotation.y += dt * (p.itemId ? 1.8 : 2.5);
+    if (p.light) { p.light.x = m.position.x; p.light.y = m.position.y + 0.8; p.light.z = m.position.z; }
     m.visible = p.life > 5 || Math.floor(p.life * 6) % 2 === 0;
-    if (d < 1.1 && !state.dead) {
+    if (d < (p.itemId ? 1.3 : 1.1) && !state.dead) {
       if (p.kind === 'mon') { addPoints(p.value, 'mon', false, 1); sfx.coin(); }
-      else { player.hp = Math.min(player.maxHp, player.hp + p.value); state.gain = `+${p.value} vida`; state.gainT = 1.6; sfx.coin(true); }
+      else if (p.kind === 'onigiri') { player.hp = Math.min(player.maxHp, player.hp + p.value); state.gain = `+${p.value} vida`; state.gainT = 1.6; sfx.coin(true); }
+      else if (p.kind === 'weapon' && p.itemId) {
+        const w = grantWeapon(p.itemId, true);
+        if (w) {
+          burst(new THREE.Vector3(player.pos.x, player.pos.y + 1.1, player.pos.z), p.color ?? 0xffd060, 120, 6.5, 0.16);
+          sfx.chime(true); sfx.taiko(1.1);
+          showMsg(`✦ ARMA ESPECIAL OBTENIDA ✦\n${w.name}\n${w.desc}\nequipada · Q para cambiar · I inventario`, 4.2);
+        }
+      } else if (p.kind === 'armor' && p.itemId) {
+        const a = grantArmor(p.itemId, true);
+        if (a) {
+          dressUp();
+          burst(new THREE.Vector3(player.pos.x, player.pos.y + 1.1, player.pos.z), p.color ?? 0xffd060, 120, 6.5, 0.16);
+          sfx.chime(true); sfx.taiko(1.1);
+          showMsg(`✦ ARMADURA ESPECIAL OBTENIDA ✦\n${a.name}\n${a.desc}\nequipada · I para cambiar en el inventario`, 4.2);
+        }
+      }
       removePickup(i);
     } else if (p.life <= 0) removePickup(i);
   }
 }
 /** place the drops' labels on screen (after the camera has moved this frame) */
-const TAG_R = 14, _t = new THREE.Vector3();
+const TAG_R = 14, TAG_R_RELIC = 26, _t = new THREE.Vector3();
 const placed: { x: number; y: number; w: number; h: number }[] = [];
 export function updatePickupTags() {
   const show = state.playing && !state.dead && !state.photo && !state.menu;
   if (pickups.length) camera.updateMatrixWorld();
-  const shown: { p: Pickup; x: number; y: number; d: number }[] = [];
+  const shown: { p: Pickup; x: number; y: number; d: number; maxR: number }[] = [];
   for (const p of pickups) {
     const d = Math.hypot(player.pos.x - p.m.position.x, player.pos.z - p.m.position.z);
-    _t.copy(p.m.position).y += 0.75;
+    const maxR = p.itemId ? TAG_R_RELIC : TAG_R;
+    _t.copy(p.m.position).y += p.itemId ? 1.25 : 0.75;
     _t.project(camera);
-    if (!show || d > TAG_R || _t.z > 1 || Math.abs(_t.x) > 1.1 || Math.abs(_t.y) > 1.1) { p.tag.style.display = 'none'; continue; }
+    if (!show || d > maxR || _t.z > 1 || Math.abs(_t.x) > 1.1 || Math.abs(_t.y) > 1.1) { p.tag.style.display = 'none'; continue; }
     p.tag.style.display = 'block';
-    shown.push({ p, x: (_t.x + 1) / 2 * innerWidth, y: (1 - _t.y) / 2 * innerHeight, d });
+    shown.push({ p, x: (_t.x + 1) / 2 * innerWidth, y: (1 - _t.y) / 2 * innerHeight, d, maxR });
   }
   // drops of one oni land side by side: the closest keeps its place, the others climb above it instead of overlapping
   shown.sort((a, b) => a.d - b.d);
@@ -331,7 +439,7 @@ export function updatePickupTags() {
     placed.push({ x: s.x, y, w, h });
     s.p.tag.style.transform = `translate(${s.x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
     // fade in as you come closer, and blink with the drop when it is about to vanish
-    s.p.tag.style.opacity = (Math.min(1, (TAG_R - s.d) / 4) * (s.p.m.visible ? 1 : 0.25)).toFixed(2);
+    s.p.tag.style.opacity = (Math.min(1, (s.maxR - s.d) / 4) * (s.p.m.visible ? 1 : 0.25)).toFixed(2);
     s.p.tag.classList.toggle('near', s.d < 4.5);
   }
 }

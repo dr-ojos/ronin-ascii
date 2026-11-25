@@ -12,10 +12,12 @@ import type { MangaBlade } from './manga-swords';
 import type { ClassId } from './classes';
 import { CLASS_ARSENAL } from './arsenal';
 import { LEVEL_REQ } from './progression';
-import { readVault, vaultReady } from './vault';
+import { readVault, saveVault, vaultReady } from './vault';
 
 export interface Weapon {
   id: string; name: string; desc: string; price: number; tier: number;
+  /** exclusive relic dropped by defeating a major boss (not sold by Masa; wieldable by any class) */
+  bossDrop?: boolean;
   form?: WeaponForm;
   /** a sword from across the sea in the katana's slot (blade-looks.ts), a bespoke Japanese manga broadsword
    *  (manga-swords.ts), and the class it was forged for (classes.ts canWield) */
@@ -147,15 +149,27 @@ export const WEAPONS: Weapon[] = [
   { id: 'jizo', name: 'Shakujō de Jizō', desc: 'el báculo del protector de viajeros: cada golpe cura 3 y carga la técnica', form: 'staff', price: 23000, tier: 3, dmg: 2.8, reach: 0.7, speed: 0.9, len: 1.02, glow: 0xffe9a8, steel: 0xfff4d0, heal: 3, charge: 0.02, daze: 1.3,
     fx: { glow: 0xfff0b8, hot: 0xffffff, cool: 0xffb84a, gravity: 1, halo: 2.1, trail: 2.4, sparks: [0xffe9a8, 0xffc26a, 0xfff8e0], extra: 'stars' } },
   { id: 'fudo', name: 'Kurikara de Fudō', desc: 'la llama inmóvil del rey de la sabiduría: el bastón de la leyenda', form: 'staff', price: 32000, tier: 3, dmg: 3.5, reach: 0.8, speed: 0.92, len: 1.05, glow: 0xff4a2a, steel: 0x2a1a1a, heal: 3, charge: 0.03, daze: 1.8,
-    fx: { glow: 0xff5a30, hot: 0xffe0a0, cool: 0xd01a3a, gravity: -1, halo: 2.4, trail: 2.8, sparks: [0xff5a30, 0xffb040, 0xff3a8a], extra: 'blood' } }
+    fx: { glow: 0xff5a30, hot: 0xffe0a0, cool: 0xd01a3a, gravity: -1, halo: 2.4, trail: 2.8, sparks: [0xff5a30, 0xffb040, 0xff3a8a], extra: 'blood' } },
+  // ---- boss-exclusive relics (dropped by major bosses in loot.ts, not sold by Masa)
+  { id: 'kuro-odachi', name: 'Ōdachi del Señor Kuro', desc: 'reliquia del Señor Kuro: hoja carmesí de gran alcance que drena 2 de vida por golpe', form: 'odachi', bossDrop: true, price: 0, tier: 2.75, dmg: 2.25, reach: 1.55, speed: 1.02, len: 1.78, width: 1.16, glow: 0xff3838, steel: 0x28141c, heal: 2,
+    fx: { glow: 0xff453c, hot: 0xffb8b0, cool: 0x8f0a18, gravity: 14, halo: 1.9, trail: 2.3, sparks: [0xff3838, 0xff7a5c, 0xc8163a], extra: 'blood' } },
+  { id: 'martillo-raijin', name: 'Maza de Raijin', desc: 'reliquia de Raijin: descarga el trueno en cada impacto, aturde y carga la técnica', form: 'cleaver', mangaModel: 'fang', bossDrop: true, price: 0, tier: 2.85, dmg: 2.5, reach: 0.95, speed: 1.14, len: 1.42, width: 1.15, glow: 0x7ea6ff, steel: 0x2c3a78, charge: 0.035, daze: 1.35,
+    fx: { glow: 0x8ca9ff, hot: 0xe6f2ff, cool: 0x3852ff, gravity: 4, halo: 2.0, trail: 2.4, sparks: [0x8ca9ff, 0xffe266, 0x5ce0ff], extra: 'bolts' } },
+  { id: 'filo-ikazuchi', name: 'Relámpago de Ikazuchi', desc: 'reliquia de Ikazuchi: estocadas fulgurantes que cargan el rayo al instante', form: 'rapier', bossDrop: true, price: 0, tier: 2.7, dmg: 2.05, reach: 0.95, speed: 0.72, len: 1.35, width: 0.92, glow: 0x7ad8ff, steel: 0xd8ecff, charge: 0.04,
+    fx: { glow: 0x9fbbff, hot: 0xffffff, cool: 0x3b8eff, gravity: 1.5, halo: 1.9, trail: 2.3, sparks: [0x9fdcff, 0xffffff, 0x7ea6ff], extra: 'bolts' } },
+  { id: 'hoja-enma', name: 'Sentencia de Enma', desc: 'reliquia del juez del infierno: filo llameante que cura 2 por golpe y carga la técnica', form: 'broad', mangaModel: 'winged', bossDrop: true, price: 0, tier: 3, dmg: 2.9, reach: 1.15, speed: 1.05, len: 1.48, width: 1.18, glow: 0xff6a1a, steel: 0x2a0c12, heal: 2, charge: 0.025,
+    fx: { glow: 0xff7824, hot: 0xfff0a8, cool: 0xb81810, gravity: -1.5, halo: 2.2, trail: 2.6, sparks: [0xff6a1a, 0xffd24a, 0xff2a20], extra: 'feathers' } },
+  { id: 'lanza-bosque', name: 'Guadaña del Bosque Sombrío', desc: 'reliquia del Bosque Sombrío: alcance inmenso, aturde y absorbe 2 de vida por golpe', form: 'spear', bossDrop: true, price: 0, tier: 2.9, dmg: 2.35, reach: 2.3, speed: 0.92, len: 0.72, glow: 0x8cff52, steel: 0x1e4428, heal: 2, daze: 1.25,
+    fx: { glow: 0x9cff5a, hot: 0xeaffc0, cool: 0x228836, gravity: 2, halo: 2.0, trail: 2.4, sparks: [0x9cff5a, 0x52d878, 0xd8ff7a], extra: 'stars' } }
 ];
 // the rest of the sōhei's, the xiákè's and the hwarang's stock: 21 weapons to buy for every class (arsenal.ts)
 WEAPONS.push(...CLASS_ARSENAL);
 for (const w of WEAPONS) if (w.lv) LEVEL_REQ[w.id] = w.lv;
 const byId = new Map(WEAPONS.map(w => [w.id, w]));
+export const weaponById = (id: string) => byId.get(id);
 export const weapon = () => byId.get(state.weapon) || byId.get(cls().weapon)!;
-/** what Masa can sell you: your class's weapons */
-export const forSale = () => WEAPONS.filter(w => canWield(w)).sort((a, b) => a.price - b.price);
+/** what Masa can sell you: your class's non-relic weapons */
+export const forSale = () => WEAPONS.filter(w => !w.bossDrop && canWield(w)).sort((a, b) => a.price - b.price);
 export const owns = (id: string) => state.owned.includes(id);
 
 /** a line of numbers for the shop: compared with the plain katana */
@@ -176,6 +190,15 @@ export function buy(w: Weapon): 'ok' | 'poor' | 'owned' {
   if (state.mon < w.price) return 'poor';
   state.mon -= w.price; state.owned.push(w.id); equip(w.id);
   return 'ok';
+}
+/** award a special weapon (e.g. from defeating a major boss) and persist it to the vault */
+export function grantWeapon(id: string, autoEquip = true): Weapon | null {
+  const w = byId.get(id);
+  if (!w) return null;
+  if (!owns(w.id)) state.owned.push(w.id);
+  if (autoEquip) equip(w.id);
+  saveVault();
+  return w;
 }
 export function equip(id: string) {
   if (!owns(id)) return;

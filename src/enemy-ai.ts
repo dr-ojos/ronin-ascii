@@ -12,7 +12,7 @@ import { surfaceY, wadeDepth } from './structures';
 import { navTarget } from './navigation';
 import { wader, splash, WADE_SINK } from './water';
 import { addPoints, POINTS } from './score';
-import { dropLoot, unseal } from './loot';
+import { dropBossRelic, dropLoot, unseal } from './loot';
 import { lifesteal } from './upgrades';
 import { chargeKill, bolt, skyFlash } from './special';
 import { circle, onEnrage, onKill, takeTurn } from './battle';
@@ -513,11 +513,13 @@ function kill(en: Enemy, i: number, gy: number) {
   if (lifesteal()) player.hp = Math.min(player.maxHp, player.hp + lifesteal());
   if (en.big) state.shake = 0.6;
   dropLoot(g.position.x, g.position.z, camp.tier, !!(def.boss || def.elite));
+  const relicName = def.boss ? dropBossRelic(en.kind, g.position.x, g.position.z) : null;
   const r = camp.roster.indexOf(en.kind); if (r >= 0) camp.roster.splice(r, 1);
-  if (camp.roster.length === 0) campCleared(camp, en.kind);
+  if (camp.roster.length === 0) campCleared(camp, en.kind, relicName);
   else if (def.boss) {
     const escort = camp.chest?.state === 'sealed' ? '\nel cofre se abrirá cuando caiga su escolta' : '';
-    showMsg(`¡ ${def.name.toUpperCase()} ABATIDO !${escort}`, 2.2);
+    const drop = relicName ? `\n✦ Ha soltado: ${relicName}` : '';
+    showMsg(`¡ ${def.name.toUpperCase()} ABATIDO !${drop}${escort}`, relicName ? 3.2 : 2.2);
   }
   else if (def.elite && camp.chest && camp.chest.state === 'sealed') {   // the guardian fell: its chest opens even if its escort lives
     unseal(camp.chest); sfx.taiko(1); addPoints(POINTS.eliteCamp, def.name);
@@ -525,7 +527,7 @@ function kill(en: Enemy, i: number, gy: number) {
   }
 }
 
-function campCleared(camp: Camp, last: Enemy['kind']) {
+function campCleared(camp: Camp, last: Enemy['kind'], relicName: string | null = null) {
   camp.clearedAt = state.time;
   if (camp.wildlife) {
     const bonus = 55 * camp.size;
@@ -543,11 +545,12 @@ function campCleared(camp: Camp, last: Enemy['kind']) {
   sfx.taiko(1.1);
   const title = (camp.boss === last || (eliteLast && camp.elite === last)) ? `¡ ${KINDS[last].name.toUpperCase()} ABATIDO !` : camp.temp ? '— EMBOSCADA SUPERADA —' : camp.route ? '— PATRULLA ABATIDA —' : '— GUARIDA LIMPIA —';
   const chest = camp.chest && camp.chest.state === 'sealed' ? '\nel cofre se ha abierto' : '';
+  const drop = relicName ? `\n✦ Ha soltado: ${relicName}` : '';
   if (camp.chest) unseal(camp.chest);
   if (camp.technique && earnTechnique(camp.technique)) {
     sfx.chime(true); skyFlash(0.6);
-    showMsg(`${title}\n— HAS GANADO ${TECHNIQUES[camp.technique].name.toUpperCase()} —\nequipada · P para usarla · O para cambiar`, 3.6);
+    showMsg(`${title}\n— HAS GANADO ${TECHNIQUES[camp.technique].name.toUpperCase()} —${drop}\nequipada · P para usarla · O para cambiar`, 3.8);
     return;
   }
-  showMsg(`${title}\n+${bonus}  ·  +20 vida${chest}`, 2.2);
+  showMsg(`${title}\n+${bonus}  ·  +20 vida${drop}${chest}`, relicName ? 3.2 : 2.2);
 }

@@ -65,9 +65,9 @@ try {
 } catch { /* no storage */ }
 
 export const cls = () => CLASSES[state.cls];
-/** a weapon forged for one class (Weapon.cls) is only its own; the rest go to the classes wielding their form */
-export const canWield = (w: { form?: WeaponForm; cls?: ClassId }) =>
-  w.cls ? w.cls === state.cls : !cls().own && cls().forms.includes(w.form ?? 'katana');
+/** a weapon forged for one class (Weapon.cls) is only its own; boss relics can be wielded by any class; the rest go to the classes wielding their form */
+export const canWield = (w: { form?: WeaponForm; cls?: ClassId; bossDrop?: boolean }) =>
+  w.bossDrop ? true : w.cls ? w.cls === state.cls : !cls().own && cls().forms.includes(w.form ?? 'katana');
 /** only changes the stored choice: class-select.ts re-dresses and re-arms the avatar */
 export function storeClass(id: ClassId) {
   state.cls = id;

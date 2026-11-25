@@ -20,7 +20,7 @@ import { createSmith } from './smith';
 import { SHOP_FLOOR as FY, shopRoninPos, shopStageActive, smithPos } from './shop-stage';
 import { forSale, weapon, owns, buy, equip, applyWeapon, weaponStats } from './weapons';
 import { cls } from './classes';
-import { ARMORS, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
+import { armorsForSale, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
 import { threatLabel } from './equipment-threat';
 import { level, levelOk, levelReq } from './progression';
@@ -198,7 +198,7 @@ function shopRows(): MenuRow[] {
     });
   }
   rows.push({ label: 'ARMADURAS', head: true });
-  for (const a of ARMORS) {
+  for (const a of armorsForSale()) {
     const mine = ownsArmor(a.id), on = state.armor === a.id, shut = locked(a.id, mine);
     rows.push({
       label: legend(a.id) + a.name, value: shut ? `nivel ${levelReq(a.id)}` : price(a.price, mine, on, 'puesta'),

@@ -2,10 +2,12 @@
 // bought with mon and, like the blades, kept from run to run (vault.ts). upgrades.ts folds these numbers into the
 // helpers the rest of the game already reads (hurtMult, dashCdMult, runMult).
 import { player, state } from './state';
-import { readVault } from './vault';
+import { readVault, saveVault } from './vault';
 
 export interface Armor {
   id: string; name: string; desc: string; price: number; tier: number;
+  /** exclusive relic dropped by defeating a major boss (not sold by Masa) */
+  bossDrop?: boolean;
   /** extra max life, share of damage it stops (0..1) */
   hp: number; guard: number;
   /** dodge cooldown and running speed multipliers, life regained per second even while fighting */
@@ -41,9 +43,20 @@ export const ARMORS: Armor[] = [
   { id: 'hachiman', name: 'Armadura de Hachiman',   desc: 'bendecida: cierra tus heridas incluso en combate', price: 14000, tier: 3, hp: 100, guard: 0.35, regen: 1.5,
     look: { lame: 0xd8a21e, lace: 0xd81a22, metal: 0xffe08a, sode: 1.8, helmet: 'sun', shins: true, aura: 'gold', glow: 0.3 } },
   { id: 'kurogane', name: 'Gran coraza Kurogane', desc: 'hierro oscuro: la mayor protección, a cambio de movilidad', price: 16800, tier: 3, hp: 120, guard: 0.42, dash: 1.18, run: 0.88,
-    look: { lame: 0x22273b, lace: 0xc23d3a, metal: 0xc8af83, sode: 2, helmet: 'kuwagata', shins: true, glow: 0.09 } }
+    look: { lame: 0x22273b, lace: 0xc23d3a, metal: 0xc8af83, sode: 2, helmet: 'kuwagata', shins: true, glow: 0.09 } },
+  // ---- boss-exclusive relics (dropped by major bosses in loot.ts, not sold by Masa)
+  { id: 'coraza-sepulcral', name: 'Coraza del Oni Sepulcral', desc: 'reliquia del oni sepulcral: placas forjadas en ceniza que cierran heridas en combate', bossDrop: true, price: 0, tier: 2.4, hp: 70, guard: 0.28, regen: 0.6,
+    look: { lame: 0x3b1a14, lace: 0xd96a38, metal: 0xffb353, sode: 1.65, helmet: 'kuwagata', shins: true, glow: 0.16 } },
+  { id: 'manto-tengu', name: 'Armadura de los Cinco Vientos', desc: 'reliquia del gran tengu: ligera como el vendaval, corres y esquivas como el viento', bossDrop: true, price: 0, tier: 2.65, hp: 65, guard: 0.24, dash: 0.64, run: 1.18,
+    look: { lame: 0x163c35, lace: 0x62d4b4, metal: 0xc8ffde, sode: 1.15, helmet: 'crescent', shins: true, aura: 'foxfire', glow: 0.18 } },
+  { id: 'yoroi-shuten', name: 'O-yoroi del Rey Oni', desc: 'reliquia de Shuten: coraza infernal de gran resistencia que regenera vida sin cesar', bossDrop: true, price: 0, tier: 3, hp: 135, guard: 0.44, regen: 1.2, run: 0.96,
+    look: { lame: 0x4c0c0e, lace: 0xff3b24, metal: 0xffe066, sode: 2, helmet: 'sun', shins: true, aura: 'gold', glow: 0.28 } },
+  { id: 'coraza-escarcha', name: 'Coraza de Escarcha Eterna', desc: 'reliquia de Yuki: placas de hielo luminoso, ágil y fría como la ventisca', bossDrop: true, price: 0, tier: 2.85, hp: 85, guard: 0.32, dash: 0.7, run: 1.1, regen: 0.9,
+    look: { lame: 0x12263a, lace: 0x9ce8ff, metal: 0xe6f8ff, sode: 1.35, helmet: 'crescent', shins: true, aura: 'neon', glow: 0.12, neon: 0x7fe6ff } }
 ];
 const byId = new Map(ARMORS.map(a => [a.id, a]));
+export const armorById = (id: string) => byId.get(id);
+export const armorsForSale = () => ARMORS.filter(a => !a.bossDrop);
 export const armor = () => byId.get(state.armor) || ARMORS[0];
 export const ownsArmor = (id: string) => state.ownedArmor.includes(id);
 
@@ -75,6 +88,15 @@ export function buyArmor(a: Armor): 'ok' | 'poor' | 'owned' {
   if (state.mon < a.price) return 'poor';
   state.mon -= a.price; state.ownedArmor.push(a.id); wearArmor(a.id, true);
   return 'ok';
+}
+/** award a special armor (e.g. from defeating a major boss) and persist it to the vault */
+export function grantArmor(id: string, autoEquip = true): Armor | null {
+  const a = byId.get(id);
+  if (!a) return null;
+  if (!ownsArmor(a.id)) state.ownedArmor.push(a.id);
+  if (autoEquip) wearArmor(a.id, true);
+  saveVault();
+  return a;
 }
 /** a new run (or another class): the travelling clothes, every armour already won (vault.ts), and the one worn last
  *  (encounters.reset has already set the class's starting life; wearArmor adds the armour's) */

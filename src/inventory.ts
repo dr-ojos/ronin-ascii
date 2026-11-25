@@ -20,7 +20,10 @@ const IMAGE_KIN: Record<string, string> = {
   'zanbato-hierro': 'espada-forja', 'zanbato-jade': 'espada-montana', 'zanbato-sol': 'espada-montana',
   matadragones: 'espada-montana', 'carmesi-sangre': 'muramasa', 'colmillo-oni': 'espada-forja',
   'verdugo-luna': 'espada-montana', 'alas-eclipse': 'masamune',
-  neon: 'kurogane'
+  'kuro-odachi': 'muramasa', 'martillo-raijin': 'susanoo', 'filo-ikazuchi': 'raiken',
+  'hoja-enma': 'masamune', 'lanza-bosque': 'guandao',
+  neon: 'kurogane', 'coraza-sepulcral': 'lacado', 'manto-tengu': 'garza',
+  'yoroi-shuten': 'hachiman', 'coraza-escarcha': 'tsukuyomi'
 };
 const itemImage = (group: string, id: string) => `${import.meta.env.BASE_URL}inventory/${group}/${IMAGE_KIN[id] ?? id}.webp`;
 
@@ -29,7 +32,7 @@ function inventoryRows(): MenuRow[] {
   for (const w of ownedWeapons()) {
     const equipped = state.weapon === w.id;
     rows.push({
-      label: w.name, value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
+      label: (w.bossDrop ? '✦ ' : '') + w.name, value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
       image: itemImage('armas', w.id),
       note: `${w.desc} · ${weaponStats(w)}`,
       act() {
@@ -44,7 +47,7 @@ function inventoryRows(): MenuRow[] {
   for (const a of ARMORS.filter(a => ownsArmor(a.id))) {
     const equipped = state.armor === a.id;
     rows.push({
-      label: a.name, value: equipped ? 'puesta' : 'ponerse', cls: equipped ? 'y' : 'b',
+      label: (a.bossDrop ? '✦ ' : '') + a.name, value: equipped ? 'puesta' : 'ponerse', cls: equipped ? 'y' : 'b',
       image: itemImage('armaduras', a.id),
       note: `${a.desc} · ${armorStats(a)}`,
       act() {
