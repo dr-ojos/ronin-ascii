@@ -13,44 +13,49 @@
   #hud .pts{color:#05060a;background:#ffd27a;padding:0 4px;font-weight:bold;animation:pts 1.2s ease-in-out infinite}
   @keyframes pts{50%{background:#fff0b8;box-shadow:0 0 10px #ffd27a}}
   /* ---- level up (level-fx.ts) */
-  #levelup{position:fixed;left:0;right:0;top:5%;display:none;flex-direction:column;align-items:center;pointer-events:none;z-index:6;text-align:center;
+  #levelup{position:fixed;left:0;right:0;top:3%;display:none;flex-direction:column;align-items:center;pointer-events:none;z-index:6;text-align:center;
     --c:#ffd27a;--c2:#fff6e0;--glow:rgba(255,190,80,.75)}
   #levelup[data-kind="milestone"]{--c:#ff6a4a;--c2:#ffd27a;--glow:rgba(255,90,60,.8)}
   #levelup[data-kind="legend"]{--c:#fff6e0;--c2:#ffd27a;--glow:rgba(255,240,200,.95)}
   #levelup.on{display:flex}
-  #levelup::before{content:"";position:absolute;left:50%;top:-6%;width:min(760px,96vw);height:118%;transform:translateX(-50%);z-index:-1;
-    background:radial-gradient(ellipse at 50% 38%,rgba(5,6,10,.82) 0%,rgba(5,6,10,.55) 45%,transparent 72%);animation:lu-fade .4s ease-out both}
+  /* a dark veil behind the number only: it must not dim the light rising over the fighter below */
+  #levelup::before{content:"";position:absolute;left:50%;top:-8%;width:min(620px,90vw);height:62%;transform:translateX(-50%);z-index:-1;
+    background:radial-gradient(ellipse at 50% 45%,rgba(5,6,10,.7) 0%,rgba(5,6,10,.35) 50%,transparent 75%);animation:lu-fade .4s ease-out both}
   #levelup .lu-kanji{position:absolute;top:-2%;font-size:clamp(120px,20vw,230px);line-height:1;color:var(--c);opacity:.13;font-family:serif;
-    animation:lu-kanji 2.6s cubic-bezier(.2,.9,.3,1) both;z-index:-1}
+    animation:lu-kanji 1.4s cubic-bezier(.2,.9,.3,1) both;z-index:-1}
   #levelup .lu-title{font-size:clamp(13px,1.8vw,18px);letter-spacing:.55em;color:var(--c2);text-shadow:0 0 10px var(--glow);
-    animation:lu-track .9s cubic-bezier(.2,.9,.3,1) both}
+    animation:lu-track .5s cubic-bezier(.2,.9,.3,1) both}
   #levelup .lu-num{position:relative;font-size:clamp(76px,13vw,150px);font-weight:bold;line-height:1;margin:2px 0 0;letter-spacing:.04em;
     background:linear-gradient(180deg,#fff 0%,var(--c2) 35%,var(--c) 70%,#8a4a10 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
-    filter:drop-shadow(0 0 18px var(--glow)) drop-shadow(0 0 3px #000);animation:lu-pop .75s cubic-bezier(.18,1.6,.4,1) both}
+    filter:drop-shadow(0 0 18px var(--glow)) drop-shadow(0 0 3px #000);animation:lu-pop .42s cubic-bezier(.2,1.5,.35,1) both,lu-glitch .45s .3s steps(1) both}
   #levelup .lu-num::after{content:attr(data-n);position:absolute;inset:0;color:transparent;
     background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.95) 50%,transparent 65%) no-repeat;background-size:250% 100%;
-    -webkit-background-clip:text;background-clip:text;animation:lu-shine 1.6s .55s ease-in-out both}
-  #levelup .lu-jump{color:var(--c2);font-size:13px;letter-spacing:.3em;margin-top:-4px;animation:lu-fade .5s .5s both}
+    -webkit-background-clip:text;background-clip:text;animation:lu-shine 1s .3s ease-in-out both}
+  #levelup .lu-jump{color:var(--c2);font-size:13px;letter-spacing:.3em;margin-top:-4px;animation:lu-fade .3s .25s both}
   #levelup .lu-rule{display:flex;align-items:center;gap:10px;color:var(--c);margin:6px 0 8px;font-size:14px;text-shadow:0 0 8px var(--glow)}
-  #levelup .lu-rule span{display:block;height:1px;width:min(220px,30vw);background:linear-gradient(90deg,transparent,var(--c));animation:lu-rule .7s .35s cubic-bezier(.2,.9,.3,1) both}
+  #levelup .lu-rule span{display:block;height:1px;width:min(220px,30vw);background:linear-gradient(90deg,transparent,var(--c));animation:lu-rule .4s .2s cubic-bezier(.2,.9,.3,1) both}
   #levelup .lu-rule span:last-child{background:linear-gradient(270deg,transparent,var(--c));transform-origin:left}
   #levelup .lu-rule span:first-child{transform-origin:right}
   #levelup .lu-lines{display:flex;flex-direction:column;gap:5px;font-size:clamp(12px,1.5vw,15px);color:#cfd6e6;text-shadow:0 0 6px #000,0 0 2px #000}
-  #levelup .lu-lines>div{animation:lu-line .45s cubic-bezier(.2,.9,.3,1) both}
+  #levelup .lu-lines>div{animation:lu-line .3s cubic-bezier(.2,.9,.3,1) both}
   #levelup .lu-lines i{display:block;font-style:normal;font-size:12px;color:#9aa3b5}
   #levelup .lu-pts{color:#ffd27a;font-weight:bold}#levelup .lu-mon{color:#ffd27a}#levelup .lu-heal{color:#ff8a7a}#levelup .lu-jade{color:#87efbd}
   #levelup .lu-perk{color:#c7a4ff;font-weight:bold;letter-spacing:.06em;text-shadow:0 0 10px rgba(170,120,255,.7)}
   #levelup .lu-item{color:#8fdcff;font-weight:bold;letter-spacing:.06em;text-shadow:0 0 10px rgba(80,180,255,.6)}
   #levelup kbd{border:1px solid #59617a;padding:0 4px;color:#cfd6e6;font:inherit;font-size:12px}
-  #levelup.out{animation:lu-out .7s ease-in both}
-  #levelup-flash{position:fixed;inset:0;pointer-events:none;z-index:5;opacity:0;
-    background:radial-gradient(ellipse at 50% 55%,rgba(255,220,140,.55),rgba(255,170,60,.18) 40%,transparent 70%)}
-  #levelup-flash[data-kind="milestone"]{background:radial-gradient(ellipse at 50% 55%,rgba(255,120,80,.6),rgba(255,190,80,.2) 40%,transparent 70%)}
-  #levelup-flash[data-kind="legend"]{background:radial-gradient(ellipse at 50% 55%,rgba(255,255,240,.8),rgba(255,210,120,.3) 45%,transparent 75%)}
-  #levelup-flash.on{animation:lu-flash .9s .2s ease-out both}
+  #levelup.out{animation:lu-out .5s ease-in both}
+  /* a neon glow along the top of the screen only: the fighter and the fight stay clear */
+  #levelup-flash{position:fixed;left:0;right:0;top:0;height:42vh;pointer-events:none;z-index:5;opacity:0;
+    background:radial-gradient(ellipse 60% 100% at 50% 0%,rgba(255,242,31,.30),rgba(255,200,0,.10) 45%,transparent 75%)}
+  #levelup-flash[data-kind="milestone"]{background:radial-gradient(ellipse 65% 100% at 50% 0%,rgba(255,242,31,.34),rgba(255,90,58,.12) 45%,transparent 75%)}
+  #levelup-flash[data-kind="legend"]{background:radial-gradient(ellipse 70% 100% at 50% 0%,rgba(255,250,235,.42),rgba(255,210,80,.14) 45%,transparent 75%)}
+  #levelup-flash.on{animation:lu-flash 1s ease-out both}
   body.leveling #msg{top:64%}
   @keyframes lu-fade{from{opacity:0}}
-  @keyframes lu-pop{0%{opacity:0;transform:scale(2.6);filter:blur(10px) drop-shadow(0 0 40px var(--glow))}60%{opacity:1}100%{transform:scale(1)}}
+  @keyframes lu-glitch{0%{translate:5px 0;filter:drop-shadow(-4px 0 0 rgba(255,40,80,.8)) drop-shadow(4px 0 0 rgba(40,220,255,.8))}
+    20%{translate:-6px 1px}40%{translate:3px -2px;filter:drop-shadow(3px 0 0 rgba(255,40,80,.7)) drop-shadow(-3px 0 0 rgba(40,220,255,.7))}
+    60%{translate:-2px 0}80%{translate:1px 0}100%{translate:0 0}}
+  @keyframes lu-pop{0%{opacity:0;transform:translateY(70px) scale(.45);filter:blur(6px) drop-shadow(0 0 40px var(--glow))}55%{opacity:1}100%{transform:none}}
   @keyframes lu-shine{from{background-position:120% 0}to{background-position:-120% 0}}
   @keyframes lu-track{from{opacity:0;letter-spacing:1.6em}}
   @keyframes lu-kanji{0%{opacity:0;transform:scale(.6) rotate(-8deg)}30%{opacity:.3}100%{opacity:.13;transform:none}}

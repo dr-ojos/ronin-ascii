@@ -6,6 +6,8 @@ import { state } from './state';
 import { TECHNIQUES } from './techniques';
 import { UPGRADES, lvl, roman, type UpgradeId } from './upgrades';
 import { WEAPONS, equip, owns, weaponStats } from './weapons';
+import { techniqueRows, toggleLevelMenu } from './level-menu';
+import { freePoints, level, rank, ROMAN } from './progression';
 
 export const inventoryButton = document.querySelector<HTMLButtonElement>('#inventory-btn')!;
 const ownedWeapons = () => WEAPONS.filter(w => owns(w.id));
@@ -52,7 +54,7 @@ function inventoryRows(): MenuRow[] {
   for (const id of state.learnedTechniques) {
     const move = TECHNIQUES[id], equipped = state.technique === id;
     rows.push({
-      label: move.name, value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
+      label: `${move.name} · ${ROMAN[rank(id)]}`, value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
       image: itemImage('tecnicas', id),
       note: move.description,
       act() {
@@ -64,6 +66,14 @@ function inventoryRows(): MenuRow[] {
       }
     });
   }
+  // the points each level gives: technique ranks here, attributes in the level menu (U)
+  rows.push(...techniqueRows(id => itemImage('tecnicas', id)));
+  const free = freePoints();
+  rows.push({
+    label: 'Atributos y habilidades de nivel', value: free ? `${free} pts · abrir` : 'abrir', cls: free ? 'y' : 'b',
+    note: 'vigor, fuerza, agilidad, temple, espíritu y fortuna · también con U',
+    act() { closeMenu(); toggleLevelMenu(); }
+  });
   const upgrades = (Object.keys(UPGRADES) as UpgradeId[]).filter(id => lvl(id) > 0);
   if (upgrades.length) rows.push({ label: 'MEJORAS PASIVAS', head: true });
   for (const id of upgrades) {
@@ -84,8 +94,8 @@ export function toggleInventory(restoreFocus = false) {
   inventoryButton.setAttribute('aria-expanded', 'true');
   openMenu({
     id: 'inventory', title: 'INVENTARIO', rows: inventoryRows,
-    sub: () => `<span class="y">${state.mon} mon</span> · <span class="b">${state.jade} ${state.jade === 1 ? 'sello' : 'sellos'} de jade</span>`,
-    foot: '↑ ↓ elegir · E / ENTER equipar · I / ESC cerrar',
+    sub: () => `<span class="y">nivel ${level()}</span> · <span class="y">${freePoints()} ${freePoints() === 1 ? 'punto' : 'puntos'}</span> · <span class="y">${state.mon} mon</span> · <span class="b">${state.jade} ${state.jade === 1 ? 'sello' : 'sellos'} de jade</span>`,
+    foot: '↑ ↓ elegir · E / ENTER equipar o mejorar · I / ESC cerrar',
     onClose() {
       inventoryButton.setAttribute('aria-expanded', 'false');
       if (restoreFocus) inventoryButton.focus();
