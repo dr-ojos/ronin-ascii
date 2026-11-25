@@ -163,7 +163,7 @@ function show(e: LevelUp, milestone: boolean, top: boolean) {
   const kind = top ? 'legend' : milestone ? 'milestone' : 'normal';
   const lines: string[] = [];
   lines.push(`<span class="lu-pts">+${e.points} ${e.points === 1 ? 'punto' : 'puntos'} para atributos y técnicas</span> <kbd>I</kbd> <kbd>U</kbd>`);
-  lines.push(`<span class="lu-mon">+${e.mon} mon</span>${e.heal > 0 ? ` · <span class="lu-heal">+${e.heal} vida</span>` : ''}${e.jade ? ` · <span class="lu-jade">+${e.jade} ${e.jade === 1 ? 'sello' : 'sellos'} de jade</span>` : ''}`);
+  lines.push(`<span class="lu-mon">+${e.mon} mon</span>${e.maxHp > 0 ? ` · <span class="lu-heal">+${e.maxHp} vida máxima</span>` : ''}${e.heal > 0 ? ` · <span class="lu-heal">+${e.heal} vida</span>` : ''}${e.jade ? ` · <span class="lu-jade">+${e.jade} ${e.jade === 1 ? 'sello' : 'sellos'} de jade</span>` : ''}`);
   // a big jump (several levels at once) would list too much: the latest few, and the rest in the U menu
   const perks = e.perks.slice(-3), items = e.items.filter(forYou), shownItems = items.slice(-3);
   for (const p of perks) lines.push(`<span class="lu-perk">★ NUEVA HABILIDAD · ${esc(p.name)}</span><i>${esc(p.desc)}</i>`);

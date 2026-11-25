@@ -28,6 +28,10 @@ export const STAT_CAP = 50;
 /** max life per point of vigour: kept small so life grows slowly with the level */
 const VIGOR_HP = 2;
 const LEGEND_HP = 25;
+/** max life every level adds on its own, and the extra of every tenth */
+const LEVEL_HP = 1, MILESTONE_HP = 3;
+/** max life the climb to `level` has given by itself (without vigour): +129 at level 100 */
+export const levelHp = (level: number) => LEVEL_HP * (level - 1) + MILESTONE_HP * Math.floor(level / 10);
 export const STATS: Record<StatId, { name: string; kanji: string; per: string; effect(n: number): string }> = {
   vigor:    { name: 'Vigor',    kanji: '体', per: '+2 vida máxima',
     effect: n => `vida máxima +${n * VIGOR_HP}` },
@@ -125,7 +129,7 @@ export const hasPerk = (id: PerkId) => prof.level >= PERKS.find(p => p.id === id
 
 // ------------------------------------------------------------ what the rest of the game reads
 /** max life on top of the class's own */
-export const bonusHp = () => prof.stats.vigor * VIGOR_HP + (hasPerk('leyenda') ? LEGEND_HP : 0);
+export const bonusHp = () => levelHp(prof.level) + prof.stats.vigor * VIGOR_HP + (hasPerk('leyenda') ? LEGEND_HP : 0);
 /** max life at the start of a run */
 export const baseHp = () => cls().hp + bonusHp();
 export const statDmg = () => (1 + 0.02 * prof.stats.fuerza) * (hasPerk('leyenda') ? 1.15 : 1);
@@ -152,6 +156,8 @@ export const stipend = () => 60 * (prof.level - 1);
 export interface LevelUp {
   from: number; to: number;
   points: number; mon: number; jade: number; heal: number;
+  /** max life the levels added by themselves */
+  maxHp: number;
   perks: Perk[];
   /** ids of the gear (LEVEL_REQ) Masa will now sell you */
   items: string[];
@@ -172,7 +178,7 @@ export function gainXp(n: number) {
 }
 
 function levelUp(from: number, to: number) {
-  const e: LevelUp = { from, to, points: pointsAt(to) - pointsAt(from), mon: 0, jade: 0, heal: 0, perks: [], items: [] };
+  const e: LevelUp = { from, to, points: pointsAt(to) - pointsAt(from), mon: 0, jade: 0, heal: 0, maxHp: levelHp(to) - levelHp(from), perks: [], items: [] };
   for (let l = from + 1; l <= to; l++) {
     const big = isMilestone(l);
     e.mon += Math.round((100 + 30 * l) * (big ? 3 : 1) * monMult() / 5) * 5;
@@ -181,6 +187,7 @@ function levelUp(from: number, to: number) {
     e.items.push(...Object.keys(LEVEL_REQ).filter(id => LEVEL_REQ[id] === l));
   }
   state.mon += e.mon; state.jade += e.jade;
+  player.maxHp += e.maxHp; player.hp += e.maxHp;   // every level makes you a little sturdier
   if (e.perks.some(p => p.id === 'leyenda')) { player.maxHp += LEGEND_HP; player.hp += LEGEND_HP; }
   // a breath of new strength: part of the life comes back, and a moment untouchable
   const before = player.hp;
@@ -262,5 +269,5 @@ export function updateProgression(dt: number) {
 export function devSetLevel(l: number) {
   const to = Math.max(1, Math.min(MAX_LEVEL, Math.floor(l)));
   if (to > prof.level) { prof.xp = 0; const from = prof.level; prof.level = to; levelUp(from, to); }
-  else { prof.level = to; prof.xp = 0; if (spent() > pointsAt(to)) { player.maxHp -= prof.stats.vigor * VIGOR_HP; refundAll(); } saveProgress(); }
+  else { player.maxHp -= levelHp(prof.level) - levelHp(to); player.hp = Math.min(player.hp, player.maxHp); prof.level = to; prof.xp = 0; if (spent() > pointsAt(to)) { player.maxHp -= prof.stats.vigor * VIGOR_HP; refundAll(); } saveProgress(); }
 }
