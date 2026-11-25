@@ -29,6 +29,9 @@ export interface AvatarInput {
   moving: number;          // 0 idle .. 1 walking
   walk: number;            // walk cycle phase
   dash: boolean;
+  jumpY?: number;          // height above ground (metres)
+  vy?: number;             // vertical velocity (m/s)
+  land?: number;           // 0..1 landing recovery settle
   weaponForm: WeaponForm;
   showWeapon?: boolean;
   look?: number;           // head turn towards the nearest oni (radians)

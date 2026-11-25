@@ -817,15 +817,29 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     const spin = move?.spin ? sampleScalar(move.spin, p) : 0;
     const rise = move?.rise ? sampleScalar(move.rise, p) : 0;
     const lean = move?.lean ? sampleScalar(move.lean, p) : 0;
+    const jumpY = s.jumpY ?? 0, vy = s.vy ?? 0, land = s.land ?? 0;
+    const air = clamp(jumpY / 0.45, 0, 1);
+    const climb = clamp(vy / 8, -0.5, 1);
+    const squash = land > 0 ? Math.sin(land * Math.PI) : 0;
     body.rotation.set(0, spin - loco.lag, loco.bank);
-    body.position.y = rise;
+    body.position.y = rise - 0.08 * squash;
+    // keep contact shadow pinned to the ground beneath the jumper
+    blob.position.y = 0.03 - jumpY;
+    const bs = Math.max(0.45, 1 - (jumpY + rise) * 0.16);
+    blob.scale.setScalar(bs);
+    (blob.material as THREE.MeshBasicMaterial).opacity = 0.6 * bs;
     root.updateMatrixWorld(true);
     body.getWorldQuaternion(bq);
     const leftAxis = axis.copy(AX_X).applyQuaternion(bq);             // +x is the samurai's left; +angle leans forward
-    if (rise > 0) {   // knees tucked in the air
-      const tuck = clamp(rise / 0.5, 0, 1);
-      rotateBoneWorld(B.RightUpLeg, leftAxis, -1.0 * tuck); rotateBoneWorld(B.RightLeg, leftAxis, 1.5 * tuck);
-      rotateBoneWorld(B.LeftUpLeg, leftAxis, -0.7 * tuck); rotateBoneWorld(B.LeftLeg, leftAxis, 1.3 * tuck);
+    const riseTuck = rise > 0 ? clamp(rise / 0.5, 0, 1) : 0;
+    const jumpTuck = air * (0.55 + 0.35 * Math.max(0, climb));
+    const tuck = Math.max(riseTuck, jumpTuck);
+    if (tuck > 0) {   // knees tucked in the air
+      rotateBoneWorld(B.RightUpLeg, leftAxis, -0.95 * tuck); rotateBoneWorld(B.RightLeg, leftAxis, 1.45 * tuck);
+      rotateBoneWorld(B.LeftUpLeg, leftAxis, -(0.6 + 0.15 * Math.max(0, climb)) * tuck); rotateBoneWorld(B.LeftLeg, leftAxis, 1.2 * tuck);
+    } else if (squash > 0) {   // brief knee bend on landing
+      rotateBoneWorld(B.RightUpLeg, leftAxis, -0.32 * squash); rotateBoneWorld(B.RightLeg, leftAxis, 0.64 * squash);
+      rotateBoneWorld(B.LeftUpLeg, leftAxis, -0.28 * squash); rotateBoneWorld(B.LeftLeg, leftAxis, 0.56 * squash);
     }
 
     const twist = move ? sampleScalar(move.twist, p) : 0;
@@ -833,7 +847,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     const lead = clamp(loco.lag * 0.5 + loco.turn * 0.03, -0.35, 0.35);
     rotateBoneWorld(B.Spine, UP, twist * 0.6 + lead * 0.35);
     rotateBoneWorld(B.Spine1, UP, twist * 0.4 + lead * 0.25);
-    rotateBoneWorld(B.Spine, leftAxis, loco.lean + (s.dash ? 0.35 : 0) + lean * 0.6);
+    rotateBoneWorld(B.Spine, leftAxis, loco.lean + (s.dash ? 0.35 : 0) + lean * 0.6 + air * (0.14 + 0.1 * Math.max(0, -climb)) + squash * 0.12);
     rotateBoneWorld(B.Spine1, leftAxis, lean * 0.4);
     look += ((clamp((s.look ?? 0) + lead * 0.8, -0.9, 0.9) - twist * 0.5) - look) * (1 - Math.exp(-dt * 6));
     rotateBoneWorld(B.Neck, UP, look);
@@ -842,14 +856,14 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     // weight in the stride, on top of the mocap: the hips roll over onto the planted leg, the shoulders
     // counter-twist against them, the body settles a little at each footfall and the head stays level
     {
-      const w = L.move * (1 - 0.55 * L.runW) * (atk ? 0.3 : 1), ph = TAU * loco.phase;
+      const w = L.move * (1 - 0.55 * L.runW) * (atk ? 0.3 : 1) * (1 - air), ph = TAU * loco.phase;
       const roll = Math.sin(ph) * 0.035 * w;   // small: the whole leg swings with the hips, the feet must not slide
       const fwd = stepAxis.set(0, 0, 1).applyQuaternion(bq);
       rotateBoneWorld(B.Hips, fwd, roll);
       rotateBoneWorld(B.Spine1, UP, -Math.sin(ph) * 0.08 * w);
       rotateBoneWorld(B.Spine2, fwd, -roll * 0.6);
       rotateBoneWorld(B.Neck, fwd, -roll * 0.5);
-      body.position.y = rise - 0.022 * w * Math.pow(0.5 + 0.5 * Math.cos(2 * ph), 4);   // the drop onto each foot
+      body.position.y = rise - 0.08 * squash - 0.022 * w * Math.pow(0.5 + 0.5 * Math.cos(2 * ph), 4);   // the drop onto each foot
     }
 
     const gait = -Math.cos(TAU * loco.phase);

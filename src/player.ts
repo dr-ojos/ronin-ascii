@@ -77,6 +77,34 @@ const moves: Record<WeaponForm, readonly [Move, Move, Move, Move]> = {
   ]
 };
 
+const JUMP_VEL = 9.4;
+const GRAVITY = 26;
+
+function doJump(groundBase: number) {
+  player.vy = JUMP_VEL * (1 - 0.15 * depth);
+  player.jumpY = Math.max(player.jumpY, 0.01);
+  player.jumpBuf = 0;
+  player.landT = 0;
+  player.airDashUsed = false;
+  sfx.jump();
+  if (depth > 0.1) {
+    splash(player.pos.x, groundBase + depth * WADE_SINK, player.pos.z, 0.75);
+    ripple(player.pos.x, player.pos.z, 1.0);
+  } else {
+    burst(new THREE.Vector3(player.pos.x, groundBase + 0.08, player.pos.z), 0xc9b38a, 10, 2.4, 0.1);
+  }
+}
+
+export function tryJump() {
+  if (!state.playing || state.dead || player.dancing) return;
+  if (player.jumpY <= 0.02 && player.vy <= 0) {
+    const groundBase = surfaceY(player.pos.x, player.pos.z) - depth * WADE_SINK;
+    doJump(groundBase);
+  } else {
+    player.jumpBuf = 0.14;
+  }
+}
+
 // K / click chain the current weapon's three cuts; L is the weapon's own heavy attack.
 export function tryAttack(heavy = false) {
   if (player.dancing) return;
@@ -89,6 +117,8 @@ export function tryAttack(heavy = false) {
   const move = moves[w.form ?? 'katana'][player.combo];
   player.attackDur = move.duration * w.speed;
   if (move.air) player.invuln = Math.max(player.invuln, player.attackDur * 0.6);
+  // brief air hang when striking mid-jump
+  if (player.jumpY > 0.05) player.vy = Math.max(player.vy, 2.2);
   // auto-aim: turn towards the closest oni in reach, otherwise keep the current heading
   let best = 4.5 + w.reach, aim = null;
   for (const en of enemies) { const d = Math.hypot(en.g.position.x - player.pos.x, en.g.position.z - player.pos.z); if (d < best) { best = d; aim = en; } }
@@ -98,14 +128,17 @@ export function tryAttack(heavy = false) {
 }
 export function tryDash() {
   if (!state.playing || state.dead || player.dashCd > 0 || player.dancing) return;
+  const airborne = player.jumpY > 0.05;
+  if (airborne && player.airDashUsed) return;
   const mv = moveInput();
   if (mv.lengthSq() < 0.01) mv.set(Math.sin(player.face), 0, Math.cos(player.face));
   player.dashDir.copy(mv.normalize()); player.dashT = 0.2; player.dashCd = 0.75 * dashCdMult(); player.invuln = 0.3;
   player.snareT = 0;
+  if (airborne) { player.airDashUsed = true; player.vy = Math.max(0, player.vy * 0.25); }
   player.face = Math.atan2(mv.x, mv.z);
   dashRing(player.pos);
   sfx.dash();
-  if (depth > 0.1) splash(player.pos.x, player.pos.y + depth * WADE_SINK, player.pos.z, 0.9);
+  if (!airborne && depth > 0.1) splash(player.pos.x, player.pos.y + depth * WADE_SINK, player.pos.z, 0.9);
 }
 export function moveInput() {
   const ix = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), iz = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
@@ -121,17 +154,21 @@ export function updatePlayer(dt: number) {
   player.invuln = Math.max(0, player.invuln - dt);
   player.dashCd = Math.max(0, player.dashCd - dt);
   player.snareT = Math.max(0, player.snareT - dt);
+  player.jumpBuf = Math.max(0, player.jumpBuf - dt);
+  player.landT = Math.max(0, player.landT - dt);
   const mv = moveInput();
+  const airborne = player.jumpY > 0.02 || player.vy > 0;
   // Shift: run (to cross the open world); attacking slows you down
   let speed = (keys.ShiftLeft || keys.ShiftRight ? 10 : 5.6) * runMult();
-  if (player.attackT >= 0) speed = 5.6 * 0.35;
+  if (player.attackT >= 0) speed = 5.6 * (airborne ? 0.55 : 0.35);
   if (player.snareT > 0) speed *= 0.53;
-  speed *= 1 - 0.4 * depth;                     // wading through the river is slow
+  if (!airborne) speed *= 1 - 0.4 * depth;      // wading through the river is slow
   if (player.dancing) {
     // the sword dance moves you (blade-dance.ts)
+    player.jumpY = 0; player.vy = 0; player.airDashUsed = false;
   } else if (player.dashT > 0) {
     player.dashT -= dt;
-    player.pos.addScaledVector(player.dashDir, 18 * (1 - 0.3 * depth) * dt);
+    player.pos.addScaledVector(player.dashDir, 18 * (airborne ? 1 : 1 - 0.3 * depth) * dt);
     // the halo: an after-image every few centimetres, brighter at the start of the dodge
     if ((ghostGap -= 18 * dt) <= 0) { ghostGap = 0.45; dashGhost(player.pos, player.face, 0.4 + player.dashT * 3); }
   } else if (mv.lengthSq() > 0) {
@@ -142,10 +179,34 @@ export function updatePlayer(dt: number) {
   // in the river the feet sink into the bed, so the water comes up to the knees
   const want = wadeDepth(player.pos.x, player.pos.z);
   depth += (want - depth) * Math.min(1, dt * 8);
-  player.pos.y = surfaceY(player.pos.x, player.pos.z) - depth * WADE_SINK;
+  const groundBase = surfaceY(player.pos.x, player.pos.z) - depth * WADE_SINK;
+  if (player.jumpY > 0 || player.vy > 0) {
+    if (player.dashT > 0) {
+      player.vy = 0;
+    } else {
+      const g = player.attackT >= 0 ? GRAVITY * 0.55 : player.vy < 0 ? GRAVITY * 1.15 : GRAVITY;
+      player.vy -= g * dt;
+    }
+    player.jumpY += player.vy * dt;
+    if (player.jumpY <= 0) {
+      const impact = Math.min(1, -player.vy / 12);
+      player.jumpY = 0; player.vy = 0; player.airDashUsed = false; player.landT = 0.16;
+      sfx.land(impact);
+      if (depth > 0.1) {
+        splash(player.pos.x, groundBase + depth * WADE_SINK, player.pos.z, 0.65 + impact * 0.45);
+        ripple(player.pos.x, player.pos.z, 0.9 + impact * 0.4);
+      } else {
+        burst(new THREE.Vector3(player.pos.x, groundBase + 0.08, player.pos.z), 0xc9b38a, Math.round(10 + impact * 10), 2.5 + impact * 1.5, 0.11);
+      }
+      if (player.jumpBuf > 0) doJump(groundBase);
+    }
+  }
+  player.pos.y = groundBase + player.jumpY;
   player.moving += ((mv.lengthSq() > 0 ? 1 : 0) - player.moving) * Math.min(1, dt * 10);
-  wade(dt, player.pos.x + mv.x * 0.35, player.pos.y + depth * WADE_SINK, player.pos.z + mv.z * 0.35, want, player.dashT > 0 ? 1 : player.moving, keys.ShiftLeft || keys.ShiftRight || player.dashT > 0);
-  player.walk += dt * 10 * player.moving;
+  if (player.jumpY <= 0.05) {
+    wade(dt, player.pos.x + mv.x * 0.35, player.pos.y + depth * WADE_SINK, player.pos.z + mv.z * 0.35, want, player.dashT > 0 ? 1 : player.moving, keys.ShiftLeft || keys.ShiftRight || player.dashT > 0);
+    player.walk += dt * 10 * player.moving;
+  }
   sam.root.position.copy(player.pos);
   sam.root.rotation.y = player.face;
   rimLight.position.set(player.pos.x - Math.sin(state.yaw) * 8, player.pos.y + 5, player.pos.z - Math.cos(state.yaw) * 8); rimLight.target.position.copy(player.pos);

@@ -61,7 +61,11 @@ export function animSamurai(dt: number, weaponForm: WeaponForm) {
   sam.update(dt, {
     time: state.time, moving: trading ? 0 : player.moving, walk: player.walk,
     showWeapon: trading, weaponForm,
-    dash: !trading && player.dashT > 0, look: !trading && Math.abs(look) < 1.6 ? look : 0,
+    dash: !trading && player.dashT > 0,
+    jumpY: trading ? 0 : player.jumpY,
+    vy: trading ? 0 : player.vy,
+    land: trading ? 0 : Math.min(1, player.landT / 0.16),
+    look: !trading && Math.abs(look) < 1.6 ? look : 0,
     attack: !trading && player.attackT >= 0 ? { combo: player.combo, p: player.attackT / player.attackDur } : null
   });
   placeMoonShadow(sam.root.position);

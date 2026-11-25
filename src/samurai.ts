@@ -523,8 +523,17 @@ export function createSamurai(): Avatar {
     const move = atk ? (grip?.attacks ?? ATTACKS)[atk.combo] : undefined;
     const rise = move?.rise ? sampleScalar(move.rise, p) : 0;
     const lean = move?.lean ? sampleScalar(move.lean, p) : 0;
+    const jumpY = s.jumpY ?? 0, vy = s.vy ?? 0, land = s.land ?? 0;
+    const air = clamp(jumpY / 0.45, 0, 1);
+    const climb = clamp(vy / 8, -0.5, 1);
+    const squash = land > 0 ? Math.sin(land * Math.PI) : 0;
     body.rotation.y = move?.spin ? sampleScalar(move.spin, p) : 0;
-    body.position.y = rise;
+    body.position.y = rise - 0.08 * squash;
+    // keep contact shadow pinned to the ground beneath the jumper
+    blob.position.y = 0.03 - jumpY;
+    const bs = Math.max(0.45, 1 - (jumpY + rise) * 0.16);
+    blob.scale.setScalar(bs);
+    (blob.material as THREE.MeshBasicMaterial).opacity = 0.6 * bs;
 
     // legs: kamae stance (right foot forward) blended into a walk cycle
     const ph = s.walk, sw = Math.sin(ph);
@@ -533,7 +542,9 @@ export function createSamurai(): Avatar {
     let hipY = lerp(0.865, 0.885 + (1 - Math.abs(sw)) * 0.03, m);
     if (atk) { thR -= 0.35 * env; knR += 0.25 * env; thL += 0.3 * env; knL += 0.15 * env; hipY -= 0.05 * env; }
     if (s.dash) { thR = -0.7; knR = 0.6; thL = 0.5; knL = 0.5; hipY = 0.8; }
-    if (rise > 0) { const tuck = clamp(rise / 0.5, 0, 1); thR -= 1.0 * tuck; knR += 1.5 * tuck; thL -= 0.7 * tuck; knL += 1.3 * tuck; }
+    const tuck = Math.max(rise > 0 ? clamp(rise / 0.5, 0, 1) : 0, air * (0.55 + 0.35 * Math.max(0, climb)));
+    if (tuck > 0) { thR -= 0.95 * tuck; knR += 1.45 * tuck; thL -= 0.65 * tuck; knL += 1.2 * tuck; }
+    else if (squash > 0) { thR -= 0.32 * squash; knR += 0.64 * squash; thL -= 0.28 * squash; knL += 0.56 * squash; hipY -= 0.04 * squash; }
     legR.thigh.rotation.x = thR; legR.knee.rotation.x = knR; legR.foot.rotation.x = -(thR + knR) * 0.85;
     legL.thigh.rotation.x = thL; legL.knee.rotation.x = knL; legL.foot.rotation.x = -(thL + knL) * 0.85;
     legR.thigh.rotation.z = -0.04; legL.thigh.rotation.z = 0.04;
@@ -548,7 +559,7 @@ export function createSamurai(): Avatar {
     // spine / chest
     const twist = move ? sampleScalar(move.twist, p) : 0;
     spine.rotation.y = lerp(spine.rotation.y, twist - hips.rotation.y * 0.8, 1 - Math.exp(-dt * 25));
-    spine.rotation.x = s.dash ? 0.45 : (atk ? 0.04 + env * 0.06 + lean : 0.05 + 0.08 * m);
+    spine.rotation.x = (s.dash ? 0.45 : (atk ? 0.04 + env * 0.06 + lean : 0.05 + 0.08 * m)) + air * (0.14 + 0.1 * Math.max(0, -climb)) + squash * 0.12;
     chest.position.y = 0.24 + Math.sin(t * 1.9) * 0.004;
     chest.scale.set(1 + Math.sin(t * 1.9) * 0.008, 1, 1 + Math.sin(t * 1.9) * 0.01);
     look = lerp(look, clamp(s.look ?? 0, -0.9, 0.9) - spine.rotation.y * 0.5, 1 - Math.exp(-dt * 6));

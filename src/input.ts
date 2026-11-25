@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { canvas } from './renderer';
 import { changeDensity } from './ascii';
 import { toggleSurfaceGlyphs } from './surface-glyphs';
-import { tryAttack, tryDash } from './player';
+import { tryAttack, tryDash, tryJump } from './player';
 import { reset } from './encounters';
 import { tryOpen } from './loot';
 import { trySpecial } from './special';
@@ -39,7 +39,8 @@ addEventListener('keydown', e => {
   if (menuKey(e)) return;   // an open menu takes the keys
   if (e.target === inventoryButton && (e.code === 'Enter' || e.code === 'Space')) return;
   keys[e.code] = true;
-  if (e.code === 'Space') { e.preventDefault(); tryDash(); }
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) tryJump(); }
+  if (!e.repeat && e.code === 'KeyV') tryDash();
   if (!e.repeat && e.code === 'KeyK' && state.playing && !state.dead) tryAttack(false);
   if (!e.repeat && e.code === 'KeyL' && state.playing && !state.dead) tryAttack(true);
   if (!e.repeat && e.code === 'KeyE' && !tryTalk() && !tryTalkTemple()) tryOpen();
@@ -71,6 +72,7 @@ addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('mousedown', e => {
   if (!state.playing || state.dead || state.menu) return;
   if (e.button === 0) tryAttack();
+  else if (e.button === 2) tryDash();
 });
 let mapWheel = 0;
 addEventListener('wheel', e => {

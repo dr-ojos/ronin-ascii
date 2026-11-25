@@ -235,7 +235,7 @@ export function reset() {
   for (let i = camps.length - 1; i >= 0; i--) if (camps[i].temp) camps.splice(i, 1);
   for (const c of camps) { c.active = false; c.roster = c.kinds.slice(); c.threat = undefined; c.clearedAt = -1; }
   resetChests(); resetUpgrades();
-  Object.assign(player, { hp: baseHp(), maxHp: baseHp(), attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1, snareT: 0 });
+  Object.assign(player, { hp: baseHp(), maxHp: baseHp(), attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1, snareT: 0, jumpY: 0, vy: 0, jumpBuf: 0, landT: 0, airDashUsed: false });
   player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0;
   resetSpecial();
   resetBattle();

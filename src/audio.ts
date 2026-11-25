@@ -268,6 +268,21 @@ export function createAudio() {
     if (!ok()) return;
     voice(['dash', ['swing', { rate: 0.8, gain: 0.9 }]], {}, () => swingSynth({ power: 0.6 }));
   }
+  function jump() { // cloth & wind lift on takeoff
+    if (!ok()) return; const t = ctx.currentTime;
+    const n = noiseSrc(t, 0.22), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.8;
+    bp.frequency.setValueAtTime(420, t); bp.frequency.exponentialRampToValueAtTime(1450, t + 0.18);
+    const g = ctx.createGain(); env(g, t, 0.015, 0.16, 0.19); n.connect(bp).connect(g); out(g, { wet: 0.25 });
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(170, t + 0.1);
+    const og = ctx.createGain(); env(og, t, 0.006, 0.12, 0.11); o.connect(og); out(og, { wet: 0.1 }); o.start(t); o.stop(t + 0.15);
+  }
+  function land(power = 0.7) { // soft grounded thud on touchdown
+    if (!ok()) return; const t = ctx.currentTime, p = Math.max(0.35, Math.min(1, power));
+    const n = noiseSrc(t, 0.16, 0.5), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 360 + p * 240;
+    const g = ctx.createGain(); env(g, t, 0.004, 0.2 * p, 0.14); n.connect(lp).connect(g); out(g, { wet: 0.12 });
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.1);
+    const og = ctx.createGain(); env(og, t, 0.003, 0.22 * p, 0.12); o.connect(og); out(og, { wet: 0.08 }); o.start(t); o.stop(t + 0.15);
+  }
   function splash({ power = 1, pan = 0 }: { power?: number; pan?: number } = {}) { // stepping into the river
     if (!ok()) return; const t = ctx.currentTime, len = 0.28 + power * 0.18;
     // the slosh: band-passed noise falling in pitch, then a hiss of droplets
@@ -397,7 +412,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, splash, warn, chime, levelUp, templeBell, rings, coin, anvil, arrow, thunder, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, jump, land, splash, warn, chime, levelUp, templeBell, rings, coin, anvil, arrow, thunder, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

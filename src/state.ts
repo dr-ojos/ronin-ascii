@@ -4,11 +4,12 @@ import * as THREE from 'three';
 import type { TechniqueId } from './techniques';
 import type { ClassId } from './classes';
 
-export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory' | 'level';
+export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory' | 'level' | 'account';
 
 export const player = {
   pos: new THREE.Vector3(0, 0, 4), face: Math.PI, hp: 100, maxHp: 100, attackT: -1, attackDur: 0.3, combo: 0, lastAttackEnd: -9,
   hitDone: false, dashT: 0, dashCd: 0, dashDir: new THREE.Vector3(), invuln: 0, snareT: 0, walk: 0, moving: 0,
+  jumpY: 0, vy: 0, jumpBuf: 0, landT: 0, airDashUsed: false,
   // the Danza de los Mil Tajos carries you from oni to oni (blade-dance.ts): no walking or attacking meanwhile
   dancing: false
 };
