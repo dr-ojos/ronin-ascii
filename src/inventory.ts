@@ -14,7 +14,10 @@ const ownedWeapons = () => WEAPONS.filter(w => owns(w.id));
 /** legendary gear (progression.ts) has no picture of its own yet: it shows its closest kin */
 const IMAGE_KIN: Record<string, string> = {
   kusanagi: 'masamune', 'ame-nuboko': 'yari-marea', 'hoo-tsubasa': 'gemelas-ocaso', tenrai: 'espada-montana', mugen: 'aurora',
-  kongo: 'tetsubo-monje', jizo: 'shakujo', fudo: 'bishamon'
+  kongo: 'tetsubo-monje', jizo: 'shakujo', fudo: 'bishamon',
+  'estoque-plata': 'sakura', 'estoque-ambar': 'raiken', 'estoque-estrella': 'aurora',
+  'odachi-niebla': 'nodachi', 'odachi-carmesi': 'muramasa', 'odachi-eclipse': 'susanoo',
+  'zanbato-hierro': 'espada-forja', 'zanbato-jade': 'espada-montana', 'zanbato-sol': 'espada-montana'
 };
 const itemImage = (group: string, id: string) => `${import.meta.env.BASE_URL}inventory/${group}/${IMAGE_KIN[id] ?? id}.webp`;
 

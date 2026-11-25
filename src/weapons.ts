@@ -11,6 +11,7 @@ import type { BladeLook } from './blade-looks';
 import type { ClassId } from './classes';
 import { CLASS_ARSENAL } from './arsenal';
 import { LEVEL_REQ } from './progression';
+import { readVault, vaultReady } from './vault';
 
 export interface Weapon {
   id: string; name: string; desc: string; price: number; tier: number;
@@ -22,8 +23,8 @@ export interface Weapon {
   lv?: number;
   /** damage multiplier, extra reach (m), attack duration multiplier (<1 = faster) */
   dmg: number; reach: number; speed: number;
-  /** blade length multiplier, glow and steel colours */
-  len: number; glow: number; steel: number;
+  /** blade length multiplier, optional width multiplier, glow and steel colours */
+  len: number; width?: number; glow: number; steel: number;
   /** life healed per oni struck, lightning charge per oni struck */
   heal?: number; charge?: number;
   /** staves: how long each blow dazes the oni it strikes (multiplier) */
@@ -51,7 +52,7 @@ export const WEAPONS: Weapon[] = [
     fx: { glow: 0xff6fb3, hot: 0xffc3dd, cool: 0xe43f8a, gravity: 1.2, halo: 1.25, trail: 1.65, sparks: [0xff74b7, 0xe65bff, 0xffbcaa], extra: 'feathers' } },
   { id: 'golondrinas', name: 'Dos Golondrinas', desc: 'espadas cortas dobles: dos tajos alternos y un remate cruzado', form: 'dual', price: 3800, tier: 1.7, dmg: 1.25, reach: -0.55, speed: 0.9, len: 0.60, glow: 0x77b9ff, steel: 0x7096a8,
     fx: { glow: 0x79c2ff, hot: 0xd9eaff, cool: 0x575ac6, gravity: 2, halo: 1.25, trail: 1.55, sparks: [0x54d8ff, 0x7d8bff, 0xe996ff] } },
-  { id: 'espada-forja', name: 'Mandoble de la fragua', desc: 'espada de hoja ancha: tajos lentos y pesados que abren la guardia', form: 'broad', price: 4300, tier: 1.85, dmg: 1.68, reach: 0.4, speed: 1.15, len: 1.15, glow: 0xff9949, steel: 0x95716a,
+  { id: 'espada-forja', name: 'Mandoble de la fragua', desc: 'espada de hoja ancha: tajos lentos y pesados que abren la guardia', form: 'broad', price: 4300, tier: 1.85, dmg: 1.68, reach: 0.4, speed: 1.15, len: 1.15, width: 0.92, glow: 0xff9949, steel: 0x95716a,
     fx: { glow: 0xff8b42, hot: 0xffd5a3, cool: 0xd14f27, gravity: 9, halo: 1.4, trail: 1.8, sparks: [0xff7437, 0xffc14d, 0xf46474] } },
   { id: 'muramasa', name: 'Hoja de Muramasa',  desc: 'sedienta: cada oni que cortas te cura 3',            price: 4800, tier: 2, dmg: 1.6, reach: 0.2, speed: 0.95, len: 1.1,  glow: 0xff1030, steel: 0x501018, heal: 3,
     fx: { glow: 0xff2040, hot: 0xff6060, cool: 0xd90c39, gravity: 16, halo: 1.6, trail: 2, sparks: [0xff254a, 0xff5786, 0xbf54ff], extra: 'blood' } },
@@ -67,7 +68,7 @@ export const WEAPONS: Weapon[] = [
     fx: { glow: 0xf774c2, hot: 0xffbfd6, cool: 0xb351ff, gravity: 2, halo: 1.5, trail: 1.9, sparks: [0xff72ad, 0xf06bff, 0xffb16f] } },
   { id: 'masamune', name: 'Hoja de Masamune',  desc: 'la obra maestra: corta como ninguna',               price: 12000, tier: 3, dmg: 2.3, reach: 0.6, speed: 0.85, len: 1.25, glow: 0xfff0b0, steel: 0xffffff,
     fx: { glow: 0xfff4c8, hot: 0xffffff, cool: 0xffb020, gravity: 2, halo: 2, trail: 2.4, sparks: [0xffd167, 0xff9854, 0xf9eeac], extra: 'stars' } },
-  { id: 'espada-montana', name: 'Quebramontes', desc: 'gran hoja ancha: tajo fuerte de gran daño y barrido amplio', form: 'broad', price: 13400, tier: 3, dmg: 2.28, reach: 0.7, speed: 1.23, len: 1.34, glow: 0xffbd6a, steel: 0xb4a099,
+  { id: 'espada-montana', name: 'Quebramontes', desc: 'gran hoja ancha: tajo fuerte de gran daño y barrido amplio', form: 'broad', price: 13400, tier: 3, dmg: 2.28, reach: 0.7, speed: 1.23, len: 1.34, width: 1.05, glow: 0xffbd6a, steel: 0xb4a099,
     fx: { glow: 0xffad61, hot: 0xffe7b1, cool: 0xf66d42, gravity: 8, halo: 1.8, trail: 2.15, sparks: [0xff985d, 0xffd664, 0xff648f] } },
   { id: 'aurora', name: 'Espada de la Aurora', desc: 'hoja iridiscente: tajos veloces que también cargan el rayo', price: 15800, tier: 3, dmg: 1.85, reach: 0.5, speed: 0.76, len: 1.2, glow: 0x5afdd2, steel: 0xa7d4dc, charge: 0.02,
     fx: { glow: 0x83ffe5, hot: 0xbaffed, cool: 0xaf53ff, gravity: 1.5, halo: 1.8, trail: 2.2, sparks: [0x32ffc2, 0x4ebaff, 0xff67e6], extra: 'stars' } },
@@ -78,10 +79,29 @@ export const WEAPONS: Weapon[] = [
     fx: { glow: 0xff8ae6, hot: 0xffe0fa, cool: 0x8a5cff, gravity: 2, halo: 1.9, trail: 2.3, sparks: [0xff7ae0, 0x9d7bff, 0x7af0ff], extra: 'bolts' } },
   { id: 'hoo-tsubasa', name: 'Alas del Hō-ō', desc: 'filos gemelos del fénix: rapidísimos, y cada oni cortado te cura 2', form: 'dual', price: 23000, tier: 3, dmg: 2.3, reach: -0.35, speed: 0.72, len: 0.7, glow: 0xff9a2a, steel: 0xffe1a8, heal: 2,
     fx: { glow: 0xffa53a, hot: 0xfff0b0, cool: 0xff3d1a, gravity: -2, halo: 2, trail: 2.4, sparks: [0xffb03a, 0xff5a2a, 0xffe57a], extra: 'feathers' } },
-  { id: 'tenrai', name: 'Tenrai, quiebracielos', desc: 'hoja ancha forjada en una tormenta: golpes devastadores que cargan el rayo', form: 'broad', price: 27000, tier: 3, dmg: 3.2, reach: 0.9, speed: 1.12, len: 1.4, glow: 0x9fd4ff, steel: 0xf0f6ff, charge: 0.03,
+  { id: 'tenrai', name: 'Tenrai, quiebracielos', desc: 'hoja ancha forjada en una tormenta: golpes devastadores que cargan el rayo', form: 'broad', price: 27000, tier: 3, dmg: 3.2, reach: 0.9, speed: 1.12, len: 1.4, width: 1.15, glow: 0x9fd4ff, steel: 0xf0f6ff, charge: 0.03,
     fx: { glow: 0xb0dcff, hot: 0xffffff, cool: 0x4a6bff, gravity: 3, halo: 2.1, trail: 2.5, sparks: [0xbfe6ff, 0x6f8bff, 0xfff3a0], extra: 'bolts' } },
   { id: 'mugen', name: 'Mugen, filo del vacío', desc: 'la hoja de la leyenda: corta la nada, cura, carga y alcanza lejos', price: 32000, tier: 3, dmg: 3.6, reach: 1, speed: 0.76, len: 1.32, glow: 0xffffff, steel: 0x1a1424, heal: 3, charge: 0.03,
     fx: { glow: 0xf4eaff, hot: 0xffffff, cool: 0xb06aff, gravity: 0.5, halo: 2.4, trail: 2.8, sparks: [0xffffff, 0xd6a8ff, 0xffd98a], extra: 'stars' } },
+  // ---- new sword archetypes: rapier (estoque), odachi (gran sable colosal), cleaver (zanbatō monumental)
+  { id: 'estoque-plata', name: 'Aguja de Plata', desc: 'estoque de hoja finísima: estocadas veloces, ráfaga triple y embestida relámpago', form: 'rapier', price: 1500, tier: 1.15, dmg: 1.12, reach: 0.55, speed: 0.80, len: 1.15, width: 0.9, glow: 0x6cd8ff, steel: 0xdceeff,
+    fx: { glow: 0x7ce4ff, hot: 0xe8fbff, cool: 0x2a88ff, gravity: 2.5, halo: 1.15, trail: 1.45, sparks: [0x7ce4ff, 0xb8f0ff, 0x5c9eff] } },
+  { id: 'odachi-niebla', name: 'Ōdachi de la Niebla', desc: 'gran sable curvo de hoja media y gran alcance: tajo ascendente y barrido circular', form: 'odachi', price: 2800, tier: 1.55, dmg: 1.48, reach: 1.15, speed: 1.14, len: 1.52, width: 0.92, glow: 0x3ef5c4, steel: 0x66a8a2,
+    fx: { glow: 0x4cffd0, hot: 0xc8fff0, cool: 0x149c88, gravity: 4, halo: 1.45, trail: 1.85, sparks: [0x3ef5c4, 0x76e0ff, 0xa8ffda] } },
+  { id: 'zanbato-hierro', name: 'Zanbatō de Hierro Negro', desc: 'cuchilla monumental más ancha que el mandoble: gancho ascendente y golpe sísmico', form: 'cleaver', price: 4600, tier: 1.9, dmg: 1.85, reach: 0.6, speed: 1.24, len: 1.24, width: 0.92, glow: 0xff5e24, steel: 0x383336,
+    fx: { glow: 0xff6e32, hot: 0xffd296, cool: 0xb82c10, gravity: 11, halo: 1.55, trail: 1.9, sparks: [0xff5e24, 0xffa838, 0xff3b4e] } },
+  { id: 'estoque-ambar', name: 'Aguijón de Ámbar', desc: 'estoque dorado de gran alcance: estocadas eléctricas que cargan el rayo', form: 'rapier', price: 6400, tier: 2.3, dmg: 1.52, reach: 0.8, speed: 0.78, len: 1.28, width: 1.05, glow: 0xffb82e, steel: 0xc9933a, charge: 0.022,
+    fx: { glow: 0xffc646, hot: 0xfff2ba, cool: 0xd96e14, gravity: 2, halo: 1.45, trail: 1.8, sparks: [0xffc646, 0xffe885, 0x6ec6ff], extra: 'bolts' } },
+  { id: 'odachi-carmesi', name: 'Segadora Carmesí', desc: 'ōdachi ancho de acero carmesí: gran alcance, barrido amplio y cura 2 por golpe', form: 'odachi', price: 8800, tier: 2.6, lv: 15, dmg: 1.98, reach: 1.45, speed: 1.12, len: 1.70, width: 1.12, glow: 0xff2854, steel: 0x5c1422, heal: 2,
+    fx: { glow: 0xff3a66, hot: 0xff9eb4, cool: 0xb8082c, gravity: 12, halo: 1.75, trail: 2.1, sparks: [0xff2854, 0xff6a8a, 0xc246ff], extra: 'blood' } },
+  { id: 'zanbato-jade', name: 'Tajamontañas de Jade', desc: 'hoja colosal de jade forjado: aplasta la guardia y cada oni golpeado te cura 2', form: 'cleaver', price: 11400, tier: 2.85, lv: 18, dmg: 2.38, reach: 0.85, speed: 1.22, len: 1.36, width: 1.06, glow: 0x38ff9a, steel: 0x266c54, heal: 2,
+    fx: { glow: 0x48ffa6, hot: 0xd2ffe6, cool: 0x109458, gravity: 9, halo: 1.85, trail: 2.2, sparks: [0x38ff9a, 0x9eff6e, 0x4ee6ff] } },
+  { id: 'estoque-estrella', name: 'Alfiler del Lucero', desc: 'estoque astral ultrafino: embestida fulgurante que cura y carga la técnica', form: 'rapier', price: 17500, tier: 3, lv: 45, dmg: 2.35, reach: 1.0, speed: 0.72, len: 1.40, width: 0.82, glow: 0x6ff8ff, steel: 0xe8f4ff, heal: 1, charge: 0.025,
+    fx: { glow: 0x8affff, hot: 0xffffff, cool: 0x8e5cff, gravity: 1, halo: 1.95, trail: 2.35, sparks: [0x6ff8ff, 0xd48aff, 0xfff2a8], extra: 'stars' } },
+  { id: 'odachi-eclipse', name: 'Ōdachi del Eclipse', desc: 'hoja colosal de obsidiana y oro: el mayor arco de espada, carga la técnica al cortar', form: 'odachi', price: 21000, tier: 3, lv: 60, dmg: 2.85, reach: 1.70, speed: 1.06, len: 1.84, width: 1.25, glow: 0xc266ff, steel: 0x1e1430, charge: 0.025,
+    fx: { glow: 0xcf7eff, hot: 0xf4dcff, cool: 0x6a22d8, gravity: 2, halo: 2.1, trail: 2.5, sparks: [0xc266ff, 0xffd266, 0x70c6ff], extra: 'stars' } },
+  { id: 'zanbato-sol', name: 'Hendedor del Sol Negro', desc: 'la hoja más ancha y temible: saltos sísmicos que aturden y cargan el rayo', form: 'cleaver', price: 25000, tier: 3, lv: 75, dmg: 3.35, reach: 1.05, speed: 1.18, len: 1.46, width: 1.18, glow: 0xffc636, steel: 0x1a1210, charge: 0.025, daze: 1.2,
+    fx: { glow: 0xffd04a, hot: 0xfff5c0, cool: 0xd84414, gravity: 6, halo: 2.25, trail: 2.6, sparks: [0xffc636, 0xff6a2a, 0xffffff], extra: 'bolts' } },
   // ---- the xiákè's arms: the straight jian he starts with, a tiger dao, butterfly swords and a guandao
   { id: 'jian', name: 'Jian de jade', desc: 'espada recta de doble filo con borla roja: rápida y precisa', look: 'jian', cls: 'xia', price: 0, tier: 0, dmg: 1, reach: 0.05, speed: 0.92, len: 1, glow: 0x7dffc0, steel: 0xe6fff3,
     fx: { glow: 0x8affc8, hot: 0xeafff4, cool: 0x2fd08a, gravity: 4, halo: 1.1, trail: 1.25 } },
@@ -128,9 +148,14 @@ export const owns = (id: string) => state.owned.includes(id);
 
 /** a line of numbers for the shop: compared with the plain katana */
 export function weaponStats(w: Weapon) {
-  const sp = w.form === 'broad' ? 'lenta' : w.form === 'dual' ? 'doble tajo' : w.speed < 0.8 ? 'muy rápida' : w.speed < 0.97 ? 'rápida' : w.speed > 1.15 ? 'lenta' : 'normal';
+  const sp = w.form === 'cleaver' ? 'muy pesada'
+    : w.form === 'broad' ? 'lenta'
+    : w.form === 'odachi' ? 'gran arco'
+    : w.form === 'rapier' ? 'estocada veloz'
+    : w.form === 'dual' ? 'doble tajo'
+    : w.speed < 0.8 ? 'muy rápida' : w.speed < 0.97 ? 'rápida' : w.speed > 1.15 ? 'lenta' : 'normal';
   const reach = w.reach ? `${w.reach > 0 ? '+' : '−'}${Math.abs(w.reach).toFixed(1)} m` : 'normal';
-  const daze = w.form === 'staff' ? ` · aturde${w.daze && w.daze > 1 ? ' mucho' : ''}` : '';
+  const daze = (w.form === 'staff' || w.daze) ? ` · aturde${w.daze && w.daze > 1 ? ' mucho' : ''}` : '';
   return `daño x${w.dmg.toFixed(2).replace(/\.?0+$/, '')} · alcance ${reach} · ${sp}${daze}`;
 }
 
@@ -153,8 +178,14 @@ export function cycleWeapon() {
   equip(list[(i + 1) % list.length].id);
   return weapon();
 }
-/** a new run (or another class): only the weapon your class starts with */
-export function resetWeapons() { const id = cls().weapon; state.owned = [id]; state.weapon = id; applyWeapon(); }
+/** a new run (or another class): the weapon your class starts with and every blade already won (vault.ts) */
+export function resetWeapons() {
+  const id = cls().weapon, v = readVault();
+  state.owned = [id, ...v.weapons.filter(w => w !== id && byId.has(w) && canWield(byId.get(w)!))];
+  state.weapon = v.weapon && state.owned.includes(v.weapon) ? v.weapon : id;
+  applyWeapon();
+  vaultReady();
+}
 
 // ------------------------------------------------------------ the blade mesh
 let displayed = WEAPONS[0];
@@ -163,7 +194,7 @@ export const displayedWeapon = () => displayed;
 export const tipZ = (w: Weapon) => BLADE_LAYOUT[w.form ?? 'katana'].base + BLADE_PROFILE.length * w.len;
 export function applyWeapon(w = weapon()) {
   displayed = w;
-  showWeaponModel(w.form ?? 'katana', w.len, w.look);
+  showWeaponModel(w.form ?? 'katana', w.len, w.look, w.width ?? 1);
   bladeMat.color.set(w.steel); bladeMat.emissive.set(w.glow);
 }
 applyWeapon();

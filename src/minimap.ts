@@ -4,6 +4,7 @@
 // dim shaded relief (2 m per pixel), painted lazily the first time each patch is uncovered.
 // Both maps are drawn at the screen's device pixel ratio so the characters stay crisp.
 // Also announces each place as you walk into it (the first time, it counts as discovered and gives points).
+// What you uncover stays uncovered from one run to the next (and across reloads): map-memory.ts keeps it.
 import { HALF, SIZE, WORLD_R, PLACES, ROADS, RIVER, TEMPLE_GLYPH, TORII_PATH, BRIDGES, biomeAt, groundAt, treeBlocked, rockZone, rockyGround, onMesaCliff, type Place } from './map';
 import { groundY } from './terrain';
 import { enemies, KINDS } from './enemies';
@@ -15,6 +16,7 @@ import { smithPos } from './shop';
 import type { Camp, Wildlife } from './types';
 import { addPoints, POINTS } from './score';
 import { player, state } from './state';
+import { loadFog, storeFog } from './map-memory';
 
 const FONT = '"Courier New", Courier, monospace';
 const BG = '#05060a';
@@ -32,7 +34,9 @@ const dprNow = () => Math.min(3, Math.max(1, window.devicePixelRatio || 1));
 // ------------------------------------------------------------ fog of war (4 m cells, 0 = unknown, 255 = seen)
 const FOG_M = 4, FN = SIZE / FOG_M;
 const fog = new Uint8Array(FN * FN);
-let fogVersion = 0, explored = 0, explorable = 0;
+/** cells in the fog grid (account.ts merges two stored maps of this size) */
+export const FOG_CELLS = FN * FN;
+let fogVersion = 0, explored = 0, explorable = 0, fogDirty = false;
 for (let j = 0; j < FN; j++) for (let i = 0; i < FN; i++) if (Math.hypot(-HALF + (i + 0.5) * FOG_M, -HALF + (j + 0.5) * FOG_M) < WORLD_R) explorable++;
 /** fog at a point, nearest cell */
 function fogAt(x: number, z: number) {
@@ -62,7 +66,7 @@ function reveal(x: number, z: number, R: number, soft = 16) {
       fog[k] = v; changed = true;
     }
   }
-  if (changed) { fogVersion++; paintRelief(x - R - FOG_M, z - R - FOG_M, x + R + FOG_M, z + R + FOG_M); }
+  if (changed) { fogVersion++; fogDirty = true; paintRelief(x - R - FOG_M, z - R - FOG_M, x + R + FOG_M, z + R + FOG_M); }
 }
 
 // ------------------------------------------------------------ shaded relief (2 m / px), painted where the fog lifts
@@ -422,14 +426,48 @@ let t = 0, lastPlace: Place | null = null, placeT = 1.5;
 let mapYaw = 0;
 /** camps you have come close to (shown on the maps from then on) */
 const seen = new Set<Camp>();
-/** a new run: the map is unknown again (the relief and characters stay cached, only hidden) */
+/** a new run: the camps are new, but the land you have mapped stays mapped */
 export function resetMinimap() {
-  fog.fill(0); explored = 0; fogVersion++; seen.clear();
-  reliefX.clearRect(0, 0, TN, TN);
+  seen.clear();
 }
+
+// ------------------------------------------------------------ the map you remember
+// Loaded once: the explored count is recounted and the relief under the uncovered land is queued, a few
+// tiles per tick so the load does not stall the first frames.
+const reliefQueue: [number, number][] = [];
+if (loadFog(fog)) {
+  for (let j = 0; j < FN; j++) for (let i = 0; i < FN; i++)
+    if (fog[j * FN + i] >= 128 && Math.hypot(-HALF + (i + 0.5) * FOG_M, -HALF + (j + 0.5) * FOG_M) < WORLD_R) explored++;
+  const per = TILE * TM / FOG_M;   // fog cells along one relief tile
+  for (let tj = 0; tj < TT; tj++) for (let ti = 0; ti < TT; ti++) {
+    let any = false;
+    for (let j = Math.max(0, tj * per - 1); !any && j < Math.min(FN, (tj + 1) * per + 1); j++)
+      for (let i = Math.max(0, ti * per - 1); i < Math.min(FN, (ti + 1) * per + 1); i++) if (fog[j * FN + i]) { any = true; break; }
+    if (any) reliefQueue.push([ti, tj]);
+  }
+  fogVersion++;
+}
+function paintQueued(n: number) {
+  if (!reliefQueue.length) return;
+  for (const [ti, tj] of reliefQueue.splice(0, n)) {
+    const x0 = -HALF + ti * TILE * TM, z0 = -HALF + tj * TILE * TM;
+    paintRelief(x0, z0, x0 + TILE * TM - TM, z0 + TILE * TM - TM);
+  }
+  fogVersion++;
+}
+let saveT = 0;
+/** writes the map if it has changed since the last write (account.ts calls it before a push) */
+export function saveMinimap() {
+  if (!fogDirty) return;
+  fogDirty = false; storeFog(fog);
+}
+addEventListener('beforeunload', saveMinimap);
+addEventListener('visibilitychange', () => { if (document.hidden) saveMinimap(); });
 export function updateMinimap(dt: number) {
-  t -= dt; placeT -= dt;
+  t -= dt; placeT -= dt; saveT -= dt;
   if (t > 0) return; t = 0.05;
+  paintQueued(6);
+  if (saveT <= 0) { saveT = 4; saveMinimap(); }
   // where am I? (smallest named place that contains the player)
   let here: Place | null = null;
   for (const p of PLACES) if (Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < p.r && (!here || p.r < here.r)) here = p;

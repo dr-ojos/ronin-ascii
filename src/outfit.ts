@@ -16,6 +16,7 @@ import { ARMORS, armor, type Armor } from './armor';
 import { state } from './state';
 import type { ClassId } from './classes';
 import { mangaFinish, roninRobe } from './manga-art';
+import { buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, type NewClassId } from './class-armor';
 
 const V = THREE.Vector3;
 const TAU = Math.PI * 2;
@@ -26,8 +27,17 @@ root.traverse(o => {
   else if (/^mixamorig/.test(o.name)) bones[o.name.replace(/^mixamorig:?/, '')] = o;
 });
 root.updateMatrixWorld(true);
-/** a bone's position in the samurai's own space (+z ahead, +y up, its left on +x) */
-const P = (n: string) => root.worldToLocal(bones[n].getWorldPosition(new V()));
+// Snapshot the bind/rest pose once so class armors built lazily on demand attach identically
+// regardless of the character's current animation frame.
+const restRootWorld = root.matrixWorld.clone();
+const restPos: Record<string, THREE.Vector3> = {};
+const restWorldInv: Record<string, THREE.Matrix4> = {};
+for (const [name, b] of Object.entries(bones)) {
+  restPos[name] = root.worldToLocal(b.getWorldPosition(new V()));
+  restWorldInv[name] = b.matrixWorld.clone().invert();
+}
+/** a bone's rest-pose position in the samurai's own space (+z ahead, +y up, its left on +x) */
+const P = (n: string) => restPos[n].clone();
 
 const sets = new Map<string, THREE.Object3D[]>();
 const auras = new Map<string, THREE.Group>();
@@ -51,11 +61,13 @@ function overlay(id: string, twin: THREE.Object3D, obj: THREE.Object3D) {
   twin.parent!.add(obj);
   sets.get(id)!.push(obj);
 }
-/** build `obj` in the samurai's space, then hang it on a bone so it follows the animation */
+/** build `obj` in the samurai's rest space, then hang it on a bone so it follows the animation */
 function hang(id: string, boneName: string, obj: THREE.Object3D) {
   finish(obj);
-  root.add(obj); obj.updateMatrixWorld(true);
-  bones[boneName].attach(obj);
+  obj.updateMatrix();
+  const localMat = restWorldInv[boneName].clone().multiply(restRootWorld).multiply(obj.matrix);
+  localMat.decompose(obj.position, obj.quaternion, obj.scale);
+  bones[boneName].add(obj);
   sets.get(id)!.push(obj);
 }
 function finish(o: THREE.Object3D) {
@@ -295,16 +307,6 @@ function build(a: Armor) {
 // master bead glows, and a kanji in neon on the back. The sōhei's hood is rig.ts's.
 const SOHEI = 'sohei-garb';
 interface HabitColours { habit: number; kesa: number; belt: number; cord: number; mark: string; roles?: boolean }
-const kesaTex = canvasTex(128, 256, x => {
-  // patchwork: rows of rectangles of slightly different shades, with dark seams between them
-  x.fillStyle = '#4a4a4a'; x.fillRect(0, 0, 128, 256);
-  for (let r = 0; r < 8; r++) for (let c = 0; c < 3; c++) {
-    const v = 170 + ((r * 7 + c * 13) % 5) * 17;
-    x.fillStyle = `rgb(${v},${v},${v})`;
-    x.fillRect(c * 43 + 3, r * 32 + 3, 37, 26);
-  }
-  x.fillStyle = '#ffffff'; x.fillRect(0, 0, 4, 256); x.fillRect(124, 0, 4, 256);   // bright hemmed edges
-});
 const NEON_CORE = 0xfff1d6;
 const neonHalo = (o: THREE.MeshBasicMaterialParameters) => tagMat(new THREE.MeshBasicMaterial({
   color: 0xffb54a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, ...o }), CLS.fx);
@@ -314,7 +316,7 @@ function buildHabit(id: string, c: HabitColours) {
   sets.set(id, []);
   const cloth = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
     new THREE.MeshStandardMaterial({ color, roughness: 0.94, emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide, ...o });
-  const habit = cloth(c.habit), kesa = cloth(c.kesa, { map: kesaTex }), collar = cloth(0xe6e0d0), cord = cloth(c.cord), sash = cloth(c.belt);
+  const habit = cloth(c.habit), kesa = cloth(c.kesa, { map: brocadeKesaTex }), collar = cloth(0xe6e0d0), cord = cloth(c.cord), sash = cloth(c.belt);
   const wood = new THREE.MeshStandardMaterial({ color: 0x3b2316, roughness: 0.45, metalness: 0.05 }), tassel = cloth(0xb3241c);
   const gilt = new THREE.MeshStandardMaterial({ color: 0xe0b450, metalness: 0.85, roughness: 0.3 });
   // the sōhei's colours come from his look (look.ts): habit = "cloth", kesa = "lacquer"
@@ -479,7 +481,9 @@ function buildSwordsman(id: string, kind: 'xia' | 'hwarang') {
   sets.set(id, []);
   const cloth = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
     new THREE.MeshStandardMaterial({ color, roughness: 0.88, emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide, ...o });
-  const robe = cloth(0x4a5e2a), trim = cloth(kind === 'xia' ? 0xd8a630 : 0xe4573d, { roughness: 0.6 }), white = cloth(0xeeeae0);
+  const silkTex = (kind === 'xia' ? cloudSilkTex : plumSilkTex).clone();
+  silkTex.repeat.set(2.5, 2.5); silkTex.needsUpdate = true;
+  const robe = cloth(0x4a5e2a, { map: silkTex }), trim = cloth(kind === 'xia' ? 0xd8a630 : 0xe4573d, { roughness: 0.6 }), white = cloth(0xeeeae0);
   robe.userData.role = 'cloth'; trim.userData.role = 'lacquer';
   const gilt = new THREE.MeshStandardMaterial({ color: 0xe0b450, metalness: 0.85, roughness: 0.3 });
   const neon = kind === 'xia' ? neonPair(0xe6fff2, 0x4dffa6) : neonPair(0xffeef5, 0xff6aa8);
@@ -574,15 +578,28 @@ for (const a of ARMORS) if (a.look?.aura) auras.set(a.id, buildAura(a.look.aura)
 
 
 
+/** lazily build a class-specific sculpted armor set for one of Masa's plated armors */
+function ensureClassArmor(clsId: NewClassId, cur: Armor): string {
+  const setId = `${clsId}:${cur.id}`;
+  if (!sets.has(setId)) {
+    sets.set(setId, []);
+    buildClassArmor(clsId, setId, cur, { bones, P, rigChest, rigWaist, overlay, hang });
+  }
+  return setId;
+}
+
 /** show the armour you wear (and its helmet instead of the kasa), with your chosen colours */
 let activeAura: THREE.Group | undefined;
 export function dressUp(cur = armor()) {
   applyLook(root);
-  // every class but the ronin wears its own garb when it has no armour of its own on, and always its own
-  // headwear (the sōhei's hood, the xiákè's douli, the hwarang's gat) instead of the kasa or a helmet
+  // every class but the ronin wears its own garb when it has no armour of its own on, its own culturally
+  // distinct sculpted armor sets for Masa's plated armors, and always its own headwear (hood, douli, gat)
   const own = GARB[state.cls], headwear = HEADWEAR[state.cls];
   const sohei = state.cls === 'sohei';
-  const worn = own && !sets.has(cur.id) ? own : cur.id;
+  let worn: string;
+  if (own && cur.look) worn = ensureClassArmor(state.cls as NewClassId, cur);
+  else if (own && !sets.has(cur.id)) worn = own;
+  else worn = cur.id;
   for (const [id, list] of sets) for (const o of list) o.visible = id === worn;
   for (const [id, g] of auras) g.visible = id === cur.id;
   activeAura = auras.get(cur.id);

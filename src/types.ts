@@ -6,7 +6,7 @@ import type { EquipmentThreat } from './equipment-threat';
 import type { TechniqueId } from './techniques';
 
 export type Vec3 = [number, number, number];
-export type WeaponForm = 'katana' | 'spear' | 'broad' | 'dual' | 'staff';
+export type WeaponForm = 'katana' | 'spear' | 'broad' | 'dual' | 'staff' | 'odachi' | 'rapier' | 'cleaver';
 
 /** katana pose in body space */
 export interface Pose { pos: THREE.Vector3; q: THREE.Quaternion }

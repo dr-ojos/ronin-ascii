@@ -20,6 +20,7 @@ import { fitGlyphs } from './surface-glyphs';
 import './input';
 import './class-select';
 import './level-menu';
+import './account';
 import { devSetLevel, gainXp } from './progression';
 
 const clock = new THREE.Clock();

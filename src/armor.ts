@@ -1,7 +1,8 @@
 // Armour sold in Masa's shop (shop.ts): more life, less damage taken, and a gift of its own. One worn at a time;
-// bought with mon and, like the blades, lost when you fall. upgrades.ts folds these numbers into the
+// bought with mon and, like the blades, kept from run to run (vault.ts). upgrades.ts folds these numbers into the
 // helpers the rest of the game already reads (hurtMult, dashCdMult, runMult).
 import { player, state } from './state';
+import { readVault } from './vault';
 
 export interface Armor {
   id: string; name: string; desc: string; price: number; tier: number;
@@ -72,8 +73,14 @@ export function buyArmor(a: Armor): 'ok' | 'poor' | 'owned' {
   state.mon -= a.price; state.ownedArmor.push(a.id); wearArmor(a.id, true);
   return 'ok';
 }
-/** a new run: back to the travelling clothes (encounters.reset has already set the class's starting life) */
-export function resetArmor() { state.armor = 'kimono'; state.ownedArmor = ['kimono']; }
+/** a new run (or another class): the travelling clothes, every armour already won (vault.ts), and the one worn last
+ *  (encounters.reset has already set the class's starting life; wearArmor adds the armour's) */
+export function resetArmor() {
+  const v = readVault();
+  state.armor = 'kimono';
+  state.ownedArmor = ['kimono', ...v.armors.filter(id => id !== 'kimono' && byId.has(id))];
+  if (v.armor) wearArmor(v.armor);
+}
 export function updateArmor(dt: number) {
   const r = armor().regen;
   if (r && !state.dead) player.hp = Math.min(player.maxHp, player.hp + r * dt);

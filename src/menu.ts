@@ -16,7 +16,7 @@ export interface MenuRow {
   cls?: string;
   sparkColors?: readonly number[];
   /** a text field instead of a value (the ronin's name) */
-  input?: { value: string; max: number; set(v: string): void };
+  input?: { value: string; max: number; secret?: boolean; set(v: string): void };
   act?(): void;
   preview?(): void;
   left?(): void;
@@ -83,7 +83,7 @@ export function render(revealSelection = false) {
     '<div class="mrows">' + rows.map((r, i) => {
       if (r.head) return `<div class="mh">${esc(r.label)}</div>`;
       const val = r.input
-        ? `<input class="mi" maxlength="${r.input.max}" value="${esc(r.input.value)}" spellcheck="false">`
+        ? `<input class="mi" maxlength="${r.input.max}" value="${esc(r.input.value)}" spellcheck="false"${r.input.secret ? ' type="password" autocomplete="current-password"' : ''} aria-label="${esc(r.label)}">`
         : r.value !== undefined
           ? (r.left ? `<span class="ma" data-d="-1">‹</span> ` : '') + `<span class="${r.cls || ''}">${esc(r.value)}</span>` + (r.right ? ` <span class="ma" data-d="1">›</span>` : '')
           : '';
@@ -108,13 +108,13 @@ export function render(revealSelection = false) {
     if (revealSelection) list.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
   }
   if (inventory) el.querySelector<HTMLElement>(focusClose ? '.mclose' : '.mr.on')?.focus({ preventScroll: true });
-  // the name field keeps focus while you type
-  const input = el.querySelector<HTMLInputElement>('.mi');
-  if (input) {
-    const row = rows.find(r => r.input)!;
+  // a text field (the ronin's name, the account's email) keeps focus while you type
+  for (const input of el.querySelectorAll<HTMLInputElement>('.mi')) {
+    const i = Number(input.closest<HTMLElement>('[data-i]')?.dataset.i), row = rows[i];
+    if (!row?.input) continue;
     input.addEventListener('input', () => row.input!.set(input.value));
-    input.addEventListener('focus', () => { sel = rows.indexOf(row); el.querySelectorAll<HTMLElement>('.mr').forEach(n => n.classList.toggle('on', Number(n.dataset.i) === sel)); });
-    if (rows[sel] === row) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    input.addEventListener('focus', () => { sel = i; el.querySelectorAll<HTMLElement>('.mr').forEach(n => n.classList.toggle('on', Number(n.dataset.i) === sel)); });
+    if (sel === i) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   }
 }
 

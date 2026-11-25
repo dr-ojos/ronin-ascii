@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BLADE_PROFILE, DUAL_PROFILE, MAT, bladeGeometry, grp, mesh, type BladeProfile } from './samurai';
+import { BLADE_PROFILE, CLEAVER_PROFILE, DUAL_PROFILE, MAT, ODACHI_PROFILE, RAPIER_PROFILE, bladeGeometry, grp, mesh, type BladeProfile } from './samurai';
 import type { Avatar, WeaponForm } from './types';
 import { createBladeLooks, type BladeLook } from './blade-looks';
 
@@ -10,7 +10,13 @@ export const BLADE_LAYOUT: Record<WeaponForm, { base: number; width: number; pro
   // the twin blades carry their own curved, broad-bellied shape (DUAL_PROFILE) at full size
   dual: { base: 0.113, width: 1, profile: DUAL_PROFILE },
   // the staff has no blade: its upper half (the striking end, with the bronze cap) carries the trail and sparks
-  staff: { base: 0.3, width: 1, profile: BLADE_PROFILE }
+  staff: { base: 0.3, width: 1, profile: BLADE_PROFILE },
+  // great odachi: long sweeping curved blade, medium-wide
+  odachi: { base: 0.19, width: 1.95, profile: ODACHI_PROFILE },
+  // fencing rapier: ultra-slim straight needle blade
+  rapier: { base: 0.145, width: 0.72, profile: RAPIER_PROFILE },
+  // colossal zanbato / cleaver: massive wide heavy slab blade, wider than the mandoble
+  cleaver: { base: 0.20, width: 3.1, profile: CLEAVER_PROFILE }
 };
 
 export function createWeaponModels(sam: Avatar, steel: THREE.MeshStandardMaterial) {
@@ -90,22 +96,77 @@ export function createWeaponModels(sam: Avatar, steel: THREE.MeshStandardMateria
 
   const shortR = shortSword(sam.katana, 'short-sword-right');
   const shortL = shortSword(sam.offhand, 'short-sword-left');
-  const models = { katana, spear, broad, dual: shortR.group, staff };
-  const blades: Record<WeaponForm, THREE.Object3D[]> = { katana: [katanaBlade], spear: [spearBlade], broad: [broadBlade], dual: [shortR.blade, shortL.blade], staff: [] };
-  for (const model of [spear, broad, shortR.group, shortL.group, staff]) model.traverse(o => {
+
+  // ---- odachi: long two-handed handle, ornate oval guard, sweeping curved blade
+  const odachi = grp(sam.katana);
+  odachi.name = 'odachi-model';
+  cylinder(odachi, -0.25, 0.15, 0.019, 0.021, wrap);
+  cylinder(odachi, -0.275, -0.242, 0.024, 0.026, MAT.gold, 8);
+  for (const z of [-0.21, -0.15, -0.09, -0.03, 0.03, 0.09, 0.13]) {
+    const bind = mesh(new THREE.TorusGeometry(0.02, 0.0038, 5, 12), MAT.cord, odachi, 0, 0, z);
+    bind.rotation.y = 0.2;
+  }
+  const odachiGuard = mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.018, 16), MAT.iron, odachi, 0, 0, 0.156);
+  odachiGuard.rotation.x = Math.PI / 2;
+  odachiGuard.scale.x = 0.65;
+  const odachiRim = mesh(new THREE.TorusGeometry(0.072, 0.0055, 6, 16), MAT.gold, odachi, 0, 0, 0.156);
+  odachiRim.scale.x = 0.65;
+  mesh(new THREE.BoxGeometry(0.02, 0.056, 0.044), MAT.gold, odachi, 0, 0.002, 0.175);
+  const odachiBlade = mesh(bladeGeometry('odachi'), steel, odachi);
+  odachiBlade.name = 'odachi-blade';
+
+  // ---- rapier: slender one-handed grip, spherical pommel, swept cup/ring guard, razor-slim needle blade
+  const rapier = grp(sam.katana);
+  rapier.name = 'rapier-model';
+  cylinder(rapier, -0.125, 0.105, 0.014, 0.015, wrap);
+  for (const z of [-0.09, -0.04, 0.01, 0.06]) cylinder(rapier, z, z + 0.007, 0.016, 0.016, MAT.gold, 10);
+  mesh(new THREE.SphereGeometry(0.021, 12, 10), MAT.gold, rapier, 0, 0, -0.138);
+  const rapierCup = mesh(new THREE.SphereGeometry(0.052, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), MAT.gold, rapier, 0, 0, 0.132);
+  rapierCup.rotation.x = -Math.PI / 2;
+  const rapierBar = mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.19, 8), MAT.gold, rapier, 0, 0, 0.122);
+  rapierBar.rotation.z = 0;
+  const rapierBow = mesh(new THREE.TorusGeometry(0.088, 0.0045, 6, 18, Math.PI), MAT.gold, rapier, 0, -0.022, -0.015);
+  rapierBow.rotation.set(0, Math.PI / 2, Math.PI / 2);
+  const rapierBlade = mesh(bladeGeometry('rapier'), steel, rapier);
+  rapierBlade.name = 'rapier-blade';
+
+  // ---- cleaver (zanbato): massive thick two-handed handle, pommel ring, heavy iron collar, colossal wide blade
+  const cleaver = grp(sam.katana);
+  cleaver.name = 'cleaver-model';
+  cylinder(cleaver, -0.23, 0.155, 0.025, 0.027, wrap);
+  const cleaverRing = mesh(new THREE.TorusGeometry(0.032, 0.0075, 7, 16), MAT.iron, cleaver, 0, 0, -0.258);
+  cleaverRing.rotation.y = Math.PI / 2;
+  cylinder(cleaver, -0.24, -0.21, 0.031, 0.033, MAT.iron, 8);
+  for (const z of [-0.18, -0.11, -0.04, 0.03, 0.10]) {
+    const bind = mesh(new THREE.TorusGeometry(0.026, 0.0055, 5, 10), MAT.cord, cleaver, 0, 0, z);
+    bind.rotation.y = 0.3;
+  }
+  mesh(new THREE.BoxGeometry(0.056, 0.16, 0.036), MAT.iron, cleaver, 0, 0, 0.165);
+  mesh(new THREE.BoxGeometry(0.042, 0.135, 0.052), MAT.gold, cleaver, 0, 0, 0.185);
+  const cleaverBlade = mesh(bladeGeometry('cleaver'), steel, cleaver);
+  cleaverBlade.name = 'cleaver-blade';
+
+  const models = { katana, spear, broad, dual: shortR.group, staff, odachi, rapier, cleaver };
+  const blades: Record<WeaponForm, THREE.Object3D[]> = {
+    katana: [katanaBlade], spear: [spearBlade], broad: [broadBlade], dual: [shortR.blade, shortL.blade], staff: [],
+    odachi: [odachiBlade], rapier: [rapierBlade], cleaver: [cleaverBlade]
+  };
+  for (const model of [spear, broad, shortR.group, shortL.group, staff, odachi, rapier, cleaver]) model.traverse(o => {
     if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
   // the jian, the dao and the hwandu ride in the katana's slot (blade-looks.ts)
   const showLook = createBladeLooks(sam.katana, steel);
-  return (form: WeaponForm, length: number, look?: BladeLook) => {
+  const thickness: Partial<Record<WeaponForm, number>> = { broad: 1.9, odachi: 1.35, rapier: 0.85, cleaver: 2.35 };
+  return (form: WeaponForm, length: number, look?: BladeLook, widthMult = 1) => {
     for (const key of Object.keys(models) as WeaponForm[]) models[key].visible = key === form && !(form === 'katana' && look);
     showLook(form === 'katana' ? look : undefined, length);
     // a longer staff: the shaft and its head stretch with the weapon's length
     if (form === 'staff') staff.scale.set(1, 1, length / 0.9);
     sam.offhand.visible = form === 'dual';
     const layout = BLADE_LAYOUT[form];
+    const tx = thickness[form] ?? 1;
     for (const blade of blades[form]) {
-      blade.scale.set(form === 'broad' ? 1.9 : 1, layout.width, length);
+      blade.scale.set(tx, layout.width * widthMult, length);
       blade.position.z = layout.base - BLADE_PROFILE.base * length;
     }
   };

@@ -4,6 +4,7 @@
 import { CLASSES, CLASS_IDS, cls, storeClass, type ClassId } from './classes';
 import { loadLook } from './look';
 import { resetWeapons } from './weapons';
+import { resetArmor } from './armor';
 import { dressUp } from './outfit';
 import { resetSpecial } from './special';
 import { TECHNIQUES } from './techniques';
@@ -32,6 +33,7 @@ function outfitClass() {
   resetWeapons();
   resetSpecial();
   player.maxHp = player.hp = baseHp();
+  resetArmor();
   dressUp();
   render();
 }

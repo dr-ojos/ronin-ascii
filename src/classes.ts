@@ -35,7 +35,7 @@ export const CLASSES: Record<ClassId, CharacterClass> = {
     id: 'ronin', name: 'Ronin', kanji: '浪人', address: 'ronin', wanderer: 'un ronin cualquiera de los caminos',
     desc: 'samurái sin señor · katanas, lanzas y espadas · empieza con la Danza de los Mil Tajos',
     hp: 100, guard: 0, run: 1,
-    forms: ['katana', 'spear', 'broad', 'dual'], weapon: 'katana', technique: 'tajos'
+    forms: ['katana', 'spear', 'broad', 'dual', 'odachi', 'rapier', 'cleaver'], weapon: 'katana', technique: 'tajos'
   },
   sohei: {
     id: 'sohei', name: 'Sōhei', kanji: '僧兵', address: 'monje', wanderer: 'un monje cualquiera de las montañas',

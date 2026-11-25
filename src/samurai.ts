@@ -161,13 +161,16 @@ export const BLADE_PROFILE = { base: 0.162, length: 0.72, curve: 0.022, width: 0
 // the twin short blades: a deep sabre sweep and a broad belly bulging out of the cutting edge,
 // widest about two thirds up and sweeping into a clipped point
 export const DUAL_PROFILE: BladeProfile = { ...BLADE_PROFILE, curve: 0.085, width: 0.04, taper: 0.006, belly: 0.028 };
+export const ODACHI_PROFILE: BladeProfile = { ...BLADE_PROFILE, curve: 0.042, width: 0.035, taper: 0.008, belly: 0 };
+export const RAPIER_PROFILE: BladeProfile = { ...BLADE_PROFILE, curve: 0, width: 0.022, taper: 0.014, belly: 0 };
+export const CLEAVER_PROFILE: BladeProfile = { ...BLADE_PROFILE, curve: 0.016, width: 0.046, taper: -0.012, belly: 0.015 };
 export const BELLY_POW = 1.6;
 /** across the blade at `t` (0 base … 1 tip): its centre line and full width, in blade units */
 export function bladeSection(p: BladeProfile, t: number) {
   const belly = p.belly * Math.sin(Math.PI * Math.pow(t, BELLY_POW));
   return { center: p.curve * t * t - belly / 2, width: p.width - p.taper * t + belly };
 }
-function bladeGeometry(shape: 'katana' | 'spear' | 'broad' | 'dual' = 'katana') {
+function bladeGeometry(shape: 'katana' | 'spear' | 'broad' | 'dual' | 'odachi' | 'rapier' | 'cleaver' = 'katana') {
   const { base, length: L, curve, width, taper } = BLADE_PROFILE;
   const sh = new THREE.Shape(), N = 24;
   const w = (s: number) => width - taper * (s / L);
@@ -182,6 +185,28 @@ function bladeGeometry(shape: 'katana' | 'spear' | 'broad' | 'dual' = 'katana') 
     // a short straight clip back down to the spine
     sh.lineTo(L * 0.84, spine(L * 0.84));
     for (let i = N; i >= 0; i--) { const s = (i / N) * L * 0.84; sh.lineTo(s, spine(s)); }
+  } else if (shape === 'odachi') {
+    const spine = (s: number) => { const { center, width } = bladeSection(ODACHI_PROFILE, s / L); return center + width / 2; };
+    const edge = (s: number) => { const { center, width } = bladeSection(ODACHI_PROFILE, s / L); return center - width / 2; };
+    sh.moveTo(0, edge(0));
+    for (let i = 1; i <= N; i++) { const s = (i / N) * (L - 0.065); sh.lineTo(s, edge(s)); }
+    sh.quadraticCurveTo(L - 0.015, edge(L * 0.96), L, spine(L) - ODACHI_PROFILE.width * 0.12);
+    for (let i = N; i >= 0; i--) { const s = (i / N) * (L - 0.05); sh.lineTo(s, spine(s)); }
+  } else if (shape === 'rapier') {
+    const half = (s: number) => bladeSection(RAPIER_PROFILE, s / L).width / 2;
+    sh.moveTo(0, -half(0));
+    for (let i = 1; i <= N; i++) { const s = (i / N) * L * 0.92; sh.lineTo(s, -half(s)); }
+    sh.lineTo(L, 0);
+    for (let i = N; i >= 0; i--) { const s = (i / N) * L * 0.92; sh.lineTo(s, half(s)); }
+  } else if (shape === 'cleaver') {
+    const spine = (s: number) => { const { center, width } = bladeSection(CLEAVER_PROFILE, s / L); return center + width / 2; };
+    const edge = (s: number) => { const { center, width } = bladeSection(CLEAVER_PROFILE, s / L); return center - width / 2; };
+    sh.moveTo(0, edge(0));
+    for (let i = 1; i <= N; i++) { const s = (i / N) * (L * 0.85); sh.lineTo(s, edge(s)); }
+    // heavy sweeping butcher/zanbato tip: curves steeply up from the broad belly into a brutal clipped spine
+    sh.quadraticCurveTo(L * 0.98, edge(L * 0.88), L, spine(L) - CLEAVER_PROFILE.width * 0.15);
+    sh.lineTo(L * 0.86, spine(L * 0.86));
+    for (let i = N; i >= 0; i--) { const s = (i / N) * (L * 0.86); sh.lineTo(s, spine(s)); }
   } else if (shape === 'spear') {
     sh.moveTo(0, -width * 0.21);
     sh.quadraticCurveTo(L * 0.26, -width * 0.83, L * 0.48, -width * 0.43);

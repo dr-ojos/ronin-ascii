@@ -21,6 +21,7 @@ import { clearSutras, startSutras, updateSutras } from './sutra-shield';
 import { clearFlyingSwords, startFlyingSwords, updateFlyingSwords } from './flying-swords';
 import { cls } from './classes';
 import { chargeMult } from './progression';
+import { readVault } from './vault';
 
 const CHARGE_TIME = 45;     // seconds to fill the charge from empty
 const KILL_BONUS = 0.04;    // each kill fills this much more
@@ -168,8 +169,11 @@ export function updateSpecial(dt: number) {
 function removeBolt(b: Bolt) { scene.remove(b.g); b.core.dispose(); b.glow.dispose(); }
 
 export function resetSpecial() {
-  const start = cls().technique;
-  Object.assign(state, { special: 0, jade: 0, technique: start, learnedTechniques: [start] });
+  // the class's own technique and every one already learnt (vault.ts); the jade seals belong to the run
+  const start = cls().technique, v = readVault();
+  const learned = [start, ...v.techniques.filter(t => t !== start && t in TECHNIQUES)];
+  const technique = v.technique && learned.includes(v.technique) ? v.technique : start;
+  Object.assign(state, { special: 0, jade: 0, technique, learnedTechniques: learned });
   clearSutras();
   clearFlyingSwords();
   clearBladeDance();

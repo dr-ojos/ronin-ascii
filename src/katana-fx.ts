@@ -95,12 +95,13 @@ function setWeaponFx(w: Weapon) {
   fxWeapon = w;
   CG.set(w.fx.glow); C1.set(w.fx.hot); C2.set(w.fx.cool);
   haloMat.color.copy(CG); haloCore.color.copy(CG).lerp(WHITE, 0.35); bladeLight.color.copy(CG);
-  const { base, width: scale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const { base, width: baseScale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const scale = baseScale * (w.width ?? 1);
   const profile = w.look ? LOOK_PROFILE[w.look] : formProfile;   // a jian, dao or hwandu (blade-looks.ts)
   const len = tipZ(w) - base, r = 0.027 * w.fx.halo;
   // the halo is a straight sleeve laid along the chord from the blade's root to its point;
-  // the broad-bellied twin blades get a fatter one
-  const width = w.form === 'dual' ? scale * bladeSection(profile, 0.6).width / BLADE_PROFILE.width : scale;
+  // the broad-bellied twin blades and heavy cleavers get a fatter one
+  const width = (w.form === 'dual' || w.form === 'cleaver') ? scale * bladeSection(profile, 0.6).width / BLADE_PROFILE.width : scale;
   const rise = bladeRise(w, 1);
   for (const glow of [halo, offhandHalo]) {
     const outer = glow.getObjectByName('outer')!, inner = glow.getObjectByName('inner')!;
@@ -108,7 +109,7 @@ function setWeaponFx(w: Weapon) {
     glow.position.set(0, 0.004 * width + rise / 2, base + len / 2);
     glow.rotation.x = -Math.atan2(rise, len);
   }
-  bladeSheen.uBladeCurve.value = w.form === 'spear' ? 0 : profile.curve;
+  bladeSheen.uBladeCurve.value = (w.form === 'spear' || w.form === 'rapier') ? 0 : profile.curve;
   bladeSheen.uBladeWidth.value = profile.width;
   bladeSheen.uBladeTaper.value = profile.taper;
   bladeSheen.uBladeBelly.value = profile.belly;
@@ -184,16 +185,18 @@ offhandSparks.name = 'offhand-sparks';
 offhandSparks.onBeforeRender = edgeSparks.onBeforeRender;
 sam.offhand.add(offhandSparks);
 function cuttingEdge(w: Weapon, t: number) {
-  const { width: scale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const { width: baseScale, profile: formProfile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const scale = baseScale * (w.width ?? 1);
   const profile = w.look ? LOOK_PROFILE[w.look] : formProfile;
   if (w.form === 'spear') return -BLADE_PROFILE.width * 0.52 * Math.pow(Math.sin(Math.PI * t), 0.72) * scale;
   const { center, width } = bladeSection(profile, t);
   return (center - width * 0.5) * scale;
 }
-/** height of the blade's centre line at `t` (0 root … 1 point): the curved twin blades rise well off the hilt's axis */
+/** height of the blade's centre line at `t` (0 root … 1 point): curved blades rise off the hilt's axis */
 function bladeRise(w: Weapon, t: number) {
-  const { width: scale, profile } = BLADE_LAYOUT[w.form ?? 'katana'];
-  return w.form === 'dual' ? bladeSection(profile, t).center * scale : 0;
+  const { width: baseScale, profile } = BLADE_LAYOUT[w.form ?? 'katana'];
+  const scale = baseScale * (w.width ?? 1);
+  return (w.form === 'dual' || w.form === 'odachi') ? bladeSection(profile, t).center * scale : 0;
 }
 function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
   edgeSparks.visible = Boolean(w.fx.sparks) && !state.dead;

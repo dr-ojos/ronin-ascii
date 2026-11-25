@@ -74,6 +74,32 @@ const moves: Record<WeaponForm, readonly [Move, Move, Move, Move]> = {
     { duration: 0.62, lunge: 2.4, reach: 3.2, strikes: [{ at: 0.54, arc: 0.9, power: 1.7, daze: 1.2 }] },
     { duration: 1.0, lunge: 4, lungeAt: [0.55, 0.7], reach: 3.3, strikes: [
       { at: 0.3, arc: Math.PI, power: 0.8, daze: 0.5 }, { at: 0.72, arc: Math.PI, power: 2.2, quake: true, daze: 1.8 }] }
+  ],
+  // odachi: long sweeping rising draw, wide horizontal sweep, lunging overhead cleave, and 360 horizon crescent
+  odachi: [
+    { duration: 0.48, lunge: 3.0, reach: 3.1, strikes: [{ at: 0.48, arc: 1.55, power: 1.05 }] },
+    { duration: 0.50, lunge: 2.6, reach: 3.25, strikes: [{ at: 0.46, arc: 1.9, power: 1.15 }] },
+    { duration: 0.64, lunge: 6.5, lungeAt: [0.22, 0.54], reach: 3.4, strikes: [{ at: 0.54, arc: 1.3, power: 1.95 }] },
+    { duration: 0.92, lunge: 11, lungeAt: [0.22, 0.56], reach: 3.6, strikes: [
+      { at: 0.42, arc: Math.PI, power: 1.2 }, { at: 0.62, arc: Math.PI, power: 1.8 }] }
+  ],
+  // rapier: ultra-fast piercing thrusts, flick + thrust, triple needle flurry, and a blinding lightning dash-skewer
+  rapier: [
+    { duration: 0.34, lunge: 5.5, reach: 3.0, strikes: [{ at: 0.38, arc: 0.48, power: 0.95 }] },
+    { duration: 0.46, lunge: 4.5, reach: 3.0, strikes: [
+      { at: 0.30, arc: 1.1, power: 0.62 }, { at: 0.58, arc: 0.48, power: 0.78 }] },
+    { duration: 0.58, lunge: 4.0, reach: 3.1, strikes: [
+      { at: 0.26, arc: 0.52, power: 0.55 }, { at: 0.48, arc: 0.52, power: 0.62 }, { at: 0.70, arc: 0.52, power: 0.88 }] },
+    { duration: 0.84, lunge: 18, lungeAt: [0.26, 0.50], reach: 3.5, strikes: [
+      { at: 0.44, arc: 0.58, power: 2.1 }, { at: 0.70, arc: 1.45, power: 1.1 }] }
+  ],
+  // cleaver (zanbato): brutal earth-scraping uppercut, seismic vertical slam, 360 colossal cleave, and leaping earth hammer
+  cleaver: [
+    { duration: 0.52, lunge: 2.0, reach: 3.0, strikes: [{ at: 0.52, arc: 1.45, power: 1.15 }] },
+    { duration: 0.56, lunge: 2.4, reach: 3.1, strikes: [{ at: 0.54, arc: 1.15, power: 1.35, quake: true }] },
+    { duration: 0.76, lunge: 1.6, reach: 3.4, strikes: [{ at: 0.54, arc: Math.PI, power: 2.2 }] },
+    { duration: 1.06, lunge: 6.5, lungeAt: [0.16, 0.58], reach: 3.6, air: true, strikes: [
+      { at: 0.34, arc: Math.PI, power: 0.9 }, { at: 0.68, arc: Math.PI, power: 3.1, quake: true, daze: 1.4 }] }
   ]
 };
 
