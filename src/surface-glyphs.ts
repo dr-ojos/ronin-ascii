@@ -10,6 +10,7 @@
 // stay legible far away and get finer close up without swimming every frame.
 import * as THREE from 'three';
 import { DPR } from './renderer';
+import { detailedSurfaces } from './surfaces';
 
 const COLS = 16;
 // three bands per material: shadow, half-tone, light
@@ -70,7 +71,8 @@ const FRAG = /* glsl */`
 #ifndef PIXEL_CLS
   float pixelCls = 0.0;
 #endif
-if (uSurfGlyph > 0.5) {
+// the 3D view (T) shows the figures plainly: no letters on them
+if (uSurfGlyph > 0.5 && uDetailedSurfaces < 0.5) {
   // pick the plane the surface faces most, so the letters stand upright on it
   vec3 n = abs(vGlyphN), P = vGlyphP;
   vec2 q; float face;
@@ -104,12 +106,12 @@ if (uSurfGlyph > 0.5) {
 
 /** install the surface letters on a figure material (inside its onBeforeCompile) */
 export function glyphShader(sh: THREE.WebGLProgramParametersWithUniforms, sub: number, rest = false) {
-  Object.assign(sh.uniforms, surfaceGlyphs);
+  Object.assign(sh.uniforms, surfaceGlyphs, { uDetailedSurfaces: detailedSurfaces });
   sh.vertexShader = 'varying vec3 vGlyphP; varying vec3 vGlyphN;\n'
     + (rest ? '#define GLYPH_REST\nattribute vec3 glyphRest; attribute vec3 glyphRestN;\n' : '')
     + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VERT);
   sh.fragmentShader = `varying vec3 vGlyphP; varying vec3 vGlyphN;
-uniform float uSurfGlyph; uniform float uGlyphH; uniform sampler2D tGlyphs;
+uniform float uSurfGlyph; uniform float uDetailedSurfaces; uniform float uGlyphH; uniform sampler2D tGlyphs;
 #define GLYPH_SUB ${sub.toFixed(1)}
 ` + sh.fragmentShader.replace('#include <opaque_fragment>', FRAG + '#include <opaque_fragment>');
 }
