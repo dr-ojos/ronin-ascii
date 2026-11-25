@@ -49,6 +49,7 @@ function frame() {
   updateInfoButton();
   updateMinimap(dt);
   cellMat.uniforms.uMode.value = state.colorMode;
+  cellMat.uniforms.uRain.value = state.rainAmt;
   syncQuality();   // T mode runs at Baja quality, ASCII at the player's choice (apply-quality.ts)
   setDetailedSurfaces(!state.asciiOn);
   if (state.asciiOn) {

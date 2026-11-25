@@ -109,11 +109,11 @@ scene.add(keyLight);
 
 // moon/sun + halo + stars + sunset dome + far mountains: a sky dome that travels with the camera
 const sky = new THREE.Group(); scene.add(sky);
-const sunsetDome = new THREE.Mesh(new THREE.SphereGeometry(248, 32, 20), new THREE.ShaderMaterial({
+const sunsetDomeMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { uSunDir: { value: SUNSET_DIR } },
+  uniforms: { uSunDir: { value: SUNSET_DIR }, uRain: { value: 0 } },
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `varying vec3 vDir; uniform vec3 uSunDir; void main(){
+  fragmentShader: `varying vec3 vDir; uniform vec3 uSunDir; uniform float uRain; void main(){
     vec3 d = normalize(vDir); float h = d.y;
     vec3 col = mix(vec3(0.16, 0.075, 0.085), vec3(0.95, 0.38, 0.14), smoothstep(-0.08, 0.03, h));
     col = mix(col, vec3(0.58, 0.20, 0.26), smoothstep(0.03, 0.20, h));
@@ -122,9 +122,15 @@ const sunsetDome = new THREE.Mesh(new THREE.SphereGeometry(248, 32, 20), new THR
     float sun = max(dot(d, uSunDir), 0.0);
     col += pow(sun, 3.0) * smoothstep(0.55, -0.05, abs(h - 0.12)) * vec3(0.52, 0.22, 0.06);
     col += pow(sun, 28.0) * vec3(1.15, 0.62, 0.20);
+    // Rain overcast: mute the fiery sunset into moody storm slate-teal clouds
+    vec3 storm = mix(vec3(0.09, 0.14, 0.19), vec3(0.16, 0.23, 0.30), smoothstep(-0.08, 0.15, h));
+    storm = mix(storm, vec3(0.07, 0.11, 0.17), smoothstep(0.15, 0.7, h));
+    storm += pow(sun, 4.0) * vec3(0.10, 0.13, 0.16);
+    col = mix(col, storm, uRain * 0.88);
     gl_FragColor = vec4(col, 1.0);
   }`
-}));
+});
+const sunsetDome = new THREE.Mesh(new THREE.SphereGeometry(248, 32, 20), sunsetDomeMat);
 sunsetDome.frustumCulled = false; sunsetDome.renderOrder = -2; sunsetDome.visible = false;
 tagMat(sunsetDome.material, CLS.sky);
 sky.add(sunsetDome);
@@ -138,6 +144,7 @@ export function updateSky(cam: THREE.Vector3) { sky.position.set(cam.x, Math.max
 let halo!: THREE.Sprite;
 let haloMat!: THREE.SpriteMaterial;
 let stars!: THREE.Points;
+let starsMat!: THREE.PointsMaterial;
 {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 10, 64, 64, 64);
@@ -152,8 +159,81 @@ let stars!: THREE.Points;
     p.set([Math.sin(ph) * Math.cos(th) * 200, Math.cos(ph) * 200, Math.sin(ph) * Math.sin(th) * 200], i * 3);
   }
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(p, 3));
-  stars = new THREE.Points(sg, tagMat(new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, fog: false }), CLS.sky));
+  starsMat = tagMat(new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, fog: false, transparent: true, opacity: 1 }), CLS.sky);
+  stars = new THREE.Points(sg, starsMat);
   stars.frustumCulled = false; sky.add(stars);
+}
+
+// Dry and rainy atmosphere palettes (preallocated so rain transitions never allocate per frame)
+const ATMOS = {
+  nightDry: {
+    moon: new THREE.Color(0xd2dcff), moonI: 5.0,
+    hemi: new THREE.Color(0x8a9ad8), ground: new THREE.Color(0x2a1f14), hemiI: 1.05,
+    rim: new THREE.Color(0x9fc0ff), rimI: 3.0,
+    key: new THREE.Color(0xdde6ff), keyI: 7.0,
+    bg: new THREE.Color(0x060912), fog: new THREE.Color(0x131b34), fogD: 0.016,
+    skyline: new THREE.Color(0x141b33),
+    disc: new THREE.Color(0xf4efdc), halo: new THREE.Color(0xc8d7ff),
+    exposure: 1.2
+  },
+  nightRain: {
+    moon: new THREE.Color(0x6b98b8), moonI: 2.9,
+    hemi: new THREE.Color(0x426e84), ground: new THREE.Color(0x111d24), hemiI: 1.15,
+    rim: new THREE.Color(0x5fa6c4), rimI: 2.2,
+    key: new THREE.Color(0x94c4dc), keyI: 5.6,
+    bg: new THREE.Color(0x040c12), fog: new THREE.Color(0x0d2330), fogD: 0.024,
+    skyline: new THREE.Color(0x0b1c28),
+    disc: new THREE.Color(0x94b8c8), halo: new THREE.Color(0x528aa4),
+    exposure: 1.14
+  },
+  sunsetDry: {
+    moon: new THREE.Color(0xff9e4e), moonI: 8.6,
+    hemi: new THREE.Color(0x624c7a), ground: new THREE.Color(0x1e110c), hemiI: 0.40,
+    rim: new THREE.Color(0xffb36b), rimI: 0.75,
+    key: new THREE.Color(0xffc280), keyI: 2.4,
+    bg: new THREE.Color(0x2a141c), fog: new THREE.Color(0x472322), fogD: 0.013,
+    skyline: new THREE.Color(0x251422),
+    disc: new THREE.Color(0xffd896), halo: new THREE.Color(0xff8c38),
+    exposure: 1.12
+  },
+  sunsetRain: {
+    moon: new THREE.Color(0x889fb8), moonI: 3.4,
+    hemi: new THREE.Color(0x48627a), ground: new THREE.Color(0x141c24), hemiI: 0.80,
+    rim: new THREE.Color(0x78a4c0), rimI: 0.90,
+    key: new THREE.Color(0x96b8d0), keyI: 2.2,
+    bg: new THREE.Color(0x121b26), fog: new THREE.Color(0x1e2e3d), fogD: 0.022,
+    skyline: new THREE.Color(0x14212e),
+    disc: new THREE.Color(0xaec0cc), halo: new THREE.Color(0x58768e),
+    exposure: 1.04
+  }
+};
+let atmosRain = -1;
+function applyAtmosphere(r: number) {
+  atmosRain = r;
+  const a = sunsetMode ? ATMOS.sunsetDry : ATMOS.nightDry;
+  const b = sunsetMode ? ATMOS.sunsetRain : ATMOS.nightRain;
+  const lerp = THREE.MathUtils.lerp;
+  moonLight.color.copy(a.moon).lerp(b.moon, r);
+  moonLight.intensity = lerp(a.moonI, b.moonI, r);
+  hemiLight.color.copy(a.hemi).lerp(b.hemi, r);
+  hemiLight.groundColor.copy(a.ground).lerp(b.ground, r);
+  hemiLight.intensity = lerp(a.hemiI, b.hemiI, r);
+  rimLight.color.copy(a.rim).lerp(b.rim, r);
+  rimLight.intensity = lerp(a.rimI, b.rimI, r);
+  keyLight.color.copy(a.key).lerp(b.key, r);
+  keyLight.intensity = lerp(a.keyI, b.keyI, r);
+  renderer.toneMappingExposure = lerp(a.exposure, b.exposure, r);
+  (scene.background as THREE.Color).copy(a.bg).lerp(b.bg, r);
+  if (scene.fog instanceof THREE.FogExp2) {
+    scene.fog.color.copy(a.fog).lerp(b.fog, r);
+    scene.fog.density = lerp(a.fogD, b.fogD, r);
+  }
+  moonMat.color.copy(a.disc).lerp(b.disc, r);
+  haloMat.color.copy(a.halo).lerp(b.halo, r);
+  (skyline.material as THREE.MeshBasicMaterial).color.copy(a.skyline).lerp(b.skyline, r);
+  sunsetDomeMat.uniforms.uRain.value = r;
+  starsMat.opacity = 1 - r * 0.92;
+  stars.visible = !sunsetMode && starsMat.opacity > 0.05;
 }
 
 let sunsetMode = false;
@@ -168,52 +248,21 @@ export function setSunsetLighting(enabled: boolean) {
   moonLight.shadow.camera.updateProjectionMatrix();
 
   if (enabled) {
-    moonLight.color.setHex(0xff9e4e);
-    moonLight.intensity = 8.6;
-    hemiLight.color.setHex(0x624c7a);
-    hemiLight.groundColor.setHex(0x1e110c);
-    hemiLight.intensity = 0.40;
-    rimLight.color.setHex(0xffb36b);
-    rimLight.intensity = 0.75;
-    keyLight.color.setHex(0xffc280);
-    keyLight.intensity = 2.4;
     keyLight.distance = 7;
     keyLight.decay = 1.8;
-    renderer.toneMappingExposure = 1.12;
     scene.environment = sunsetEnv;
-    (scene.background as THREE.Color).setHex(0x2a141c);
-    if (scene.fog instanceof THREE.FogExp2) { scene.fog.color.setHex(0x472322); scene.fog.density = 0.013; }
-    moonMat.color.setHex(0xffd896);
     moon.scale.setScalar(1.45);
-    haloMat.color.setHex(0xff8c38);
     halo.scale.set(78, 78, 1);
-    (skyline.material as THREE.MeshBasicMaterial).color.setHex(0x251422);
     sunsetDome.visible = true;
-    stars.visible = false;
   } else {
-    moonLight.color.setHex(0xd2dcff);
-    moonLight.intensity = 5.0;
-    hemiLight.color.setHex(0x8a9ad8);
-    hemiLight.groundColor.setHex(0x2a1f14);
-    hemiLight.intensity = 1.05;
-    rimLight.color.setHex(0x9fc0ff);
-    rimLight.intensity = 3.0;
-    keyLight.color.setHex(0xdde6ff);
-    keyLight.intensity = 7.0;
     keyLight.distance = 12;
     keyLight.decay = 1.2;
-    renderer.toneMappingExposure = 1.2;
     scene.environment = nightEnv;
-    (scene.background as THREE.Color).setHex(0x060912);
-    if (scene.fog instanceof THREE.FogExp2) { scene.fog.color.setHex(0x131b34); scene.fog.density = 0.016; }
-    moonMat.color.setHex(0xf4efdc);
     moon.scale.setScalar(1);
-    haloMat.color.setHex(0xc8d7ff);
     halo.scale.set(48, 48, 1);
-    (skyline.material as THREE.MeshBasicMaterial).color.setHex(0x141b33);
     sunsetDome.visible = false;
-    stars.visible = true;
   }
+  applyAtmosphere(state.rainAmt);
   moon.position.copy(moonDir).multiplyScalar(150);
   halo.position.copy(moon.position);
   placeMoonShadow(player.pos);
@@ -463,7 +512,7 @@ for (let i = 0; i < RAIN; i++) {
 const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
 const rain = new THREE.LineSegments(rainGeo, tagMat(new THREE.LineBasicMaterial({ color: 0x9fb2d8, transparent: true, opacity: 0.55, depthWrite: false }), CLS.fx));
 rain.frustumCulled = false; scene.add(rain);
-const SHOWER = [40, 90], DRY = [60, 150], FADE = 10; // seconds: a shower, a dry spell, easing in / out
+const SHOWER = [35, 70], DRY = [210, 390], FADE = 10; // seconds: a shower, a dry spell, easing in / out
 let rainSent = -1;
 function toggleWeather() { // the cycle's own change: eases in / out instead of snapping
   state.raining = !state.raining;
@@ -473,12 +522,14 @@ function toggleWeather() { // the cycle's own change: eases in / out instead of 
 export function toggleRain() {
   state.raining = !state.raining; state.rainAmt = state.raining ? 1 : 0;
   state.rainT = state.raining ? rnd(SHOWER[0], SHOWER[1]) : rnd(DRY[0], DRY[1]);
+  applyAtmosphere(state.rainAmt);
 }
 export function updateRain(dt: number) {
   state.rainT -= dt;
   if (state.rainT <= 0) toggleWeather();
   const target = state.raining ? 1 : 0, step = dt / FADE;
   state.rainAmt = state.rainAmt < target ? Math.min(target, state.rainAmt + step) : Math.max(target, state.rainAmt - step);
+  if (Math.abs(state.rainAmt - atmosRain) > 1e-4) applyAtmosphere(state.rainAmt);
   if (Math.abs(state.rainAmt - rainSent) > 0.01 || (state.rainAmt === target && rainSent !== target)) { rainSent = state.rainAmt; sfx.setRain(rainSent); }
   updateWaterWeather(dt, state.rainAmt);   // raindrops on the water, puddles on the roads
   updateDrift(dt);

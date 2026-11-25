@@ -131,7 +131,7 @@ export const cellMat = new THREE.ShaderMaterial({
   uniforms: {
     tScene: { value: rt.texture }, tMask: { value: maskRT.texture },
     uRes: { value: bufSize.clone() }, uCell: { value: new THREE.Vector2() },
-    uN: { value: N }, uEdgeRow: { value: EDGE_ROW }, uMode: { value: 0 }, uHit: { value: 0 }, uTime: { value: 0 }, uActor: { value: 0 },
+    uN: { value: N }, uEdgeRow: { value: EDGE_ROW }, uMode: { value: 0 }, uHit: { value: 0 }, uTime: { value: 0 }, uActor: { value: 0 }, uRain: { value: 0 },
     uLight: { value: new THREE.Vector2(0, 1) },  // moonlight direction on screen (unit, pixels, y up)
     // ---- relief engine: the scene's depth buffer rebuilt into view-space positions and normals
     tDepth: { value: sceneDepth }, uProjInv: { value: new THREE.Matrix4() }, uProj: { value: new THREE.Matrix4() }, uProjScale: { value: new THREE.Vector2(1, 1) },
@@ -143,7 +143,7 @@ export const cellMat = new THREE.ShaderMaterial({
   vertexShader: `void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tScene; uniform sampler2D tMask; uniform sampler2D tDepth;
-    uniform vec2 uRes; uniform vec2 uCell; uniform float uN; uniform float uEdgeRow; uniform float uMode; uniform float uHit; uniform float uActor;
+    uniform vec2 uRes; uniform vec2 uCell; uniform float uN; uniform float uEdgeRow; uniform float uMode; uniform float uHit; uniform float uActor; uniform float uRain;
     uniform vec2 uLight;
     uniform mat4 uProjInv; uniform mat4 uProj; uniform vec2 uProjScale; uniform mat3 uViewRot; uniform vec3 uMoonV; uniform float uExposure; uniform float uTime;
     #define MAXF ${MAX_FLARES}
@@ -410,9 +410,9 @@ export const cellMat = new THREE.ShaderMaterial({
             }
           }
           // aerial perspective: far ground fades into a cool moonlit mist instead of black, so the
-          // planes of the landscape stack one behind the other
-          far = smoothstep(18.0, 95.0, dist);
-          mist = vec3(0.42, 0.5, 0.78);
+          // planes of the landscape stack one behind the other (thicker and more slate-teal in rain)
+          far = smoothstep(mix(18.0, 12.0, uRain), mix(95.0, 68.0, uRain), dist);
+          mist = mix(vec3(0.42, 0.5, 0.78), vec3(0.28, 0.54, 0.66), uRain);
           // grass and foliage do not get outlines (every blade would be one)
           if (grassRow || foliageRow && edgeK < 0.9 || light) edgeK = 0.0;
         }
@@ -429,7 +429,13 @@ export const cellMat = new THREE.ShaderMaterial({
         c = light ? mix(tint, vec3(1.0), 0.25) * (0.8 + 0.6 * l) : tint * (0.27 + 0.75 * l);
         c = mix(c, mix(tint, vec3(0.8, 1.0, 0.55), 0.2) * (0.5 + 0.85 * l), vividGrass);   // lit blades glow
         // the moon's side of every surface warms a touch, the shaded side cools: volume through colour too
-        c *= mix(vec3(0.85, 0.9, 1.1), vec3(1.06, 1.02, 0.95), smoothstep(0.25, 0.85, l));
+        vec3 dryTemp = mix(vec3(0.85, 0.9, 1.1), vec3(1.06, 1.02, 0.95), smoothstep(0.25, 0.85, l));
+        vec3 rainTemp = mix(vec3(0.68, 0.92, 1.08), vec3(0.82, 0.98, 1.06), smoothstep(0.25, 0.85, l));
+        c *= light ? dryTemp : mix(dryTemp, rainTemp, uRain);
+        if (!light && uRain > 0.001) {
+          float cl = luma(c);
+          c = mix(c, mix(vec3(cl), c, 0.78) * vec3(0.76, 0.96, 1.10), uRain);
+        }
         if (strokeOn > 0.5 && edgeK <= 0.5 && l > 0.14 && length(strokeDir) > 0.05) {
           row = uEdgeRow; idx = bin(vec2(-strokeDir.y, strokeDir.x));
         }
@@ -534,7 +540,7 @@ const postMat = new THREE.ShaderMaterial({
   uniforms: {
     tCells: { value: cellRT.texture }, tFont: { value: null }, tCellsA: { value: actorCellRT.texture }, tFontA: { value: null },
     tMask: { value: maskRT.texture }, uRes: { value: bufSize.clone() }, uN: { value: N },
-    tScene: { value: rt.texture }, uMode: cellMat.uniforms.uMode, uHit: cellMat.uniforms.uHit, uRim: { value: 1.15 * DPR }, uLight: cellMat.uniforms.uLight,
+    tScene: { value: rt.texture }, uMode: cellMat.uniforms.uMode, uHit: cellMat.uniforms.uHit, uRain: cellMat.uniforms.uRain, uRim: { value: 1.15 * DPR }, uLight: cellMat.uniforms.uLight,
     uCell: { value: new THREE.Vector2() }, uGlyph: { value: new THREE.Vector2() }, uGrid: { value: new THREE.Vector2() },
     uCellA: { value: new THREE.Vector2() }, uGlyphA: { value: new THREE.Vector2() }, uGridA: { value: new THREE.Vector2() },
     tGlow: { value: glowA.texture }, tGlowW: { value: wideA.texture }, uGlow: flareUniforms.uGlow,
@@ -545,7 +551,7 @@ const postMat = new THREE.ShaderMaterial({
     uniform sampler2D tCells; uniform sampler2D tFont; uniform sampler2D tCellsA; uniform sampler2D tFontA; uniform sampler2D tMask;
     uniform vec2 uRes; uniform float uN;
     uniform vec2 uCell; uniform vec2 uGlyph; uniform vec2 uGrid; uniform vec2 uCellA; uniform vec2 uGlyphA; uniform vec2 uGridA;
-    uniform sampler2D tScene; uniform float uMode; uniform float uHit; uniform float uRim; uniform vec2 uLight;
+    uniform sampler2D tScene; uniform float uMode; uniform float uHit; uniform float uRain; uniform float uRim; uniform vec2 uLight;
     uniform sampler2D tGlow; uniform sampler2D tGlowW; uniform float uGlow; uniform float uSurf;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
@@ -611,9 +617,13 @@ const postMat = new THREE.ShaderMaterial({
         col = max(mix(et, es, 0.25), actor);
         vec4 surface = texelFetch(tScene, ivec2(fc / uRes * vec2(textureSize(tScene, 0))), 0);
         if (abs(surface.a - ${CLS.grassBlade.toFixed(2)}) < 0.002) {
-          col = max(col, surfaceInk(grade(surface.rgb) * 0.70));
+          vec3 gcol = grade(surface.rgb) * 0.70;
+          if (uMode < 0.5 && uRain > 0.001) gcol = mix(gcol, mix(vec3(luma(gcol)), gcol, 0.80) * vec3(0.76, 0.96, 1.12), uRain);
+          col = max(col, surfaceInk(gcol));
         } else if (abs(surface.a - ${CLS.foliageLeaf.toFixed(2)}) < 0.002) {
-          col = max(col, surfaceInk(grade(surface.rgb) * 0.76));
+          vec3 fcol = grade(surface.rgb) * 0.76;
+          if (uMode < 0.5 && uRain > 0.001) fcol = mix(fcol, mix(vec3(luma(fcol)), fcol, 0.80) * vec3(0.76, 0.96, 1.12), uRain);
+          col = max(col, surfaceInk(fcol));
         }
         // dark contour just outside the silhouette
         // a wide dark moat round every figure, so its letters never merge with the ground's
@@ -628,13 +638,17 @@ const postMat = new THREE.ShaderMaterial({
         // deep dark halo on the shadow side, a lighter one where the moon hits (so the bright rim pops)
         col *= 1.0 - near * mix(0.95, 0.6, litSide);
       }
+      // rain ambient grade before lantern glow so warm lanterns pop against the cool wet night
+      if (uMode < 0.5 && uRain > 0.001) {
+        col *= mix(vec3(1.0), vec3(0.86, 0.98, 1.08), uRain);
+      }
       // glow: the cell grid overhangs the screen a little, so map through its own extent
       vec2 guv = fc / (uGrid * uCell);
       vec3 glow = (texture2D(tGlow, guv).rgb * 0.8 + texture2D(tGlowW, guv).rgb * 1.3) * uGlow;
       float ink = smoothstep(0.02, 0.3, max(col.r, max(col.g, col.b)));
       col += glow * (0.3 + 1.1 * ink);
       vec2 q = fc / uRes - 0.5;
-      float vig = 1.0 - dot(q, q) * 0.6;
+      float vig = 1.0 - dot(q, q) * (0.6 + 0.14 * uRain);
       gl_FragColor = vec4(col * vig, 1.0);
     }`
 });

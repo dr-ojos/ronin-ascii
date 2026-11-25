@@ -37,7 +37,7 @@ export const state = {
   // feel
   shake: 0, hitStop: 0, time: 0,
   // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes
-  raining: true, rainAmt: 1, rainT: 30 + Math.random() * 30,
+  raining: false, rainAmt: 0, rainT: 140 + Math.random() * 160,
   // toggles
   asciiOn: true, colorMode: 0, photo: false, bigMap: false
 };
