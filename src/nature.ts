@@ -192,10 +192,13 @@ function sprayMaterial(kind: Parameters<typeof canopyTexture>[0], height: number
   const map = canopyTexture(kind), alphaTest = kind === 'needles' ? 0.28 : 0.40;
   const material = new THREE.MeshStandardMaterial({ map, alphaTest, roughness: 0.97, side: THREE.DoubleSide });
   const depth = addWind(material, { height, amp, flutter });
+  depth.map = map;
+  depth.alphaTest = alphaTest;
   const compile = material.onBeforeCompile;
   const key = material.customProgramCacheKey();
-  const sunRough = kind === 'blossom' ? 0.44 : 0.52;
-  const translucency = kind === 'blossom' ? 0.58 : 0.44;
+  const isBush = kind === 'leaves';
+  const sunRough = kind === 'blossom' ? 0.44 : isBush ? 0.46 : 0.52;
+  const translucency = kind === 'blossom' ? 0.58 : isBush ? 0.52 : 0.44;
   material.onBeforeCompile = (sh, renderer) => {
     compile.call(material, sh, renderer);
     sh.uniforms.uDetailedSurfaces = detailedSurfaces;
@@ -203,7 +206,7 @@ function sprayMaterial(kind: Parameters<typeof canopyTexture>[0], height: number
     sh.fragmentShader = `uniform float uDetailedSurfaces;\nuniform vec3 uSunDir;\n` + sh.fragmentShader
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);')
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nif (uDetailedSurfaces > 0.5) roughnessFactor = ${sunRough.toFixed(2)};`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\ndiffuseColor.rgb *= ${gain.toFixed(2)};`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\ndiffuseColor.rgb *= ${gain.toFixed(2)};${isBush ? '\nif (uDetailedSurfaces > 0.5) diffuseColor.rgb *= vec3(0.62, 1.22, 0.72);' : ''}`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * (uDetailedSurfaces > 0.5 ? 0.04 : 0.10);')
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
       if (uDetailedSurfaces > 0.5) {
@@ -212,8 +215,16 @@ function sprayMaterial(kind: Parameters<typeof canopyTexture>[0], height: number
         float facingSun = smoothstep(-0.35, 0.75, dot(geometryNormal, sunV));
         float rim = pow(1.0 - abs(dot(geometryNormal, geometryViewDir)), 2.0);
         float backlit = pow(clamp(dot(geometryViewDir, -sunV), 0.0, 1.0), 2.6);
+        ${isBush ? `
+        // Volumetric light & deep emerald shadow contrast on bushes
+        reflectedLight.indirectDiffuse *= mix(0.64, 1.08, facingSun);
+        reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.05, 0.16, 0.11) * (1.0 - sunMask * 0.6);
+        reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.85, 0.92, 0.24) * (0.42 * facingSun * sunMask + ${translucency.toFixed(2)} * backlit * (0.28 + 0.72 * sunMask));
+        reflectedLight.directSpecular += vec3(1.0, 0.76, 0.30) * rim * (0.48 * facingSun * sunMask + 0.30 * backlit * sunMask);
+        ` : `
         reflectedLight.directDiffuse += diffuseColor.rgb * vec3(1.15, 0.54, 0.15) * (0.34 * sunMask + ${translucency.toFixed(2)} * backlit * (0.28 + 0.72 * sunMask));
         reflectedLight.directSpecular += vec3(1.0, 0.60, 0.22) * rim * (0.42 * facingSun * sunMask + 0.28 * backlit * sunMask);
+        `}
       }`);
   };
   material.customProgramCacheKey = () => `${key}|sprays:${kind}`;
@@ -238,6 +249,43 @@ const MAT = (() => {
     flower: addWind(flower, { height: 1.6, amp: 0.08, flutter: 0.015 }),
     wild: addWind(wild, { height: 0.8, amp: 0.32, flutter: 0.01 })
   };
+  // Directional crown light, cool interior shadow, and sunlit leaf rim on low shrubs in Mode T.
+  {
+    const prev = lowShrub.onBeforeCompile, key = lowShrub.customProgramCacheKey();
+    lowShrub.onBeforeCompile = (sh, renderer) => {
+      prev.call(lowShrub, sh, renderer);
+      sh.uniforms.uDetailedSurfaces = detailedSurfaces;
+      sh.uniforms.uSunDir = sunsetSunDir;
+      sh.vertexShader = 'varying vec3 vShrubOut; varying float vShrubH;\n' + sh.vertexShader
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vShrubH = clamp((position.y + 0.25) / 0.95, 0.0, 1.0);
+        vec3 sOut = normalize(vec3(position.x * 1.4, max(0.08, position.y + 0.28), position.z * 1.4));
+        #ifdef USE_INSTANCING
+          vShrubOut = normalize(mat3(modelMatrix) * (mat3(instanceMatrix) * sOut));
+        #else
+          vShrubOut = normalize(mat3(modelMatrix) * sOut);
+        #endif`);
+      sh.fragmentShader = 'uniform float uDetailedSurfaces; uniform vec3 uSunDir; varying vec3 vShrubOut; varying float vShrubH;\n' + sh.fragmentShader
+        .replace('#include <color_fragment>', `#include <color_fragment>
+        if (uDetailedSurfaces > 0.5) {
+          // Shift low shrubs slightly greener under warm sunset light and deepen inner base AO.
+          diffuseColor.rgb *= vec3(0.74, 1.08, 0.82) * mix(0.42, 1.12, smoothstep(0.05, 0.85, vShrubH));
+        }`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        if (uDetailedSurfaces > 0.5) {
+          vec3 crown = normalize(vShrubOut);
+          float sunDot = dot(crown, uSunDir);
+          float sunSide = smoothstep(-0.35, 0.65, sunDot);
+          float sunMask = smoothstep(0.02, 0.25, length(reflectedLight.directDiffuse));
+          // Deep shaded back/base vs bright warm sunlit crown
+          reflectedLight.directDiffuse *= mix(0.32, 1.32, sunSide);
+          reflectedLight.indirectDiffuse *= mix(0.55, 1.05, sunSide * 0.6 + vShrubH * 0.4);
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.04, 0.11, 0.09) * (1.0 - sunSide * sunMask);
+          reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.95, 0.78, 0.24) * sunSide * sunMask * (0.28 + 0.36 * vShrubH);
+        }`);
+    };
+    lowShrub.customProgramCacheKey = () => key + '|lowshrub-t';
+  }
   surfaceMaterial(bark, 'bark');
   surfaceMaterial(culm, 'bamboo');
   surfaceMaterial(leaf, 'leafBlade');
@@ -652,12 +700,17 @@ function buildGrass(scene: THREE.Scene) {
   const geo = grassTuft();
   const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
   mat.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, wind, terrainUniforms, { uMask: { value: grassMask() }, uDetailedSurfaces: detailedSurfaces });
+    Object.assign(sh.uniforms, wind, terrainUniforms, {
+      uMask: { value: grassMask() },
+      uDetailedSurfaces: detailedSurfaces,
+      uSunDir: sunsetSunDir
+    });
     sh.vertexShader = WIND_GLSL + `
       uniform vec2 uCenter; uniform vec4 uPush[8]; uniform sampler2D uMask; uniform float uDetailedSurfaces;
       attribute vec4 aGrassOffsets;
       varying vec3 vGrassTint;
       varying float vAcross;
+      varying float vTip;
       ${GRASS_KEEP}
       ${MEADOW_HEIGHT}
     ` + sh.vertexShader
@@ -668,19 +721,25 @@ function buildGrass(scene: THREE.Scene) {
         mat3 basis = mat3(instanceMatrix);
         vec2 root = tuft + (basis * vec3(aGrassOffsets.x, 0.0, aGrassOffsets.y)).xz;
         float meadow = wNoise(tuft * 0.23);
-        // Broad low clearings with smaller variations along their edges, fixed to the terrain.
-        float tall = meadowHeight(tuft, meadow);
-        float lengthScale = mix(0.34, 1.0, tall);
+        // Broad low clearings in ASCII; in Mode T, much more lush tall grass across the meadow.
+        float tall = uDetailedSurfaces > 0.5
+          ? smoothstep(0.18, 0.40, 0.80 * wNoise(tuft * 0.083 + vec2(4.8, -8.1)) + 0.20 * meadow)
+          : meadowHeight(tuft, meadow);
+        float lengthScale = uDetailedSurfaces > 0.5 ? mix(0.50, 1.38, tall) : mix(0.34, 1.0, tall);
         float stand = 0.74 * wNoise(tuft * 0.61 + 13.2) + 0.26 * meadow;
         float sage = smoothstep(0.67, 0.78, stand) * mix(0.32, 1.0, tall);
         float variation = wHash(root * 19.7);
         float tip = uv.y;
+        vTip = tip;
         // The pale stands have wider, straighter leaves and catch the light as one group.
         vec3 leaf = transformed * lengthScale;
         // Short leaves still have a readable width at the normal play camera distance.
-        leaf.xz += aGrassOffsets.zw * (0.58 * (1.0 - tall) + 1.8 * sage);
+        float widen = uDetailedSurfaces > 0.5
+          ? (0.45 + 0.55 * tall + 1.45 * sage)
+          : (0.58 * (1.0 - tall) + 1.8 * sage);
+        leaf.xz += aGrassOffsets.zw * widen;
         vec3 local = basis * leaf;
-        local.y *= (0.68 + 0.56 * meadow) * (1.0 + 0.28 * sage);
+        local.y *= (uDetailedSurfaces > 0.5 ? (0.76 + 0.58 * meadow) : (0.68 + 0.56 * meadow)) * (1.0 + 0.28 * sage);
         vec3 base = vec3(root.x, terrainH(root) - 0.13, root.y);
         vec3 windBend = windAt(base, tip, (0.18 + variation * 0.14) * (1.0 - sage * 0.20), 0.006 * tip);
         local += windBend * lengthScale;
@@ -695,10 +754,13 @@ function buildGrass(scene: THREE.Scene) {
         vec4 wPos = vec4(base + local * (grassKeep(root) * edge), 1.0);
         vAcross = uv.x;
         if (uDetailedSurfaces > 0.5) {
-          vec3 cool = mix(vec3(0.048, 0.118, 0.026), vec3(0.105, 0.215, 0.048), meadow);
-          cool = mix(cool, vec3(0.082, 0.178, 0.038), (1.0 - tall) * 0.35);
-          vGrassTint = mix(cool, vec3(0.195, 0.195, 0.058), sage);
-          vGrassTint *= (0.64 + 0.52 * variation) * (0.52 + 0.58 * tip);
+          // Rich emerald/meadow greens balanced for warm sunset sunlight (low red prevents muddy olive).
+          vec3 deep = vec3(0.016, 0.145, 0.036);
+          vec3 fresh = vec3(0.042, 0.265, 0.056);
+          vec3 cool = mix(deep, fresh, meadow);
+          cool = mix(cool, vec3(0.030, 0.220, 0.046), (1.0 - tall) * 0.30);
+          vGrassTint = mix(cool, vec3(0.095, 0.295, 0.048), sage * 0.85);
+          vGrassTint *= (0.68 + 0.48 * variation) * (0.48 + 0.66 * tip);
         } else {
           vec3 cool = mix(vec3(0.029, 0.044, 0.029), vec3(0.077, 0.101, 0.058), meadow);
           vGrassTint = mix(cool, vec3(0.182, 0.168, 0.055), sage);
@@ -707,13 +769,20 @@ function buildGrass(scene: THREE.Scene) {
         vec4 mvPosition = viewMatrix * wPos;
         gl_Position = projectionMatrix * mvPosition;`)
       .replace('#include <worldpos_vertex>', 'vec4 worldPosition = wPos;');
-    sh.fragmentShader = 'uniform float uDetailedSurfaces; varying vec3 vGrassTint; varying float vAcross;\n' + sh.fragmentShader
+    sh.fragmentShader = 'uniform float uDetailedSurfaces; uniform vec3 uSunDir; varying vec3 vGrassTint; varying float vAcross; varying float vTip;\n' + sh.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
         // A narrow folded face reads as a stroke even seen from above.
-        diffuseColor.rgb = vGrassTint * mix(0.78, 1.10, smoothstep(0.40, 0.65, vAcross));
-        float thinFade = uDetailedSurfaces > 0.5 ? 0.18 : 0.40;
+        diffuseColor.rgb = vGrassTint * mix(0.78, 1.12, smoothstep(0.40, 0.65, vAcross));
+        float thinFade = uDetailedSurfaces > 0.5 ? 0.12 : 0.40;
         diffuseColor.rgb *= 1.0 - thinFade * smoothstep(0.5, 1.8, fwidth(vAcross));`)
-      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        if (uDetailedSurfaces > 0.5) {
+          float sunMask = smoothstep(0.02, 0.22, length(reflectedLight.directDiffuse));
+          // Sunlit green-gold translucency on blade tips + cool emerald shadow fill at the base
+          reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.32, 0.72, 0.10) * vTip * sunMask;
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.05, 0.16, 0.10) * (1.0 - sunMask * 0.65);
+        }`);
   };
   mat.customProgramCacheKey = () => 'grass-tufts';
   tagMat(mat, CLS.grassBlade);
