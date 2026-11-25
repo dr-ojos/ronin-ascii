@@ -57,7 +57,8 @@ function stepQuality(d: number) {
 function rows(): MenuRow[] {
   const r: MenuRow[] = [
     { label: 'AJUSTES', head: true },
-    { label: 'Calidad gráfica', value: preset().name, cls: 'y', note: preset().note,
+    { label: 'Calidad gráfica', value: preset().name, cls: 'y',
+      note: state.asciiOn ? preset().note : 'en modo T siempre se usa Baja · esta calidad vuelve con el ASCII',
       left: () => stepQuality(-1), right: () => stepQuality(1), act: () => stepQuality(1) }
   ];
   for (const [head, keys] of SECTIONS) {

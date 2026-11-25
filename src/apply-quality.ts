@@ -1,12 +1,18 @@
 // Switches the graphics quality (quality.ts) while the game runs: pixel ratio, ASCII grid, shadow filter and size.
+// T mode (the plain 3D view) always runs at Baja; back in ASCII the quality the player chose returns.
 import * as THREE from 'three';
 import { renderer, scene, setDpr } from './renderer';
 import { resizeAscii } from './ascii';
 import { setMoonShadowMap } from './world';
-import { dprFor, QUALITY_PRESETS, storeQuality, type Quality } from './quality';
+import { dprFor, quality, QUALITY_PRESETS, storeQuality, type Quality } from './quality';
+import { state } from './state';
 
-export function setQuality(q: Quality) {
-  storeQuality(q);
+/** what the renderer runs right now (renderer.ts and world.ts start with the stored quality) */
+let applied: Quality = quality;
+export const effectiveQuality = (): Quality => state.asciiOn ? quality : 'baja';
+
+function apply(q: Quality) {
+  applied = q;
   const p = QUALITY_PRESETS[q];
   setDpr(dprFor(q));
   resizeAscii();   // the character grid and the ASCII pass's buffers follow the new pixel count
@@ -21,3 +27,9 @@ export function setQuality(q: Quality) {
   }
   renderer.shadowMap.needsUpdate = true;
 }
+
+/** every frame (main.ts): follows T mode on and off, and the H menu's choice */
+export function syncQuality() { const q = effectiveQuality(); if (q !== applied) apply(q); }
+
+/** the player's choice (H menu): kept for ASCII mode, applied now unless T mode holds Baja */
+export function setQuality(q: Quality) { storeQuality(q); syncQuality(); }
