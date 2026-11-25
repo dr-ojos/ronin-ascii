@@ -264,8 +264,8 @@ export const cellMat = new THREE.ShaderMaterial({
           c = mix(c, steel * (0.30 + 0.95 * sqrt(min(1.0, peak))), 0.86);
         }
         c = modeCol(c, al);
-      } else if (abs(surface.a - ${CLS.grassBlade.toFixed(2)}) < 0.002) {
-        // The final pass draws the leaf. A technique flare can still write its glyph here.
+      } else if (abs(surface.a - ${CLS.grassBlade.toFixed(2)}) < 0.002 || abs(surface.a - ${CLS.foliageLeaf.toFixed(2)}) < 0.002) {
+        // The final pass draws grass blades and tree/bush leaves directly. A technique flare can still write its glyph here.
         row = 0.0; idx = 0.0; c = vec3(0.0);
       } else {
         if (coverage / 6.0 > 0.35) { gl_FragColor = vec4(0.0); return; }
@@ -612,6 +612,8 @@ const postMat = new THREE.ShaderMaterial({
         vec4 surface = texelFetch(tScene, ivec2(fc / uRes * vec2(textureSize(tScene, 0))), 0);
         if (abs(surface.a - ${CLS.grassBlade.toFixed(2)}) < 0.002) {
           col = max(col, surfaceInk(grade(surface.rgb) * 0.70));
+        } else if (abs(surface.a - ${CLS.foliageLeaf.toFixed(2)}) < 0.002) {
+          col = max(col, surfaceInk(grade(surface.rgb) * 0.76));
         }
         // dark contour just outside the silhouette
         // a wide dark moat round every figure, so its letters never merge with the ground's

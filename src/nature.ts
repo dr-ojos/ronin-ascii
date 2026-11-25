@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tagMat, CLS, asciiGrid, FLOWER_GLYPHS } from './materials';
-import { addRoundedSurface, addSurfaceVariant, detailedSurfaces, showSurfaceDetail, surfaceMaterial } from './surfaces';
+import { addRoundedSurface, detailedSurfaces, showSurfaceDetail, surfaceMaterial } from './surfaces';
 import { bambooBlade, canopySprays, canopyTexture, grassTuft, lowShrubGeometry } from './vegetation-art';
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
 import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, seeded, treeBlocked } from './map';
@@ -202,17 +202,14 @@ function sprayMaterial(kind: Parameters<typeof canopyTexture>[0], height: number
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 0.10;');
   };
   material.customProgramCacheKey = () => `${key}|sprays:${kind}`;
-  return { material: tagMat(material, CLS.foliage), depth };
+  return { material: tagMat(material, CLS.foliageLeaf), depth };
 }
 
 const MAT = (() => {
   const bark = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, vertexColors: true });
-  const blossom = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, emissive: 0x2a0a18 });
-  const needle = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
   const petal = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, side: THREE.DoubleSide });
   const culm = new THREE.MeshStandardMaterial({ color: 0x5d8a35, roughness: 0.5 });
   const leaf = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, side: THREE.DoubleSide });
-  const bush = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
   const lowShrub = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   const flower = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, emissive: 0x181018 });
   const wild = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, emissive: 0x101010 });
@@ -221,10 +218,7 @@ const MAT = (() => {
   const depth = {
     bark: addWind(bark, { height: 12, amp: 0.25, flutter: 0 }),
     culm: addWind(culm, { height: 10, amp: 0.55, flutter: 0 }),
-    blossom: addWind(blossom, { height: 7, amp: 0.3, flutter: 0.03 }),
-    needle: addWind(needle, { height: 12, amp: 0.28, flutter: 0.012 }),
     leaf: addWind(leaf, { height: 10, amp: 0.55, flutter: 0.05 }),
-    bush: addWind(bush, { height: 1.6, amp: 0.08, flutter: 0.012 }),
     lowShrub: addWind(lowShrub, { height: 0.7, amp: 0.07, flutter: 0.003 }),
     flower: addWind(flower, { height: 1.6, amp: 0.08, flutter: 0.015 }),
     wild: addWind(wild, { height: 0.8, amp: 0.32, flutter: 0.01 })
@@ -233,11 +227,11 @@ const MAT = (() => {
   surfaceMaterial(culm, 'bamboo');
   surfaceMaterial(leaf, 'leafBlade');
   surfaceMaterial(rock, 'boulder', 'rounded');
-  tagMat(bark, CLS.wood); tagMat(culm, CLS.foliage); tagMat(blossom, CLS.foliage); tagMat(needle, CLS.foliage);
-  tagMat(leaf, CLS.foliage); tagMat(petal, CLS.foliage); tagMat(bush, CLS.foliage); tagMat(flower, CLS.light);
+  tagMat(bark, CLS.wood); tagMat(culm, CLS.foliage);
+  tagMat(leaf, CLS.foliageLeaf); tagMat(petal, CLS.foliageLeaf); tagMat(flower, CLS.light);
   tagMat(wild, CLS.light); tagMat(rock, CLS.ground);
-  tagMat(lowShrub, CLS.foliage);
-  return { bark, blossom, needle, petal, culm, leaf, bush, lowShrub, flower, wild, rock, depth };
+  tagMat(lowShrub, CLS.foliageLeaf);
+  return { bark, petal, culm, leaf, lowShrub, flower, wild, rock, depth };
 })();
 const SPRAYS = {
   blossoms: sprayMaterial('blossom', 7, 0.3, 0.03, 1.12),
@@ -246,13 +240,8 @@ const SPRAYS = {
 };
 // built once, shared by every tree in the world
 const GEO = (() => {
-  const leaf = new THREE.PlaneGeometry(0.06, 0.34); leaf.translate(0, -0.17, 0);
   return {
-    blob: jitter(new THREE.IcosahedronGeometry(0.2, 1), 0.03),
-    blobLite: jitter(new THREE.IcosahedronGeometry(0.22, 0), 0.03),
     petal: new THREE.PlaneGeometry(0.07, 0.05),
-    leaf,
-    bush: jitter(new THREE.IcosahedronGeometry(0.32, 1), 0.06),
     bloom: new THREE.IcosahedronGeometry(0.05, 0),
     wild: new THREE.IcosahedronGeometry(0.04, 0),
     flowerSpray: canopySprays(0.26),
@@ -274,10 +263,9 @@ export interface KitOpts {
 export interface KitMesh { mesh: THREE.Mesh; blocker: boolean }
 export function createKit(o: KitOpts) {
   const q = o.lite ? 0.55 : 1, qs = o.lite ? 1.22 : 1, cnt = (n: number) => Math.max(1, Math.round(n * q));
-  const blob = o.lite ? GEO.blobLite : GEO.blob;
   const bark: THREE.BufferGeometry[] = [], culms: THREE.BufferGeometry[] = [], rockGeos: THREE.BufferGeometry[] = [];
-  const blossoms = new Batch(blob, MAT.blossom), needles = new Batch(blob, MAT.needle), petals = new Batch(GEO.petal, MAT.petal);
-  const leaves = new Batch(GEO.leaf, MAT.leaf), bushes = new Batch(GEO.bush, MAT.bush), blooms = new Batch(GEO.bloom, MAT.flower), wild = new Batch(GEO.wild, MAT.wild);
+  const blossoms = new Batch(GEO.flowerSpray, SPRAYS.blossoms.material), needles = new Batch(GEO.needleSpray, SPRAYS.needles.material), petals = new Batch(GEO.petal, MAT.petal);
+  const leaves = new Batch(GEO.bambooBlade, MAT.leaf), bushes = new Batch(GEO.shrubSpray, SPRAYS.bushes.material), blooms = new Batch(GEO.bloom, MAT.flower), wild = new Batch(GEO.wild, MAT.wild);
   const lowShrubs = new Batch(GEO.lowShrub, MAT.lowShrub);
   const petalSources: THREE.Vector3[] = [];   // canopy points that shed falling petals
   let gy = 0;   // ground height under the tree being grown
@@ -471,19 +459,14 @@ export function createKit(o: KitOpts) {
       put(mesh, depth, blocker, shadow);
       return mesh;
     };
-    const spray = (b: Batch, depth: THREE.Material, geometry: THREE.BufferGeometry, detailed: typeof SPRAYS.blossoms, blocker: boolean) => {
-      const mesh = inst(b, depth, blocker);
-      if (mesh) addSurfaceVariant(mesh, geometry, detailed.material, detailed.depth);
-    };
     merged(rockGeos, MAT.rock, null, false);
     merged(bark, MAT.bark, MAT.depth.bark, true);
     merged(culms, MAT.culm, MAT.depth.culm, true);
-    spray(blossoms, MAT.depth.blossom, GEO.flowerSpray, SPRAYS.blossoms, true);
-    spray(needles, MAT.depth.needle, GEO.needleSpray, SPRAYS.needles, true);
-    const bamboo = inst(leaves, MAT.depth.leaf, false);
-    if (bamboo) addRoundedSurface(bamboo, GEO.bambooBlade);
+    inst(blossoms, SPRAYS.blossoms.depth, true);
+    inst(needles, SPRAYS.needles.depth, true);
+    inst(leaves, MAT.depth.leaf, false);
     inst(petals, null, false, false);
-    spray(bushes, MAT.depth.bush, GEO.shrubSpray, SPRAYS.bushes, false);
+    inst(bushes, SPRAYS.bushes.depth, false);
     inst(lowShrubs, MAT.depth.lowShrub, false);
     inst(blooms, MAT.depth.flower, false, false);
     inst(wild, MAT.depth.wild, false, false);
