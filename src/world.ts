@@ -5,6 +5,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { renderer, scene } from './renderer';
 import { M, CLS, tagMat, tagTree, shadowTree, box } from './materials';
 import { buildNature } from './nature';
+import { preset } from './quality';
 import { addCollider, isFree } from './physics';
 import { addLight, updateLights } from './lights';
 import { buildTerrainMesh, buildSkyline } from './terrain';
@@ -33,9 +34,16 @@ export const rimLight = new THREE.DirectionalLight(0x9fc0ff, 3.0);
 scene.add(rimLight, rimLight.target);
 moonLight.position.copy(moonDir).multiplyScalar(50);
 moonLight.castShadow = true;
-// tighter frustum around the player = sharper shadows with the same 4096 map
-const SHADOW_HALF = 24, SHADOW_MAP = 4096, SHADOW_TEXEL = (SHADOW_HALF * 2) / SHADOW_MAP;
-moonLight.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+// tighter frustum around the player = sharper shadows with the same map (4096 at high quality, quality.ts)
+const SHADOW_HALF = 24;
+let SHADOW_TEXEL = 1;
+/** the moon's shadow map side; the old map is dropped and three.js builds the new one on the next frame */
+export function setMoonShadowMap(size: number) {
+  moonLight.shadow.mapSize.set(size, size);
+  moonLight.shadow.map?.dispose(); moonLight.shadow.map = null;
+  SHADOW_TEXEL = (SHADOW_HALF * 2) / size;
+}
+setMoonShadowMap(preset().shadowMap);
 Object.assign(moonLight.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF, top: SHADOW_HALF, bottom: -SHADOW_HALF, near: 1, far: 110 });
 moonLight.shadow.bias = -0.0003; moonLight.shadow.normalBias = 0.025;
 scene.add(moonLight, moonLight.target);

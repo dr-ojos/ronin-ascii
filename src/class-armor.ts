@@ -748,25 +748,25 @@ function buildForearmVambrace(
   tier: number
 ): THREE.Group {
   const g = new THREE.Group();
-  const h = len * 0.66;
-  // tapered sleeve guard hugging the forearm
-  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.044, h, 14, 1, true), armorMat);
+  const h = len * 0.72;
+  // tapered sleeve guard hugging cleanly outside the mocap forearm sleeve
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.053, h, 16, 1, true), armorMat);
   g.add(sleeve);
   // raised dorsal splint plate along the outer forearm
-  const splint = new THREE.Mesh(new THREE.CylinderGeometry(0.060, 0.048, h * 0.86, 10, 1, true, -0.75, 1.5), lacquerMat);
+  const splint = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.057, h * 0.88, 12, 1, true, -0.85, 1.7), lacquerMat);
   g.add(splint);
   // gilded wrist & elbow cuffs
-  for (const [y, r, thick] of [[h * 0.48, 0.057, 0.0045], [-h * 0.48, 0.045, 0.005]] as const) {
-    const cuff = new THREE.Mesh(new THREE.TorusGeometry(r, thick, 6, 20), metalMat);
+  for (const [y, r, thick] of [[h * 0.48, 0.069, 0.005], [-h * 0.48, 0.054, 0.0055]] as const) {
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(r, thick, 6, 22), metalMat);
     cuff.rotation.x = Math.PI / 2; cuff.position.y = y; g.add(cuff);
   }
   // silk binding band mid-forearm
-  const bind = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.004, 5, 18), laceMat);
+  const bind = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.0045, 5, 20), laceMat);
   bind.rotation.x = Math.PI / 2; g.add(bind);
   if (tier >= 2.2) {
     // gilded ridge strip along dorsal splint
-    const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.008, h * 0.8, 0.008), metalMat);
-    ridge.position.set(0, 0, 0.054);
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.009, h * 0.82, 0.009), metalMat);
+    ridge.position.set(0, 0, 0.066);
     g.add(ridge);
   }
   return g;
@@ -783,28 +783,28 @@ function buildContouredGreave(
   laceMat: THREE.Material
 ): THREE.Group {
   const g = new THREE.Group();
-  const h = len * 0.64;
-  // main contoured shin plate
-  const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.056, h, 14, 1, true, -1.35, 2.7), armorMat);
+  const h = len * 0.66;
+  // main contoured shin plate sized cleanly outside the baggy hakama/baji trousers
+  const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.069, h, 16, 1, true, -1.4, 2.8), armorMat);
   g.add(shin);
   // central protective vertical ridge + side splints
-  for (const [ang, w] of [[0, 0.015], [-0.72, 0.011], [0.72, 0.011]] as const) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.94, 0.009), ang === 0 ? metalMat : lacquerMat);
-    s.position.set(Math.sin(ang) * 0.066, 0, Math.cos(ang) * 0.066);
+  for (const [ang, w] of [[0, 0.016], [-0.75, 0.012], [0.75, 0.012]] as const) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.94, 0.010), ang === 0 ? metalMat : lacquerMat);
+    s.position.set(Math.sin(ang) * 0.081, 0, Math.cos(ang) * 0.081);
     s.rotation.y = ang;
     g.add(s);
   }
   // sculpted domed kneecap above the shin guard
-  const knee = new THREE.Mesh(new THREE.SphereGeometry(0.052, 14, 10, -Math.PI * 0.45, Math.PI * 0.9, Math.PI * 0.2, Math.PI * 0.65), lacquerMat);
-  knee.scale.set(1.0, 1.15, 0.85);
-  knee.position.set(0, h * 0.56, 0.024);
+  const knee = new THREE.Mesh(new THREE.SphereGeometry(0.060, 14, 10, -Math.PI * 0.45, Math.PI * 0.9, Math.PI * 0.2, Math.PI * 0.65), lacquerMat);
+  knee.scale.set(1.02, 1.15, 0.88);
+  knee.position.set(0, h * 0.56, 0.036);
   g.add(knee);
-  const kneeRim = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.0045, 6, 18), metalMat);
-  kneeRim.position.set(0, h * 0.56, 0.056);
+  const kneeRim = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.005, 6, 18), metalMat);
+  kneeRim.position.set(0, h * 0.56, 0.070);
   g.add(kneeRim);
   // lacing cords top & bottom
-  for (const [y, r] of [[h * 0.46, 0.073], [-h * 0.46, 0.058]] as const) {
-    g.add(ellipseArcTube(r, r, y, -1.35, 2.7, 0.0055, laceMat, 16));
+  for (const [y, r] of [[h * 0.46, 0.089], [-h * 0.46, 0.071]] as const) {
+    g.add(ellipseArcTube(r, r, y, -1.4, 2.8, 0.006, laceMat, 16));
   }
   return g;
 }
@@ -1147,7 +1147,7 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
     }
 
     const sk = new THREE.Group();
-    sk.scale.z = rzScale;
+    sk.scale.z = 0.86;
     sk.position.y = 0.008 - h * 0.5;
     g.add(sk);
 
@@ -1162,13 +1162,13 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
       const n = 6, span = (TAU / n) * 0.88;
       for (let i = 0; i < n; i++) {
         const th = i * (TAU / n) - span * 0.5;
-        sk.add(buildTassetPanel(R * 1.01, R * 1.15, h, th, span, 0.012, patterned(1.6, 1.0)));
-        sk.add(ellipseArcTube(R * 1.155, R * 1.155, -h * 0.5, th, span, 0.0042, metal, 12));
+        sk.add(buildTassetPanel(R * 1.03, R * 1.24, h, th, span, 0.012, patterned(1.6, 1.0)));
+        sk.add(ellipseArcTube(R * 1.245, R * 1.245, -h * 0.5, th, span, 0.0042, metal, 12));
       }
       // Brocade front apron panel over center tasset
       const kesaMat = silk(new THREE.Color(l.lace).lerp(new THREE.Color(l.metal), 0.22).getHex(), brocadeKesaTex, 0.65, 1.1);
-      sk.add(buildTassetPanel(R * 1.03, R * 1.17, h * 1.12, -0.34, 0.68, 0.03, kesaMat));
-      sk.add(ellipseArcTube(R * 1.175, R * 1.175, -h * 0.56, -0.34, 0.68, 0.0045, metal, 12));
+      sk.add(buildTassetPanel(R * 1.05, R * 1.26, h * 1.12, -0.34, 0.68, 0.03, kesaMat));
+      sk.add(ellipseArcTube(R * 1.265, R * 1.265, -h * 0.56, -0.34, 0.68, 0.0045, metal, 12));
 
     } else if (cls === 'xia') {
       // Ornate imperial belt buckle (daikou) + hanging jade bi disc & crimson tassel
@@ -1204,10 +1204,10 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
       ];
       for (const [th0, sp, ph, drop] of panels) {
         const panelMat = patterned(1.5, 1.1);
-        const p = buildTassetPanel(R * 1.01, R * 1.18, ph, th0, sp, drop, panelMat);
+        const p = buildTassetPanel(R * 1.03, R * 1.25, ph, th0, sp, drop, panelMat);
         p.position.y = (h - ph) * 0.5;
         sk.add(p);
-        sk.add(ellipseArcTube(R * 1.185, R * 1.185, -ph + h * 0.5, th0, sp, 0.0042, metal, 12));
+        sk.add(ellipseArcTube(R * 1.255, R * 1.255, -ph + h * 0.5, th0, sp, 0.0042, metal, 12));
       }
 
     } else {
@@ -1224,10 +1224,10 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
       for (let i = 0; i < n; i++) {
         const th = i * (TAU / n) + 0.04;
         const ph = (i === 0 || i === 5) ? h * 1.08 : h * 1.02;
-        const p = buildTassetPanel(R * 1.01, R * 1.17, ph, th, span, 0.034, patterned(1.4, 1.05));
+        const p = buildTassetPanel(R * 1.03, R * 1.25, ph, th, span, 0.034, patterned(1.4, 1.05));
         p.position.y = (h - ph) * 0.5;
         sk.add(p);
-        sk.add(ellipseArcTube(R * 1.175, R * 1.175, -ph + h * 0.5, th, span, 0.0045, metal, 12));
+        sk.add(ellipseArcTube(R * 1.255, R * 1.255, -ph + h * 0.5, th, span, 0.0045, metal, 12));
       }
     }
 

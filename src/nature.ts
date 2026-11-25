@@ -467,7 +467,7 @@ export function createKit(o: KitOpts) {
     inst(leaves, MAT.depth.leaf, false);
     inst(petals, null, false, false);
     inst(bushes, SPRAYS.bushes.depth, false);
-    inst(lowShrubs, MAT.depth.lowShrub, false);
+    inst(lowShrubs, null, false, false);
     inst(blooms, MAT.depth.flower, false, false);
     inst(wild, MAT.depth.wild, false, false);
     return out;

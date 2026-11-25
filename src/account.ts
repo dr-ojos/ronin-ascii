@@ -16,16 +16,23 @@ import { saveProgress } from './progression';
 import { holdVault, mergeVaults, parseVault, saveVault, VAULT_PREFIX } from './vault';
 import { holdFog, MAP_KEY, mergeFogs } from './map-memory';
 import { saveMinimap, FOG_CELLS } from './minimap';
-import { closeMenu, menuStatus, openMenu, render as renderMenu, type MenuRow } from './menu';
-import { overlay } from './hud';
 
 const PREFIX = 'ronin-ascii.';
 type Saves = Record<string, string>;
 interface Cloud { auth: Auth; db: Firestore; fa: typeof import('firebase/auth'); fs: typeof import('firebase/firestore') }
 let cloud: Cloud | null = null;
 
-const account = { user: null as User | null, synced: false, busy: false, savedAt: 0, failed: '' };
-const form = { email: '', password: '' };
+const account = { user: null as User | null, ready: false, synced: false, savedAt: 0, failed: '' };
+const listeners = new Set<() => void>();
+/** the title screen (title.ts) redraws on every change: signed in or out, synced, saved, failed */
+export function onAccount(fn: () => void) { listeners.add(fn); fn(); }
+function refresh() { for (const fn of listeners) fn(); }
+export const accountEnabled = cloudEnabled;
+/** ready: Firebase has said whether someone is signed in (at once without a project) */
+export const accountView = () => ({
+  ready: account.ready || !cloudEnabled(), synced: account.synced, savedAt: account.savedAt, failed: account.failed,
+  user: account.user ? { email: account.user.email ?? '', name: account.user.displayName ?? '' } : null
+});
 
 // ------------------------------------------------------------ the save, as plain keys
 function readLocal(): Saves {
@@ -113,12 +120,12 @@ async function boot() {
   const fbApp = app.initializeApp(firebaseConfig);
   cloud = { auth: fa.getAuth(fbApp), db: fs.getFirestore(fbApp), fa, fs };
   fa.onAuthStateChanged(cloud.auth, user => {
-    account.user = user; account.synced = false; lastPushed = '';
+    account.user = user; account.ready = true; account.synced = false; lastPushed = '';
     if (user) pull(user).catch(e => { account.failed = errorText(e); refresh(); });
     refresh();
   });
 }
-if (cloudEnabled()) boot().catch(e => { account.failed = errorText(e); refresh(); });
+if (cloudEnabled()) boot().catch(e => { account.failed = errorText(e); account.ready = true; refresh(); });
 
 // ------------------------------------------------------------ messages
 function errorText(e: unknown): string {
@@ -138,7 +145,8 @@ function errorText(e: unknown): string {
     'auth/operation-not-allowed': 'Este modo de entrar no está activado en Firebase.',
     'auth/unauthorized-domain': 'Este dominio no está autorizado en Firebase.',
     'permission-denied': 'Firestore ha rechazado el guardado (revisa firestore.rules).',
-    'unavailable': 'Sin conexión con la nube. Se guardará más tarde.'
+    'unavailable': 'Sin conexión con la nube. Se guardará más tarde.',
+    'loading': 'La cuenta aún se está cargando. Prueba en un momento.'
   };
   return known[code] ?? `Error${code ? ` (${code})` : ''}.`;
 }
@@ -147,67 +155,15 @@ const ago = (t: number) => {
   return s < 60 ? 'hace un momento' : s < 3600 ? `hace ${Math.round(s / 60)} min` : `hace ${Math.round(s / 3600)} h`;
 };
 
-// ------------------------------------------------------------ the menu
-async function attempt(fn: (c: Cloud) => Promise<unknown>, done?: string) {
-  if (!cloud) return menuStatus('La cuenta aún se está cargando.');
-  if (account.busy) return;
-  account.busy = true; menuStatus('…');
-  try { await fn(cloud); if (done) menuStatus(done); form.password = ''; }
-  catch (e) { menuStatus(errorText(e)); }
-  finally { account.busy = false; refresh(); }
+// ------------------------------------------------------------ what the title screen calls
+async function withCloud(fn: (c: Cloud) => Promise<unknown>) {
+  if (!cloud) throw { code: 'loading' };
+  await fn(cloud);
 }
-const needEmail = () => { if (!form.email.trim()) { menuStatus('Escribe tu email.'); return false; } return true; };
-
-function rows(): MenuRow[] {
-  const back: MenuRow = { label: 'Volver', act: closeMenu };
-  if (!cloudEnabled()) return [
-    { label: 'Cuentas sin configurar', note: 'falta el proyecto de Firebase en src/firebase-config.ts · el progreso se guarda en este navegador' },
-    back
-  ];
-  const u = account.user;
-  if (u) return [
-    { label: u.email || u.displayName || 'Cuenta', head: true },
-    { label: 'Guardar ahora', value: account.synced ? (account.savedAt ? `guardado ${ago(account.savedAt)}` : 'listo') : 'sincronizando…', cls: account.synced ? 'b' : 'd',
-      note: account.failed || 'nivel, atributos, armas, armaduras, técnicas, aspecto y récord se guardan solos',
-      act: () => void attempt(() => push(true), 'Guardado en la nube.') },
-    { label: 'Cerrar sesión', note: 'el progreso sigue también en este navegador',
-      act: () => void attempt(async c => { await push(true).catch(() => {}); await c.fa.signOut(c.auth); }, 'Sesión cerrada.') },
-    back
-  ];
-  return [
-    { label: 'Email', input: { value: form.email, max: 80, set(v) { form.email = v; } } },
-    { label: 'Contraseña', input: { value: form.password, max: 64, secret: true, set(v) { form.password = v; } } },
-    { label: 'Entrar', act: () => { if (needEmail()) void attempt(c => c.fa.signInWithEmailAndPassword(c.auth, form.email.trim(), form.password)); } },
-    { label: 'Crear cuenta', note: 'tu progreso de este navegador pasa a la cuenta',
-      act: () => { if (needEmail()) void attempt(c => c.fa.createUserWithEmailAndPassword(c.auth, form.email.trim(), form.password), 'Cuenta creada.'); } },
-    { label: 'Entrar con Google', act: () => void attempt(c => c.fa.signInWithPopup(c.auth, new c.fa.GoogleAuthProvider())) },
-    { label: 'He olvidado la contraseña', note: 'te llega un email para cambiarla',
-      act: () => { if (needEmail()) void attempt(c => c.fa.sendPasswordResetEmail(c.auth, form.email.trim()), 'Mira tu correo.'); } },
-    back
-  ];
-}
-
-const button = document.getElementById('account-btn')!;
-function refresh() {
-  const u = account.user;
-  button.textContent = u ? `[ cuenta · ${u.email || u.displayName || 'conectado'} ]` : '[ cuenta · guardar progreso ]';
-  if (state.menu === 'account') renderMenu();
-}
-// without a project the button only shows while developing, to say what is missing
-button.hidden = !cloudEnabled() && !import.meta.env.DEV;
-refresh();
-
-export function openAccount(back?: () => void) {
-  openMenu({
-    id: 'account', title: '— CUENTA —',
-    sub: () => account.user ? 'tu progreso viaja contigo' : 'entra para guardar tu progreso y lo que ganes',
-    rows, foot: '↑ ↓ elegir · ENTER aceptar · ESC volver',
-    onClose: back
-  }, account.user ? 1 : 0);
-}
-button.addEventListener('click', e => {
-  e.stopPropagation();                              // a click on the overlay itself starts the run
-  if (state.menu) return;
-  overlay.style.display = 'none';
-  openAccount(() => { overlay.style.display = 'flex'; });
-});
+export const signInGoogle = () => withCloud(c => c.fa.signInWithPopup(c.auth, new c.fa.GoogleAuthProvider()));
+export const signInEmail = (email: string, password: string) => withCloud(c => c.fa.signInWithEmailAndPassword(c.auth, email.trim(), password));
+export const signUpEmail = (email: string, password: string) => withCloud(c => c.fa.createUserWithEmailAndPassword(c.auth, email.trim(), password));
+export const resetPassword = (email: string) => withCloud(c => c.fa.sendPasswordResetEmail(c.auth, email.trim()));
+export const signOutAccount = () => withCloud(async c => { await push(true).catch(() => {}); await c.fa.signOut(c.auth); });
+export const saveNow = () => push(true);
+export { errorText as accountError, ago };

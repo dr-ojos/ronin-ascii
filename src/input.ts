@@ -22,10 +22,18 @@ import { state, keys } from './state';
 import { resetMinimap, zoomBigMap } from './minimap';
 import { toggleLevelMenu } from './level-menu';
 import { startRun } from './progression';
+import { toggleInfo } from './info';
 
 /** camera heading when photo mode was switched on */
 let photoYaw = 0;
 addEventListener('keydown', e => {
+  // the title screen's fields and buttons keep their keys (typing an email must not mute the sound)
+  if (!state.menu && (e.target as HTMLElement | null)?.closest?.('#overlay')) return;
+  if (e.code === 'KeyH' && !e.metaKey && !e.ctrlKey && !e.altKey && (!state.menu || state.menu === 'info')) {
+    if (!e.repeat && (state.menu === 'info' || (state.playing && !state.dead))) toggleInfo();
+    e.preventDefault();
+    return;
+  }
   if (e.code === 'KeyI' && !e.metaKey && !e.ctrlKey && !e.altKey && (!state.menu || state.menu === 'inventory')) {
     if (!e.repeat) toggleInventory(document.activeElement === inventoryButton);
     e.preventDefault();
@@ -85,9 +93,12 @@ addEventListener('wheel', e => {
   if (state.photo) state.photoDist = THREE.MathUtils.clamp(state.photoDist + e.deltaY * 0.01, 2, 40);
   else state.camDistUser = THREE.MathUtils.clamp(state.camDistUser + e.deltaY * 0.01, 3, 34);
 }, { passive: true });
-overlay.addEventListener('click', () => {
+/** the title screen's start button (title.ts) */
+export function startGame() {
+  (document.activeElement as HTMLElement | null)?.blur?.();   // the keys go back to the game, not the hidden button
   sfx.init(); overlay.style.display = 'none';
   if (state.dead || !state.playing) { reset(); resetMinimap(); resetWeapons(); resetArmor(); dressUp(); startRun(); }
   state.playing = true;
-});
+}
+document.getElementById('go')!.addEventListener('click', startGame);
 

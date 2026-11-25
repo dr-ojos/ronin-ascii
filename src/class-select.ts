@@ -1,4 +1,4 @@
-// The class picker on the title (and death) screen: ronin or sōhei. Picking one re-arms and re-dresses the
+// The class picker on the title (and death) screen: one card per class. Picking one re-arms and re-dresses the
 // avatar at once, so the figure behind the title shows who you are about to play; the run itself starts
 // with the usual reset (input.ts).
 import { CLASSES, CLASS_IDS, cls, storeClass, type ClassId } from './classes';
@@ -13,17 +13,23 @@ import { baseHp, level, loadProgress, xpFrac } from './progression';
 
 const pick = document.getElementById('class-pick')!;
 const desc = document.getElementById('class-desc')!;
-const startTech = document.getElementById('start-tech');
 const customBtn = document.getElementById('custom-btn')!;
+
+/** the level each class has reached (progression.ts keeps one profile per class) */
+function classLevel(id: ClassId) {
+  if (id === state.cls) return level();
+  try { return Math.max(1, Math.floor(Number(JSON.parse(localStorage.getItem(`ronin-ascii.progress.${id}`) || 'null')?.level) || 1)); } catch { return 1; }
+}
 
 function render() {
   pick.innerHTML = CLASS_IDS.map(id => {
     const c = CLASSES[id], on = id === state.cls;
-    return `<span class="cls${on ? ' on' : ''}" data-cls="${id}" role="radio" aria-checked="${on}" tabindex="0">[ ${c.kanji} ${c.name} ]</span>`;
+    return `<button type="button" class="cls${on ? ' on' : ''}" data-cls="${id}" role="radio" aria-checked="${on}">` +
+      `<span class="kj" aria-hidden="true">${c.kanji}</span><span class="nm">${c.name}</span><span class="lv">nivel ${classLevel(id)}</span></button>`;
   }).join('');
-  desc.innerHTML = `${cls().desc}<br><span style="color:#ffd27a">nivel ${level()}</span> <span style="color:#6c7488">· ${Math.floor(xpFrac() * 100)} % al siguiente</span>`;
-  if (startTech) startTech.innerHTML = `empiezas con <b>${TECHNIQUES[cls().technique].name}</b>`;
-  customBtn.textContent = `[ personalizar ${cls().name.toLowerCase()} ]`;
+  desc.innerHTML = `${cls().desc}<br><span style="color:#ffd27a">nivel ${level()}</span> <span style="color:#6c7488">· ${Math.floor(xpFrac() * 100)} % al siguiente · empiezas con <b style="color:#e8e3d3">${TECHNIQUES[cls().technique].name}</b></span>`;
+  customBtn.textContent = `personalizar ${cls().name.toLowerCase()}`;
+  dispatchEvent(new Event('ronin:class'));   // title.ts names the warrior beside the figure
 }
 
 /** arm and dress the avatar as the stored class (on load, and after a pick) */
@@ -46,15 +52,11 @@ export function chooseClass(id: ClassId) {
 }
 
 pick.addEventListener('click', e => {
-  e.stopPropagation();                           // a click on the overlay itself starts the run
   const id = (e.target as HTMLElement).closest<HTMLElement>('[data-cls]')?.dataset.cls;
-  if (id && id in CLASSES) chooseClass(id as ClassId);
+  if (!id || !(id in CLASSES)) return;
+  chooseClass(id as ClassId);
+  pick.querySelector<HTMLElement>('.on')?.focus();   // the cards are drawn again: keep the keyboard on the chosen one
 });
-pick.addEventListener('keydown', e => {
-  const id = (e.target as HTMLElement).dataset?.cls;
-  if ((e.key === 'Enter' || e.key === ' ') && id && id in CLASSES) { e.preventDefault(); e.stopPropagation(); chooseClass(id as ClassId); }
-});
-
 outfitClass();
 // the death screen shows again: the level may have grown during the run
 addEventListener('ronin:overlay', render);

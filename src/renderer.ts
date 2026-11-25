@@ -1,14 +1,17 @@
 // WebGL renderer, main scene and camera.
 import * as THREE from 'three';
+import { dprFor, preset, quality } from './quality';
 
 export const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-export const DPR = Math.min(window.devicePixelRatio || 1, 2);
+/** screen pixels per CSS pixel, capped by the graphics quality (quality.ts); changes live via setDpr */
+export let DPR = dprFor(quality);
 renderer.setPixelRatio(DPR);
+export function setDpr(d: number) { DPR = d; renderer.setPixelRatio(d); renderer.setSize(innerWidth, innerHeight); }
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;   // only affects the "T" (no ASCII) view; the ASCII pass grades itself
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = preset().shadowType;
 document.body.prepend(renderer.domElement);
 export const canvas = renderer.domElement;
 

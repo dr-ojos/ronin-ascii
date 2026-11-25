@@ -3,8 +3,8 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 
-const go = document.getElementById('go')!;
-go.textContent = '[ cargando personajes... ]';
+const go = document.getElementById('go') as HTMLButtonElement;
+go.textContent = 'CARGANDO PERSONAJES…'; go.disabled = true;
 let gltf: GLTF | null = null;
 // the realistic head: a 3D scan by Lee Perry-Smith (CC BY 3.0), see real-head.ts
 let head: { geo: THREE.BufferGeometry; map: THREE.Texture; normal: THREE.Texture } | null = null;
@@ -24,7 +24,7 @@ if (scan.status === 'fulfilled') {
   const mesh = g.scene.getObjectByName('LeePerrySmith') as THREE.Mesh | undefined;
   if (mesh) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; head = { geo: mesh.geometry, map, normal }; }
 } else console.warn('No se pudo cargar la cabeza escaneada', scan.reason);
-go.textContent = '[ clic para desenvainar ]';
+go.textContent = '▶ INICIAR JUEGO'; go.disabled = false;
 
 /** null when the model failed to load: the procedural samurai / oni are used instead */
 export const rigGltf = gltf;

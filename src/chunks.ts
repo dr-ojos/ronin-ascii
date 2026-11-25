@@ -8,7 +8,7 @@ import { removeSurfaceVariant } from './surfaces';
 import { addCollider, removeColliders, isFree } from './physics';
 import { biomeAt, treeBlocked, groundAt, seeded, rockZone, hillsAt, WORLD_R, HALF } from './map';
 
-const CH = 48, LOAD = 150, UNLOAD = 240, DRAW = 140, CLEARING = 56;
+const CH = 48, LOAD = 120, UNLOAD = 170, DRAW = 115, CLEARING = 56;
 interface Chunk { i: number; j: number; cx: number; cz: number; group: THREE.Group; meshes: KitMesh[]; owner: object }
 const chunks = new Map<number, Chunk>();
 const ckey = (i: number, j: number) => (i + 512) * 1024 + (j + 512);

@@ -10,4 +10,8 @@ export const firebaseConfig = {
   messagingSenderId: '1097813750264',
   appId: '1:1097813750264:web:3225e07372ba3e7b2c260d'
 };
-export const cloudEnabled = () => !!firebaseConfig.apiKey && !!firebaseConfig.projectId;
+/** for now accounts are off on local servers (npm run dev, vite preview): the title screen goes straight to the
+ *  warriors and Firebase is never loaded. Set it to false to try accounts locally. */
+const LOCAL_WITHOUT_ACCOUNTS = true;
+const local = import.meta.env.DEV || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+export const cloudEnabled = () => !!firebaseConfig.apiKey && !!firebaseConfig.projectId && !(LOCAL_WITHOUT_ACCOUNTS && local);

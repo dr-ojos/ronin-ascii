@@ -82,6 +82,6 @@ export function showDeathScreen() {
   const record = state.score > 0 && state.score >= state.best ? ' · ¡ nuevo récord !' : ` · récord ${state.best}`;
   dispatchEvent(new Event('ronin:overlay'));   // class-select.ts refreshes the level under the class
   overlay.querySelector('.sub')!.textContent = `nivel ${level()} · ${state.score} puntos · ${state.kills} bajas · ${state.campsCleared} guaridas · ${state.chests} cofres · ${discovered.size} lugares${record}`;
-  document.getElementById('go')!.textContent = '[ clic para volver a empezar ]';
+  document.getElementById('go')!.textContent = '▶ VOLVER A EMPEZAR';
   overlay.style.display = 'flex';
 }

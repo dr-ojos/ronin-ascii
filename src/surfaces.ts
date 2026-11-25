@@ -110,8 +110,7 @@ const cloth = /* glsl */`
   relief = weave.g * 0.46 + weave.b * 0.26;
 `;
 const bark = /* glsl */`
-  vec3 axis = vSurfacePosition * vec3(1.11, 0.32, 1.11);
-  vec3 cork = surfaceSample(axis, worldNormal);
+  vec3 cork = tex;
   float seam = 1.0 - smoothstep(0.012, 0.094, abs(cork.b - 0.42 + 0.17 * (cork.r - 0.5)));
   seam *= smoothstep(0.24, 0.64, tex.r + cork.g * 0.17);
   float scale = smoothstep(0.27, 0.76, cork.g * 0.64 + cork.r * 0.36);
@@ -124,7 +123,7 @@ const bark = /* glsl */`
   relief = 0.44 * scale + 0.25 * grit - 0.43 * seam;
 `;
 const bamboo = /* glsl */`
-  vec3 fibre = surfaceSample(vSurfacePosition * vec3(1.5, 0.28, 1.5), worldNormal);
+  vec3 fibre = tex;
   float sap = smoothstep(0.24, 0.82, fibre.b * 0.64 + fibre.r * 0.36);
   float age = smoothstep(0.59, 0.83, stain * 0.61 + grit * 0.39);
   vec3 rind = mix(vec3(0.043, 0.091, 0.021), vec3(0.177, 0.244, 0.068), sap);
@@ -162,8 +161,8 @@ const finishes = {
   masonry: { scale: 0.46, stretch: 1, bump: 0.036, height: 'mineral', color: '', roughness: 0.97, shader: MASONRY },
   paper: { scale: 0.67, stretch: 1, bump: 0.003, height: 'grit', color: '', roughness: 0.94, shader: paper },
   cloth: { scale: 0.42, stretch: 1, bump: 0.005, height: 'grit', color: '', roughness: 0.97, shader: cloth },
-  bark: { scale: 0.64, stretch: 0.74, bump: 0.018, height: 'grain', color: '', roughness: 0.98, shader: bark },
-  bamboo: { scale: 0.52, stretch: 0.61, bump: 0.006, height: 'grain', color: '', roughness: 0.88, shader: bamboo },
+  bark: { scale: 0.90, stretch: 0.35, bump: 0.018, height: 'grain', color: '', roughness: 0.98, shader: bark },
+  bamboo: { scale: 0.90, stretch: 0.32, bump: 0.006, height: 'grain', color: '', roughness: 0.88, shader: bamboo },
   leafBlade: { scale: 0.82, stretch: 1, bump: 0.002, height: 'grit', color: '', roughness: 0.88, shader: leafBlade },
 };
 
@@ -236,7 +235,7 @@ ${ascii ? ASCII_HELPERS : ''}
       ${style === 'boards' ? `float board = vSurfacePosition.x / 0.29;
         float offset = fract(sin(floor(board) * 31.87) * 47.51);
         p += vec3(offset * 0.5, 0.0, offset);` : ''}
-      vec3 tex = surfaceSample(p, worldNormal);
+      ${style === 'terrain' ? 'vec3 tex = texture2D(uSurfaceTile, p.xz).rgb;' : 'vec3 tex = surfaceSample(p, worldNormal);'}
       float stain = smoothstep(0.25, 0.77, tex.r);
       float grit = smoothstep(0.28, 0.77, tex.g);
       float grain = smoothstep(0.23, 0.76, tex.b);
@@ -260,7 +259,7 @@ ${ascii ? ASCII_HELPERS : ''}
       metalnessFactor = 0.0;
       float relief = ${finish.height};
       ${pattern}
-      normal = surfaceRelief(normal, relief * ${finish.bump.toFixed(3)}, -vViewPosition);
+      if (dot(vViewPosition, vViewPosition) < 1600.0) normal = surfaceRelief(normal, relief * ${finish.bump.toFixed(3)}, -vViewPosition);
     }${ascii ? ` else {
       vec3 worldNormal = inverseTransformDirection(normal, viewMatrix);
       ${ascii}

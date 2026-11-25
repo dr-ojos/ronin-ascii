@@ -723,5 +723,6 @@ export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
 export function resizeAscii() {
   renderer.getDrawingBufferSize(bufSize);
   rt.setSize(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE); maskRT.setSize(bufSize.x, bufSize.y);
+  postMat.uniforms.uRim.value = 1.15 * DPR;   // the graphics quality can change DPR while playing
   applyDensity();   // grid size + glyph atlas follow the new canvas size
 }

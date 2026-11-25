@@ -129,7 +129,7 @@ export function canopyTexture(kind: Canopy) {
 export function canopySprays(radius: number, sprigs = 4) {
   const parts = [];
   for (let i = 0; i < sprigs; i++) {
-    const card = new THREE.PlaneGeometry(radius * 2, radius * 2, 2, 2);
+    const card = new THREE.PlaneGeometry(radius * 2, radius * 2, 2, 1);
     const { position, uv } = card.attributes, row = i >> 1, col = i % 2;
     for (let j = 0; j < position.count; j++) {
       const curve = 1 - Math.abs(position.getX(j) / radius);

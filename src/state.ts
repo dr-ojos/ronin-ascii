@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { TechniqueId } from './techniques';
 import type { ClassId } from './classes';
 
-export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory' | 'level' | 'account';
+export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory' | 'level' | 'info';
 
 export const player = {
   pos: new THREE.Vector3(0, 0, 4), face: Math.PI, hp: 100, maxHp: 100, attackT: -1, attackDur: 0.3, combo: 0, lastAttackEnd: -9,
@@ -31,6 +31,8 @@ export const state = {
   indoors: false,
   // An open menu pauses the fight. All techniques draw on the same charge (0..1).
   menu: null as MenuId | null,
+  /** the title screen is up: the camera frames the chosen warrior on the right (title.ts, camera.ts) */
+  showcase: false,
   special: 0, jade: 0, technique: 'tajos' as TechniqueId, learnedTechniques: ['tajos'] as TechniqueId[],
   // feel
   shake: 0, hitStop: 0, time: 0,

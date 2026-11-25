@@ -15,8 +15,8 @@ const camTarget = new THREE.Vector3();
 const shopRight = new THREE.Vector3();
 const camRay = new THREE.Raycaster();
 export function updateCamera(dt: number) {
-  // the look menu (custom.ts) frames the samurai close up, like the photo mode
-  const dress = state.menu === 'custom';
+  // the look menu (custom.ts) and the title screen frame the samurai close up, like the photo mode
+  const dress = state.menu === 'custom' || (state.showcase && !state.menu);
   // photo mode close up (F + wheel): the camera comes down to eye level and frames the face
   const close = state.photo ? THREE.MathUtils.clamp((5 - state.photoDist) / 3, 0, 1) : 0;
   camTarget.lerp(tmp.set(player.pos.x, player.pos.y + (state.photo || dress ? 1.3 + 0.3 * close : 1.5), player.pos.z), Math.min(1, dt * 10));
@@ -55,6 +55,12 @@ export function updateCamera(dt: number) {
   // never dig into a hillside
   const gy = groundY(camera.position.x, camera.position.z) + 1.2;
   if (camera.position.y < gy) camera.position.y = gy;
+  // the title screen keeps its panel on the left: aim a little left of the warrior so he stands on the right
+  if (state.showcase && !state.menu && innerWidth > 820) {
+    const halfWidth = camDist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+    camera.lookAt(tmp.set(Math.cos(state.yaw), 0, -Math.sin(state.yaw)).multiplyScalar(-halfWidth * 0.42).add(camTarget));
+    return;
+  }
   camera.lookAt(camTarget);
 }
 
