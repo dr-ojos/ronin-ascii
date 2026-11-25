@@ -27,8 +27,12 @@ import { buildDrift, updateDrift, updateWaterWeather } from './water';
 const camBlockers: THREE.Object3D[] = [];
 
 // sky fill: brighter blue from above, warm bounce from the ground so shadows aren't pitch black
-scene.add(new THREE.HemisphereLight(0x8a9ad8, 0x2a1f14, 1.05));
-export const moonDir = new THREE.Vector3(-0.55, 0.7, -0.45).normalize();
+const hemiLight = new THREE.HemisphereLight(0x8a9ad8, 0x2a1f14, 1.05);
+scene.add(hemiLight);
+const NIGHT_DIR = new THREE.Vector3(-0.55, 0.7, -0.45).normalize();
+// low golden-hour sun angle: casts long, dramatic shadows across the clearing in T (3D) mode
+const SUNSET_DIR = new THREE.Vector3(-0.78, 0.28, -0.56).normalize();
+export const moonDir = NIGHT_DIR.clone();
 const moonLight = new THREE.DirectionalLight(0xd2dcff, 5.0);
 export const rimLight = new THREE.DirectionalLight(0x9fc0ff, 3.0);
 scene.add(rimLight, rimLight.target);
@@ -37,6 +41,7 @@ moonLight.castShadow = true;
 // tighter frustum around the player = sharper shadows with the same map (4096 at high quality, quality.ts)
 const SHADOW_HALF = 24;
 let SHADOW_TEXEL = 1;
+let shadowDist = 45;
 /** the moon's shadow map side; the old map is dropped and three.js builds the new one on the next frame */
 export function setMoonShadowMap(size: number) {
   moonLight.shadow.mapSize.set(size, size);
@@ -48,55 +53,166 @@ Object.assign(moonLight.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF,
 moonLight.shadow.bias = -0.0003; moonLight.shadow.normalBias = 0.025;
 scene.add(moonLight, moonLight.target);
 // light-space axes: the shadow camera is snapped to whole texels so shadows don't shimmer while walking
-const shLX = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), moonDir).normalize();
-const shLY = new THREE.Vector3().crossVectors(moonDir, shLX).normalize();
+const shLX = new THREE.Vector3();
+const shLY = new THREE.Vector3();
 const shSnap = new THREE.Vector3();
+function syncShadowAxes() {
+  shLX.crossVectors(THREE.Object3D.DEFAULT_UP, moonDir).normalize();
+  shLY.crossVectors(moonDir, shLX).normalize();
+}
+syncShadowAxes();
 export function placeMoonShadow(p: THREE.Vector3) {
   const a = Math.round(p.dot(shLX) / SHADOW_TEXEL) * SHADOW_TEXEL;
   const b = Math.round(p.dot(shLY) / SHADOW_TEXEL) * SHADOW_TEXEL;
   shSnap.set(0, 0, 0).addScaledVector(shLX, a).addScaledVector(shLY, b).addScaledVector(moonDir, p.dot(moonDir));
   moonLight.target.position.copy(shSnap);
-  moonLight.position.copy(shSnap).addScaledVector(moonDir, 45);
+  moonLight.position.copy(shSnap).addScaledVector(moonDir, shadowDist);
 }
-{ // night environment map so lacquer, gold and steel get real reflections
-  const pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene();
-  es.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
+// environment maps so lacquer, gold, steel and water get real reflections (night for ASCII, sunset for T mode)
+const [nightEnv, sunsetEnv] = (() => {
+  const pm = new THREE.PMREMGenerator(renderer);
+  const nightScene = new THREE.Scene();
+  nightScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
     side: THREE.BackSide,
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
     fragmentShader: `varying vec3 vP; void main(){ float h = normalize(vP).y; gl_FragColor = vec4(mix(vec3(0.01,0.012,0.012), vec3(0.09,0.12,0.24), smoothstep(-0.15,0.6,h)), 1.); }`
   })));
   const md = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(7, 7, 6.4) }));
-  md.position.copy(moonDir).multiplyScalar(8); es.add(md);
+  md.position.copy(NIGHT_DIR).multiplyScalar(8); nightScene.add(md);
   const lw = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.4, 0.4) }));
-  lw.position.set(4, 0.8, -6); es.add(lw);
-  scene.environment = pm.fromScene(es, 0.03).texture;
-}
+  lw.position.set(4, 0.8, -6); nightScene.add(lw);
+  const nightTex = pm.fromScene(nightScene, 0.03).texture;
+
+  const sunsetScene = new THREE.Scene();
+  sunsetScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: { uSunDir: { value: SUNSET_DIR } },
+    vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+    fragmentShader: `varying vec3 vP; uniform vec3 uSunDir; void main(){
+      vec3 d = normalize(vP); float h = d.y;
+      vec3 col = mix(vec3(0.05, 0.025, 0.025), vec3(0.32, 0.12, 0.06), smoothstep(-0.15, 0.08, h));
+      col = mix(col, vec3(0.14, 0.06, 0.14), smoothstep(0.08, 0.35, h));
+      col = mix(col, vec3(0.04, 0.045, 0.12), smoothstep(0.35, 0.8, h));
+      col += pow(max(dot(d, uSunDir), 0.0), 6.0) * vec3(0.45, 0.18, 0.05);
+      gl_FragColor = vec4(col, 1.);
+    }`
+  })));
+  const sd = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(8, 3.8, 1.2) }));
+  sd.position.copy(SUNSET_DIR).multiplyScalar(8); sunsetScene.add(sd);
+  const sunsetTex = pm.fromScene(sunsetScene, 0.04).texture;
+  pm.dispose();
+  return [nightTex, sunsetTex] as const;
+})();
+scene.environment = nightEnv;
 export const keyLight = new THREE.PointLight(0xdde6ff, 7, 12, 1.2);
 scene.add(keyLight);
 
-// moon + halo + stars + far mountains: a sky dome that travels with the camera
+// moon/sun + halo + stars + sunset dome + far mountains: a sky dome that travels with the camera
 const sky = new THREE.Group(); scene.add(sky);
-const moon = new THREE.Mesh(new THREE.SphereGeometry(7, 24, 16), new THREE.MeshBasicMaterial({ color: 0xf4efdc, fog: false }));
+const sunsetDome = new THREE.Mesh(new THREE.SphereGeometry(248, 32, 20), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { uSunDir: { value: SUNSET_DIR } },
+  vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `varying vec3 vDir; uniform vec3 uSunDir; void main(){
+    vec3 d = normalize(vDir); float h = d.y;
+    vec3 col = mix(vec3(0.16, 0.075, 0.085), vec3(0.95, 0.38, 0.14), smoothstep(-0.08, 0.03, h));
+    col = mix(col, vec3(0.58, 0.20, 0.26), smoothstep(0.03, 0.20, h));
+    col = mix(col, vec3(0.18, 0.12, 0.28), smoothstep(0.20, 0.46, h));
+    col = mix(col, vec3(0.06, 0.07, 0.18), smoothstep(0.46, 0.85, h));
+    float sun = max(dot(d, uSunDir), 0.0);
+    col += pow(sun, 3.0) * smoothstep(0.55, -0.05, abs(h - 0.12)) * vec3(0.52, 0.22, 0.06);
+    col += pow(sun, 28.0) * vec3(1.15, 0.62, 0.20);
+    gl_FragColor = vec4(col, 1.0);
+  }`
+}));
+sunsetDome.frustumCulled = false; sunsetDome.renderOrder = -2; sunsetDome.visible = false;
+tagMat(sunsetDome.material, CLS.sky);
+sky.add(sunsetDome);
+const moonMat = new THREE.MeshBasicMaterial({ color: 0xf4efdc, fog: false });
+const moon = new THREE.Mesh(new THREE.SphereGeometry(7, 24, 16), moonMat);
 moon.position.copy(moonDir).multiplyScalar(150);
-tagMat(moon.material, CLS.light);
+tagMat(moonMat, CLS.light);
 sky.add(moon);
 const skyline = buildSkyline(); tagMat(skyline.material, CLS.ground); sky.add(skyline);
 export function updateSky(cam: THREE.Vector3) { sky.position.set(cam.x, Math.max(cam.y - 12, player.pos.y - 6), cam.z); }
+let halo!: THREE.Sprite;
+let haloMat!: THREE.SpriteMaterial;
+let stars!: THREE.Points;
 {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 10, 64, 64, 64);
-  g.addColorStop(0, 'rgba(200,215,255,0.55)'); g.addColorStop(1, 'rgba(200,215,255,0)');
+  g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
-  tagMat(halo.material, CLS.sky); halo.scale.set(48, 48, 1); halo.position.copy(moon.position); sky.add(halo);
+  haloMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color: 0xc8d7ff, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
+  halo = new THREE.Sprite(haloMat);
+  tagMat(haloMat, CLS.sky); halo.scale.set(48, 48, 1); halo.position.copy(moon.position); sky.add(halo);
   const n = 900, p = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
     const th = Math.random() * Math.PI * 2, ph = Math.acos(rnd(0.08, 1));
     p.set([Math.sin(ph) * Math.cos(th) * 200, Math.cos(ph) * 200, Math.sin(ph) * Math.sin(th) * 200], i * 3);
   }
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(p, 3));
-  const stars = new THREE.Points(sg, tagMat(new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, fog: false }), CLS.sky));
+  stars = new THREE.Points(sg, tagMat(new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, fog: false }), CLS.sky));
   stars.frustumCulled = false; sky.add(stars);
+}
+
+let sunsetMode = false;
+/** Switch between night moonlight (ASCII mode) and low-angle golden sunset with stark shadows (T mode). */
+export function setSunsetLighting(enabled: boolean) {
+  if (sunsetMode === enabled) return;
+  sunsetMode = enabled;
+  moonDir.copy(enabled ? SUNSET_DIR : NIGHT_DIR);
+  syncShadowAxes();
+  shadowDist = enabled ? 55 : 45;
+  moonLight.shadow.camera.far = enabled ? 135 : 110;
+  moonLight.shadow.camera.updateProjectionMatrix();
+
+  if (enabled) {
+    moonLight.color.setHex(0xff9448);
+    moonLight.intensity = 7.4;
+    hemiLight.color.setHex(0x624c7a);
+    hemiLight.groundColor.setHex(0x1e110c);
+    hemiLight.intensity = 0.42;
+    rimLight.color.setHex(0xffb36b);
+    rimLight.intensity = 0.75;
+    keyLight.color.setHex(0xffb26e);
+    keyLight.intensity = 1.0;
+    renderer.toneMappingExposure = 1.12;
+    scene.environment = sunsetEnv;
+    (scene.background as THREE.Color).setHex(0x2a141c);
+    if (scene.fog instanceof THREE.FogExp2) { scene.fog.color.setHex(0x472322); scene.fog.density = 0.013; }
+    moonMat.color.setHex(0xffd896);
+    moon.scale.setScalar(1.45);
+    haloMat.color.setHex(0xff8c38);
+    halo.scale.set(78, 78, 1);
+    (skyline.material as THREE.MeshBasicMaterial).color.setHex(0x251422);
+    sunsetDome.visible = true;
+    stars.visible = false;
+  } else {
+    moonLight.color.setHex(0xd2dcff);
+    moonLight.intensity = 5.0;
+    hemiLight.color.setHex(0x8a9ad8);
+    hemiLight.groundColor.setHex(0x2a1f14);
+    hemiLight.intensity = 1.05;
+    rimLight.color.setHex(0x9fc0ff);
+    rimLight.intensity = 3.0;
+    keyLight.color.setHex(0xdde6ff);
+    keyLight.intensity = 7.0;
+    renderer.toneMappingExposure = 1.2;
+    scene.environment = nightEnv;
+    (scene.background as THREE.Color).setHex(0x060912);
+    if (scene.fog instanceof THREE.FogExp2) { scene.fog.color.setHex(0x131b34); scene.fog.density = 0.016; }
+    moonMat.color.setHex(0xf4efdc);
+    moon.scale.setScalar(1);
+    haloMat.color.setHex(0xc8d7ff);
+    halo.scale.set(48, 48, 1);
+    (skyline.material as THREE.MeshBasicMaterial).color.setHex(0x141b33);
+    sunsetDome.visible = false;
+    stars.visible = true;
+  }
+  moon.position.copy(moonDir).multiplyScalar(150);
+  halo.position.copy(moon.position);
+  placeMoonShadow(player.pos);
 }
 
 // layout helpers

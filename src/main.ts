@@ -7,7 +7,7 @@ import { animSamurai, sam } from './avatar';
 import { updateOutfit } from './outfit';
 import { updateSparks } from './katana-fx';
 import { displayedWeapon } from './weapons';
-import { updateRain, updateWorld, updateSky } from './world';
+import { updateRain, updateWorld, updateSky, setSunsetLighting } from './world';
 import { updateMinimap } from './minimap';
 import { updateCamera, updateLightDir } from './camera';
 import { updateHud } from './hud';
@@ -39,6 +39,7 @@ function frame() {
   if (state.hitStop > 0) { state.hitStop -= dt; dt *= 0.1; }
   // photo mode freezes the game: never leave the ronin hidden mid-blink
   if (state.photo) { state.time += dt; state.yaw += dt * 0.35; sam.root.visible = true; } else update(dt);
+  setSunsetLighting(!state.asciiOn);
   animSamurai(dt, displayedWeapon().form ?? 'katana');
   updateOutfit();
   updateSparks(dt, !state.dead);
