@@ -10,7 +10,7 @@ import { addCollider, isFree } from './physics';
 import { addLight, updateLights } from './lights';
 import { buildTerrainMesh, buildSkyline } from './terrain';
 import { buildStructures, updateStructures, blockers, floors, MT } from './structures';
-import { addRoundedSurface, showSurfaceDetail, surfaceMaterial } from './surfaces';
+import { addRoundedSurface, showSurfaceDetail, sunsetSunDir, surfaceMaterial } from './surfaces';
 import { updateChunks, chunkBlockers } from './chunks';
 import { buildMasks } from './map';
 import { buildLandmarks } from './landmarks';
@@ -31,7 +31,7 @@ const hemiLight = new THREE.HemisphereLight(0x8a9ad8, 0x2a1f14, 1.05);
 scene.add(hemiLight);
 const NIGHT_DIR = new THREE.Vector3(-0.55, 0.7, -0.45).normalize();
 // low golden-hour sun angle: casts long, dramatic shadows across the clearing in T (3D) mode
-const SUNSET_DIR = new THREE.Vector3(-0.78, 0.28, -0.56).normalize();
+const SUNSET_DIR = sunsetSunDir.value;
 export const moonDir = NIGHT_DIR.clone();
 const moonLight = new THREE.DirectionalLight(0xd2dcff, 5.0);
 export const rimLight = new THREE.DirectionalLight(0x9fc0ff, 3.0);
@@ -97,7 +97,7 @@ const [nightEnv, sunsetEnv] = (() => {
       gl_FragColor = vec4(col, 1.);
     }`
   })));
-  const sd = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(8, 3.8, 1.2) }));
+  const sd = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(12, 5.8, 1.8) }));
   sd.position.copy(SUNSET_DIR).multiplyScalar(8); sunsetScene.add(sd);
   const sunsetTex = pm.fromScene(sunsetScene, 0.04).texture;
   pm.dispose();
@@ -168,15 +168,17 @@ export function setSunsetLighting(enabled: boolean) {
   moonLight.shadow.camera.updateProjectionMatrix();
 
   if (enabled) {
-    moonLight.color.setHex(0xff9448);
-    moonLight.intensity = 7.4;
+    moonLight.color.setHex(0xff9e4e);
+    moonLight.intensity = 8.6;
     hemiLight.color.setHex(0x624c7a);
     hemiLight.groundColor.setHex(0x1e110c);
-    hemiLight.intensity = 0.42;
+    hemiLight.intensity = 0.40;
     rimLight.color.setHex(0xffb36b);
     rimLight.intensity = 0.75;
-    keyLight.color.setHex(0xffb26e);
-    keyLight.intensity = 1.0;
+    keyLight.color.setHex(0xffc280);
+    keyLight.intensity = 2.4;
+    keyLight.distance = 7;
+    keyLight.decay = 1.8;
     renderer.toneMappingExposure = 1.12;
     scene.environment = sunsetEnv;
     (scene.background as THREE.Color).setHex(0x2a141c);
@@ -198,6 +200,8 @@ export function setSunsetLighting(enabled: boolean) {
     rimLight.intensity = 3.0;
     keyLight.color.setHex(0xdde6ff);
     keyLight.intensity = 7.0;
+    keyLight.distance = 12;
+    keyLight.decay = 1.2;
     renderer.toneMappingExposure = 1.2;
     scene.environment = nightEnv;
     (scene.background as THREE.Color).setHex(0x060912);

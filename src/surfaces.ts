@@ -4,6 +4,8 @@ import { seeded } from './map';
 import { DIRT, FINISH_HELPERS, MASONRY, PAVERS, PLASTER, SIDING, THATCH, TILES, ASCII_HELPERS, ASCII_TILES, ASCII_THATCH, ASCII_SIDING, ASCII_PLASTER, ASCII_MASONRY, ASCII_WOOD, ASCII_MOTTLE } from './architecture-finishes';
 
 export const detailedSurfaces = { value: 0 };
+/** Sunset sun direction shared by surface and foliage shaders in Mode T. */
+export const sunsetSunDir = { value: new THREE.Vector3(-0.78, 0.28, -0.56).normalize() };
 interface SurfaceVariant {
   geometry: THREE.BufferGeometry;
   material: THREE.Mesh['material'];
@@ -140,31 +142,42 @@ const leafBlade = /* glsl */`
   diffuseColor.rgb = leaf + vec3(0.043, 0.062, 0.018) * (midrib + vein * 0.19);
   relief = midrib * 0.32 + vein * 0.15 + grit * 0.13;
 `;
+interface FinishSpec {
+  scale: number;
+  stretch: number;
+  bump: number;
+  height: string;
+  color: string;
+  roughness: number;
+  metalness?: number;
+  sunGlow?: number;
+  shader?: string;
+}
 const finishes = {
-  stone: { scale: 0.46, stretch: 1, bump: 0.020, height: 'mineral', color: 'stoneTint', roughness: 0.94 },
-  boulder: { scale: 0.46, stretch: 1, bump: 0.017, height: 'mineral', color: 'stoneTint', roughness: 0.96 },
-  gravel: { scale: 0.73, stretch: 1, bump: 0.015, height: 'grit', color: 'gravelTint', roughness: 0.98 },
-  wood: { scale: 0.48, stretch: 0.45, bump: 0.013, height: 'grain', color: 'woodTint', roughness: 0.90 },
-  boards: { scale: 0.48, stretch: 0.45, bump: 0.011, height: 'grain', color: 'woodTint', roughness: 0.90 },
-  clay: { scale: 0.53, stretch: 1, bump: 0.009, height: 'mineral', color: 'clayTint', roughness: 0.93 },
-  foliage: { scale: 0.85, stretch: 1, bump: 0.005, height: 'grit', color: 'leafTint', roughness: 0.94 },
-  terrain: { scale: 0.34, stretch: 1, bump: 0.012, height: 'mineral', color: 'stoneTint', roughness: 0.98 },
-  track: { scale: 0.75, stretch: 1, bump: 0.030, height: 'grit', color: '', roughness: 0.99, shader: TRACK },
-  lane: { scale: 0.65, stretch: 1, bump: 0.024, height: 'grit', color: '', roughness: 0.99, shader: DIRT },
-  pavers: { scale: 0.62, stretch: 1, bump: 0.027, height: 'mineral', color: '', roughness: 0.97, shader: PAVERS },
-  flagstone: { scale: 0.55, stretch: 1, bump: 0.022, height: 'mineral', color: '', roughness: 0.95, shader: flagstone },
-  tiles: { scale: 0.45, stretch: 1, bump: 0.016, height: 'mineral', color: '', roughness: 0.92, shader: TILES },
-  sweptTiles: { scale: 0.45, stretch: 1, bump: 0.018, height: 'mineral', color: '', roughness: 0.92, shader: SWEPT_TILES },
-  thatch: { scale: 0.43, stretch: 1, bump: 0.013, height: 'grit', color: '', roughness: 0.98, shader: THATCH },
-  siding: { scale: 0.42, stretch: 0.5, bump: 0.018, height: 'grain', color: '', roughness: 0.93, shader: SIDING },
-  plaster: { scale: 0.54, stretch: 1, bump: 0.008, height: 'grit', color: '', roughness: 0.98, shader: PLASTER },
-  masonry: { scale: 0.46, stretch: 1, bump: 0.036, height: 'mineral', color: '', roughness: 0.97, shader: MASONRY },
-  paper: { scale: 0.67, stretch: 1, bump: 0.003, height: 'grit', color: '', roughness: 0.94, shader: paper },
-  cloth: { scale: 0.42, stretch: 1, bump: 0.005, height: 'grit', color: '', roughness: 0.97, shader: cloth },
-  bark: { scale: 0.90, stretch: 0.35, bump: 0.018, height: 'grain', color: '', roughness: 0.98, shader: bark },
-  bamboo: { scale: 0.90, stretch: 0.32, bump: 0.006, height: 'grain', color: '', roughness: 0.88, shader: bamboo },
-  leafBlade: { scale: 0.82, stretch: 1, bump: 0.002, height: 'grit', color: '', roughness: 0.88, shader: leafBlade },
-};
+  stone: { scale: 0.46, stretch: 1, bump: 0.020, height: 'mineral', color: 'stoneTint', roughness: 0.78, sunGlow: 0.28 },
+  boulder: { scale: 0.46, stretch: 1, bump: 0.017, height: 'mineral', color: 'stoneTint', roughness: 0.86, sunGlow: 0.22 },
+  gravel: { scale: 0.73, stretch: 1, bump: 0.015, height: 'grit', color: 'gravelTint', roughness: 0.90 },
+  wood: { scale: 0.48, stretch: 0.45, bump: 0.013, height: 'grain', color: 'woodTint', roughness: 0.68, sunGlow: 0.42 },
+  boards: { scale: 0.48, stretch: 0.45, bump: 0.011, height: 'grain', color: 'woodTint', roughness: 0.70, sunGlow: 0.36 },
+  clay: { scale: 0.53, stretch: 1, bump: 0.009, height: 'mineral', color: 'clayTint', roughness: 0.50, metalness: 0.16, sunGlow: 0.52 },
+  foliage: { scale: 0.85, stretch: 1, bump: 0.005, height: 'grit', color: 'leafTint', roughness: 0.64, sunGlow: 0.45 },
+  terrain: { scale: 0.34, stretch: 1, bump: 0.012, height: 'mineral', color: 'stoneTint', roughness: 0.96 },
+  track: { scale: 0.75, stretch: 1, bump: 0.030, height: 'grit', color: '', roughness: 0.96, shader: TRACK },
+  lane: { scale: 0.65, stretch: 1, bump: 0.024, height: 'grit', color: '', roughness: 0.95, shader: DIRT },
+  pavers: { scale: 0.62, stretch: 1, bump: 0.027, height: 'mineral', color: '', roughness: 0.76, sunGlow: 0.26, shader: PAVERS },
+  flagstone: { scale: 0.55, stretch: 1, bump: 0.022, height: 'mineral', color: '', roughness: 0.74, sunGlow: 0.28, shader: flagstone },
+  tiles: { scale: 0.45, stretch: 1, bump: 0.016, height: 'mineral', color: '', roughness: 0.42, metalness: 0.22, sunGlow: 0.65, shader: TILES },
+  sweptTiles: { scale: 0.45, stretch: 1, bump: 0.018, height: 'mineral', color: '', roughness: 0.40, metalness: 0.24, sunGlow: 0.68, shader: SWEPT_TILES },
+  thatch: { scale: 0.43, stretch: 1, bump: 0.013, height: 'grit', color: '', roughness: 0.82, sunGlow: 0.36, shader: THATCH },
+  siding: { scale: 0.42, stretch: 0.5, bump: 0.018, height: 'grain', color: '', roughness: 0.70, sunGlow: 0.38, shader: SIDING },
+  plaster: { scale: 0.54, stretch: 1, bump: 0.008, height: 'grit', color: '', roughness: 0.76, sunGlow: 0.32, shader: PLASTER },
+  masonry: { scale: 0.46, stretch: 1, bump: 0.036, height: 'mineral', color: '', roughness: 0.76, sunGlow: 0.30, shader: MASONRY },
+  paper: { scale: 0.67, stretch: 1, bump: 0.003, height: 'grit', color: '', roughness: 0.88, sunGlow: 0.20, shader: paper },
+  cloth: { scale: 0.42, stretch: 1, bump: 0.005, height: 'grit', color: '', roughness: 0.90, sunGlow: 0.24, shader: cloth },
+  bark: { scale: 0.90, stretch: 0.35, bump: 0.018, height: 'grain', color: '', roughness: 0.76, sunGlow: 0.38, shader: bark },
+  bamboo: { scale: 0.90, stretch: 0.32, bump: 0.006, height: 'grain', color: '', roughness: 0.36, metalness: 0.06, sunGlow: 0.55, shader: bamboo },
+  leafBlade: { scale: 0.82, stretch: 1, bump: 0.002, height: 'grit', color: '', roughness: 0.44, sunGlow: 0.55, shader: leafBlade },
+} satisfies Record<string, FinishSpec>;
 
 /** what the buildings show in the text view, where the detailed finishes above are switched off */
 const asciiFinishes: Partial<Record<keyof typeof finishes, string>> = {
@@ -173,8 +186,10 @@ const asciiFinishes: Partial<Record<keyof typeof finishes, string>> = {
 };
 
 export function surfaceMaterial(mat: THREE.MeshStandardMaterial, style: keyof typeof finishes, smooth?: 'mesh' | 'rounded') {
-  const finish = finishes[style], compile = mat.onBeforeCompile, cacheKey = mat.customProgramCacheKey();
-  const pattern = 'shader' in finish ? finish.shader : '', ascii = asciiFinishes[style] ?? '';
+  const finish: FinishSpec = finishes[style], compile = mat.onBeforeCompile, cacheKey = mat.customProgramCacheKey();
+  const pattern = finish.shader ?? '', ascii = asciiFinishes[style] ?? '';
+  const sunGlow = finish.sunGlow ?? 0;
+  const finishMetal = finish.metalness ?? 0;
   const finishVarying = style === 'sweptTiles' ? 'varying vec2 vRoofPanelPosition;\n'
     : style === 'bark' ? 'varying float vBarkHeight;\n'
     : style === 'leafBlade' ? 'varying vec2 vBambooUv;\n' : '';
@@ -182,6 +197,7 @@ export function surfaceMaterial(mat: THREE.MeshStandardMaterial, style: keyof ty
     compile.call(mat, sh, renderer);
     sh.uniforms.uDetailedSurfaces = detailedSurfaces;
     sh.uniforms.uSurfaceTile = { value: texture ??= surfaceTexture() };
+    sh.uniforms.uSunDir = sunsetSunDir;
     const smoothVarying = smooth ? 'varying vec3 vSurfaceNormal;\n' : '';
     sh.vertexShader = `varying vec3 vSurfacePosition;
 uniform float uDetailedSurfaces;
@@ -207,6 +223,7 @@ ${style === 'bark' ? 'attribute float aBarkHeight;\n' : ''}` + sh.vertexShader
 ${smoothVarying}${finishVarying}
 uniform float uDetailedSurfaces;
 uniform sampler2D uSurfaceTile;
+uniform vec3 uSunDir;
 
 vec3 surfaceSample(vec3 p, vec3 n) {
   vec3 w = pow(abs(n), vec3(5.0));
@@ -255,15 +272,27 @@ ${ascii ? ASCII_HELPERS : ''}
       ${style === 'boards' ? `float joint = abs(fract(board + 0.5) - 0.5);
         float seam = smoothstep(0.013, 0.020 + fwidth(board), joint);
         diffuseColor.rgb *= mix(0.36, 0.86 + offset * 0.22, mix(1.0, seam, abs(worldNormal.y)));` : ''}
-      roughnessFactor = max(roughnessFactor, ${finish.roughness.toFixed(2)});
-      metalnessFactor = 0.0;
       float relief = ${finish.height};
       ${pattern}
+      roughnessFactor = clamp(min(roughnessFactor, ${finish.roughness.toFixed(2)}) + (0.5 - relief) * 0.18, 0.24, 0.98);
+      metalnessFactor = ${finishMetal > 0 ? `max(metalnessFactor, ${finishMetal.toFixed(2)})` : '0.0'};
       if (dot(vViewPosition, vViewPosition) < 1600.0) normal = surfaceRelief(normal, relief * ${finish.bump.toFixed(3)}, -vViewPosition);
     }${ascii ? ` else {
       vec3 worldNormal = inverseTransformDirection(normal, viewMatrix);
       ${ascii}
     }` : ''}`);
+    if (sunGlow > 0) {
+      // Shadow-aware golden sunset sheen & warm rim on sunlit building and tree surfaces in Mode T.
+      sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+      if (uDetailedSurfaces > 0.5) {
+        float sunLit = smoothstep(0.02, 0.24, length(reflectedLight.directDiffuse));
+        vec3 sunV = normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz);
+        float sunSide = smoothstep(-0.15, 0.65, dot(geometryNormal, sunV));
+        float fres = pow(1.0 - clamp(dot(geometryNormal, geometryViewDir), 0.0, 1.0), 2.3);
+        reflectedLight.directSpecular += vec3(1.0, 0.60, 0.22) * fres * sunSide * sunLit * ${sunGlow.toFixed(2)};
+        reflectedLight.directDiffuse += reflectedLight.directDiffuse * vec3(0.28, 0.13, 0.02) * sunSide * ${(sunGlow * 0.75).toFixed(2)};
+      }`);
+    }
     if (ascii.includes('asciiLift')) {
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <map_fragment>', 'vec3 asciiLift = vec3(0.0);\n#include <map_fragment>')

@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { tagMat, CLS, asciiGrid, FLOWER_GLYPHS } from './materials';
-import { addRoundedSurface, detailedSurfaces, showSurfaceDetail, surfaceMaterial } from './surfaces';
+import { addRoundedSurface, detailedSurfaces, showSurfaceDetail, sunsetSunDir, surfaceMaterial } from './surfaces';
 import { bambooBlade, canopySprays, canopyTexture, grassTuft, lowShrubGeometry } from './vegetation-art';
 import { TERRAIN_GLSL, terrainUniforms, groundY } from './terrain';
 import { HALF, SIZE, WORLD_R, MASK_RES, groundMask, groundAt, seeded, treeBlocked } from './map';
@@ -194,12 +194,27 @@ function sprayMaterial(kind: Parameters<typeof canopyTexture>[0], height: number
   const depth = addWind(material, { height, amp, flutter });
   const compile = material.onBeforeCompile;
   const key = material.customProgramCacheKey();
+  const sunRough = kind === 'blossom' ? 0.44 : 0.52;
+  const translucency = kind === 'blossom' ? 0.58 : 0.44;
   material.onBeforeCompile = (sh, renderer) => {
     compile.call(material, sh, renderer);
-    sh.fragmentShader = sh.fragmentShader
+    sh.uniforms.uDetailedSurfaces = detailedSurfaces;
+    sh.uniforms.uSunDir = sunsetSunDir;
+    sh.fragmentShader = `uniform float uDetailedSurfaces;\nuniform vec3 uSunDir;\n` + sh.fragmentShader
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);')
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nif (uDetailedSurfaces > 0.5) roughnessFactor = ${sunRough.toFixed(2)};`)
       .replace('#include <color_fragment>', `#include <color_fragment>\ndiffuseColor.rgb *= ${gain.toFixed(2)};`)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 0.10;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * (uDetailedSurfaces > 0.5 ? 0.04 : 0.10);')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+      if (uDetailedSurfaces > 0.5) {
+        vec3 sunV = normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz);
+        float sunMask = smoothstep(0.02, 0.28, length(reflectedLight.directDiffuse));
+        float facingSun = smoothstep(-0.35, 0.75, dot(geometryNormal, sunV));
+        float rim = pow(1.0 - abs(dot(geometryNormal, geometryViewDir)), 2.0);
+        float backlit = pow(clamp(dot(geometryViewDir, -sunV), 0.0, 1.0), 2.6);
+        reflectedLight.directDiffuse += diffuseColor.rgb * vec3(1.15, 0.54, 0.15) * (0.34 * sunMask + ${translucency.toFixed(2)} * backlit * (0.28 + 0.72 * sunMask));
+        reflectedLight.directSpecular += vec3(1.0, 0.60, 0.22) * rim * (0.42 * facingSun * sunMask + 0.28 * backlit * sunMask);
+      }`);
   };
   material.customProgramCacheKey = () => `${key}|sprays:${kind}`;
   return { material: tagMat(material, CLS.foliageLeaf), depth };

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { tagMat } from './materials';
 import { glyphShader } from './surface-glyphs';
+import { detailedSurfaces, sunsetSunDir } from './surfaces';
 
 // ASCII sub-classes of the actor class (ascii.ts picks a character ramp from them)
 export const ACTOR_CLOTH = 0.6, ACTOR_METAL = 0.62, ACTOR_SKIN = 0.64;
@@ -147,28 +148,51 @@ const ONI_PAINT = /* glsl */`
 }
 `;
 
-// rim light: the edge turned away from the camera catches a cool, slightly self-coloured light
+// rim light: the edge turned away from the camera catches a painted light on its contour.
+// In Mode T (sunset), characters get a stronger golden-hour hero rim and subtle shadow lift so
+// they never disappear into dark foliage or cast shadows while keeping ground shadows crisp.
 const RIM = /* glsl */`
 {
-  float rimF = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
-  rimF = rimF * rimF * rimF;
-  totalEmissiveRadiance += mix(diffuseColor.rgb, vec3(0.55, 0.72, 1.0), 0.55) * rimF * 0.3;
+  vec3 viewDir = normalize(vViewPosition);
+  float rimRaw = 1.0 - clamp(dot(normal, viewDir), 0.0, 1.0);
+  if (uHeroSunset > 0.5) {
+    vec3 sunV = normalize((viewMatrix * vec4(uHeroSunDir, 0.0)).xyz);
+    float sunRim = smoothstep(-0.35, 0.75, dot(normal, sunV));
+    float broadRim = pow(rimRaw, 1.9);
+    float crispRim = smoothstep(0.42, 0.90, rimRaw);
+    vec3 rimCol = mix(vec3(0.88, 0.62, 0.44), vec3(1.0, 0.80, 0.42), sunRim);
+    // Warm contour glow + gentle albedo lift so characters stay readable even inside deep shadows
+    totalEmissiveRadiance += mix(diffuseColor.rgb, rimCol, 0.62) * (broadRim * 0.72 + crispRim * 0.42 * (0.45 + 0.55 * sunRim));
+    totalEmissiveRadiance += diffuseColor.rgb * 0.22 + vec3(0.028, 0.020, 0.014);
+  } else {
+    float rimF = rimRaw * rimRaw * rimRaw;
+    totalEmissiveRadiance += mix(diffuseColor.rgb, vec3(0.55, 0.72, 1.0), 0.55) * rimF * 0.3;
+  }
 }
 `;
 
 // form light: chiaroscuro modelling, so the figure reads as a volume and not a flat cut-out.
 // A 3/4 key from the moon's side of the screen (camera.ts keeps it in view space every frame):
 // the lit side keeps its colour, the turned-away side sinks into a deep shadow with a darker
-// core shadow along the terminator, and the cool rim (above) still catches the far edge.
+// core shadow along the terminator, and the rim (above) still catches the far edge.
 export const formKey = { value: new THREE.Vector3(-0.55, 0.55, 0.62).normalize() };
 const FORM = /* glsl */`
 {
   float ndl = dot(normal, uFormKey);
   float lit = smoothstep(-0.18, 0.42, ndl);                              // soft terminator
-  float core = 1.0 - 0.32 * exp(-pow((ndl + 0.02) / 0.14, 2.0));         // core shadow right at the turn
-  float form = mix(0.34, 1.22, lit) * core;
-  form += 0.14 * pow(max(ndl, 0.0), 6.0);                                // a broad sheen where it faces the key
-  outgoingLight = (outgoingLight - totalEmissiveRadiance) * form + totalEmissiveRadiance;
+  if (uHeroSunset > 0.5) {
+    float core = 1.0 - 0.14 * exp(-pow((ndl + 0.02) / 0.16, 2.0));       // gentle volume turn
+    float form = mix(0.76, 1.52, lit) * core;
+    vec3 litPart = (outgoingLight - totalEmissiveRadiance) * form;
+    // Golden sunset sheen on the side facing the key light
+    litPart += mix(diffuseColor.rgb, vec3(1.0, 0.78, 0.45), 0.55) * pow(max(ndl, 0.0), 4.5) * 0.36;
+    outgoingLight = litPart + totalEmissiveRadiance;
+  } else {
+    float core = 1.0 - 0.32 * exp(-pow((ndl + 0.02) / 0.14, 2.0));       // core shadow right at the turn
+    float form = mix(0.34, 1.22, lit) * core;
+    form += 0.14 * pow(max(ndl, 0.0), 6.0);                              // a broad sheen where it faces the key
+    outgoingLight = (outgoingLight - totalEmissiveRadiance) * form + totalEmissiveRadiance;
+  }
 }
 `;
 
@@ -202,7 +226,9 @@ function install(mat: THREE.MeshStandardMaterial) {
         '#include <color_fragment>\n' + (isRonin ? RONIN_CLOTH : ONI_PAINT));
     }
     sh.uniforms.uFormKey = formKey;
-    sh.fragmentShader = 'uniform vec3 uFormKey;\n' + sh.fragmentShader
+    sh.uniforms.uHeroSunset = detailedSurfaces;
+    sh.uniforms.uHeroSunDir = sunsetSunDir;
+    sh.fragmentShader = 'uniform vec3 uFormKey;\nuniform float uHeroSunset;\nuniform vec3 uHeroSunDir;\n' + sh.fragmentShader
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + RIM)
       .replace('#include <opaque_fragment>', FORM + '#include <opaque_fragment>');
     if (glyphs) glyphShader(sh, sub, !!mat.userData.glyphRest);
