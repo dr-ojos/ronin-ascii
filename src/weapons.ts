@@ -9,6 +9,8 @@ import { BLADE_LAYOUT } from './weapon-models';
 import type { WeaponForm } from './types';
 import type { BladeLook } from './blade-looks';
 import type { ClassId } from './classes';
+import { CLASS_ARSENAL } from './arsenal';
+import { LEVEL_REQ } from './progression';
 
 export interface Weapon {
   id: string; name: string; desc: string; price: number; tier: number;
@@ -16,6 +18,8 @@ export interface Weapon {
   /** a sword from across the sea in the katana's slot (blade-looks.ts), and the class it was forged for:
    *  the xiákè's and the hwarang's weapons are theirs alone (classes.ts canWield) */
   look?: BladeLook; cls?: ClassId;
+  /** the level Masa asks before he sells it (folded into progression.ts LEVEL_REQ below) */
+  lv?: number;
   /** damage multiplier, extra reach (m), attack duration multiplier (<1 = faster) */
   dmg: number; reach: number; speed: number;
   /** blade length multiplier, glow and steel colours */
@@ -113,10 +117,13 @@ export const WEAPONS: Weapon[] = [
   { id: 'fudo', name: 'Kurikara de Fudō', desc: 'la llama inmóvil del rey de la sabiduría: el bastón de la leyenda', form: 'staff', price: 32000, tier: 3, dmg: 3.5, reach: 0.8, speed: 0.92, len: 1.05, glow: 0xff4a2a, steel: 0x2a1a1a, heal: 3, charge: 0.03, daze: 1.8,
     fx: { glow: 0xff5a30, hot: 0xffe0a0, cool: 0xd01a3a, gravity: -1, halo: 2.4, trail: 2.8, sparks: [0xff5a30, 0xffb040, 0xff3a8a], extra: 'blood' } }
 ];
+// the rest of the sōhei's, the xiákè's and the hwarang's stock: 21 weapons to buy for every class (arsenal.ts)
+WEAPONS.push(...CLASS_ARSENAL);
+for (const w of WEAPONS) if (w.lv) LEVEL_REQ[w.id] = w.lv;
 const byId = new Map(WEAPONS.map(w => [w.id, w]));
 export const weapon = () => byId.get(state.weapon) || byId.get(cls().weapon)!;
 /** what Masa can sell you: your class's weapons */
-export const forSale = () => WEAPONS.filter(w => canWield(w));
+export const forSale = () => WEAPONS.filter(w => canWield(w)).sort((a, b) => a.price - b.price);
 export const owns = (id: string) => state.owned.includes(id);
 
 /** a line of numbers for the shop: compared with the plain katana */
