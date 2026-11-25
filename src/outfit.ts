@@ -16,7 +16,7 @@ import { ARMORS, armor, type Armor } from './armor';
 import { state } from './state';
 import type { ClassId } from './classes';
 import { mangaFinish, roninRobe } from './manga-art';
-import { buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, type NewClassId } from './class-armor';
+import { buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps, type NewClassId } from './class-armor';
 
 const V = THREE.Vector3;
 const TAU = Math.PI * 2;
@@ -135,16 +135,38 @@ const extrude = (s: THREE.Shape, depth: number) => new THREE.ExtrudeGeometry(s, 
 
 // ------------------------------------------------------------ one armour
 function build(a: Armor) {
-  const l = a.look!, glow = l.glow ?? 0.06;
+  const l = a.look!, glow = l.glow ?? 0.06, isNeon = l.neon !== undefined;
   sets.set(a.id, []);
-  const lamTex = lamellar(l);
+  const tronPbr = isNeon ? tronPlateMaps(l.neon) : null;
+  const lamTex = tronPbr ? tronPbr.map : lamellar(l);
   const lam = (rx: number, ry: number) => {
     const t = lamTex.clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
+    if (tronPbr) {
+      const em = tronPbr.emissive!.clone(); em.repeat.set(rx, ry); em.needsUpdate = true;
+      const bump = tronPbr.bump.clone(); bump.repeat.set(rx, ry); bump.needsUpdate = true;
+      const rough = tronPbr.rough.clone(); rough.repeat.set(rx, ry); rough.needsUpdate = true;
+      return new THREE.MeshStandardMaterial({
+        map: t, bumpMap: bump, bumpScale: 0.016, roughnessMap: rough,
+        emissiveMap: em, emissive: l.neon!, emissiveIntensity: 2.3,
+        roughness: 0.28, metalness: 0.56, side: THREE.DoubleSide
+      });
+    }
     return new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.38, metalness: 0.2, side: THREE.DoubleSide });
   };
-  const lacquer = new THREE.MeshStandardMaterial({ color: l.lame, roughness: 0.25, metalness: 0.25, emissive: l.lame, emissiveIntensity: glow, side: THREE.DoubleSide });
-  const metal = new THREE.MeshStandardMaterial({ color: l.metal, roughness: 0.3, metalness: 0.85, emissive: l.metal, emissiveIntensity: Math.max(0.18, glow * 1.4), side: THREE.DoubleSide });
-  const lace = new THREE.MeshStandardMaterial({ color: l.lace, roughness: 0.8, emissive: l.lace, emissiveIntensity: 0.15 });
+  const lacquer = new THREE.MeshStandardMaterial({
+    color: l.lame, roughness: isNeon ? 0.22 : 0.25, metalness: isNeon ? 0.55 : 0.25,
+    emissive: l.lame, emissiveIntensity: isNeon ? 0.04 : glow, side: THREE.DoubleSide
+  });
+  const metal = new THREE.MeshStandardMaterial({
+    color: isNeon ? l.neon! : l.metal, roughness: isNeon ? 0.12 : 0.3, metalness: isNeon ? 0.18 : 0.85,
+    emissive: isNeon ? l.neon! : l.metal, emissiveIntensity: isNeon ? 2.4 : Math.max(0.18, glow * 1.4), side: THREE.DoubleSide
+  });
+  if (isNeon) metal.userData.noGlyphs = true;
+  const lace = new THREE.MeshStandardMaterial({
+    color: isNeon ? 0xdceeff : l.lace, roughness: isNeon ? 0.2 : 0.8,
+    emissive: isNeon ? l.neon! : l.lace, emissiveIntensity: isNeon ? 1.55 : 0.15
+  });
+  if (isNeon) lace.userData.noGlyphs = true;
 
   const hips = P('Hips');
 
@@ -167,6 +189,20 @@ function build(a: Armor) {
     for (const s of [-1, 1]) {
       const strap = new THREE.Mesh(new THREE.BoxGeometry(0.043, 0.012, 0.243), lacquer); strap.position.set(0.104 * s, 0.243, -0.008); strap.rotation.z = -s * 0.12; g.add(strap);
       const stud = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), metal); stud.position.set(0.104 * s, 0.25, 0.111); g.add(stud);
+    }
+    if (isNeon) {
+      // TRON glowing front rails & Identity Disc on the Ronin's back
+      for (const s of [-1, 1]) {
+        const rail = new THREE.CatmullRomCurve3([
+          new V(0.072 * s, 0.222, 0.115), new V(0.095 * s, 0.08, 0.165), new V(0.072 * s, -0.08, 0.15), new V(0.066 * s, -0.24, 0.13)
+        ]);
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(rail, 20, 0.0042, 5), metal));
+      }
+      const discGrp = new THREE.Group(); discGrp.position.set(0, 0.085, -0.165); discGrp.rotation.x = 0.08;
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.076, 0.076, 0.012, 32), lacquer); core.rotation.x = Math.PI / 2; discGrp.add(core);
+      const outerR = new THREE.Mesh(new THREE.TorusGeometry(0.076, 0.007, 8, 36), metal); outerR.position.z = -0.004; discGrp.add(outerR);
+      const innerR = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.0045, 6, 32), lace); innerR.position.z = -0.006; discGrp.add(innerR);
+      g.add(discGrp);
     }
     overlay(a.id, rigChest, g);
   }
@@ -426,7 +462,7 @@ function buildHabit(id: string, c: HabitColours) {
 
 // ---- auras: they ride with the samurai, not with a bone
 const fxMat = (c: number, o: number) => tagMat(new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.light);
-function buildAura(kind: 'foxfire' | 'gold') {
+function buildAura(kind: 'foxfire' | 'gold' | 'neon') {
   const g = new THREE.Group(); g.name = kind;
   if (kind === 'foxfire') {
     // three wisps of blue fox-fire circling you
@@ -436,6 +472,12 @@ function buildAura(kind: 'foxfire' | 'gold') {
       const outer = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), fxMat(0x30a8ff, 0.35)); outer.scale.y = 1.5; w.add(outer);
       g.add(w);
     }
+  } else if (kind === 'neon') {
+    // TRON white-light ring: crisp luminous circuit halo at the feet and soft identity-disc pulse
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.68, 0.74, 64), fxMat(0xffffff, 0.65));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; ring.name = 'ring'; g.add(ring);
+    const outer = new THREE.Mesh(new THREE.RingGeometry(0.74, 0.86, 64), fxMat(0xcce8ff, 0.22));
+    outer.rotation.x = -Math.PI / 2; outer.position.y = 0.038; outer.name = 'outer'; g.add(outer);
   } else {
     // Hachiman's blessing: a golden halo behind the head, a ring of light at the feet
     const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.025, 6, 40), fxMat(0xffd040, 0.85)); halo.name = 'halo'; g.add(halo);
@@ -619,6 +661,7 @@ export function dressUp(cur = armor()) {
   if (dressed && robeMat) {
     if (habit !== undefined) robeMat.color.set(habit);
     else if (monk) robeMat.color.set(cur.robe!.linen);
+    else if (cur.look!.neon !== undefined) robeMat.color.set(0x06070b);
     else robeMat.color.set(cur.look!.lame).multiplyScalar(0.42).lerp(new THREE.Color(cur.look!.lace), 0.22);
     robeMat.map = robeMat.emissiveMap = null; robeMat.emissive.copy(robeMat.color); robeMat.needsUpdate = true;
   } else if (robeMat && robeMap) {
@@ -647,7 +690,15 @@ export function updateOutfit() {
     w.position.set(Math.sin(a) * 0.85, 1.05 + Math.sin(t * 2.3 + i) * 0.25, Math.cos(a) * 0.85);
     w.scale.setScalar(0.85 + Math.sin(t * 9 + i * 2) * 0.15);
   });
-  else {
+  else if (g.name === 'neon') {
+    const ring = g.getObjectByName('ring')! as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+    const outer = g.getObjectByName('outer')! as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+    const pulse = 1 + Math.sin(t * 2.6) * 0.04;
+    ring.scale.setScalar(pulse);
+    outer.scale.setScalar(1 + Math.sin(t * 2.6 - 0.6) * 0.08);
+    ring.material.opacity = 0.55 + Math.sin(t * 2.6) * 0.18;
+    outer.material.opacity = 0.18 + Math.sin(t * 2.6) * 0.08;
+  } else {
     const halo = g.getObjectByName('halo')!, disc = g.getObjectByName('disc')!, ring = g.getObjectByName('ring')! as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
     for (const o of [halo, disc]) o.position.set(0, 1.78, -0.26);
     halo.rotation.z = t * 0.6;

@@ -45,7 +45,92 @@ function makeTex(
   return t;
 }
 
-interface PBRMaps { map: THREE.CanvasTexture; bump: THREE.CanvasTexture; rough: THREE.CanvasTexture }
+interface PBRMaps { map: THREE.CanvasTexture; bump: THREE.CanvasTexture; rough: THREE.CanvasTexture; emissive?: THREE.CanvasTexture }
+
+/** TRON-style dark obsidian carbon armor plates bordered by razor-sharp glowing white neon circuits */
+export function tronPlateMaps(neonColor = 0xffffff): PBRMaps {
+  const S = 512;
+  const neonHex = css(neonColor, 1);
+  const softGlow = css(neonColor, 1, 0.32);
+
+  const traceCircuits = (x: CanvasRenderingContext2D, lineW: number, stroke: string, nodeR: number) => {
+    x.strokeStyle = stroke;
+    x.fillStyle = stroke;
+    x.lineWidth = lineW;
+    x.lineJoin = 'miter';
+    const rows = 4, rh = S / rows;
+    for (let r = 0; r < rows; r++) {
+      const y0 = r * rh, y1 = y0 + rh;
+      // crisp horizontal neon rail dividing each armor tier
+      x.beginPath(); x.moveTo(0, y0 + 4); x.lineTo(S, y0 + 4); x.stroke();
+      // angular chamfered TRON panel dividers & recessed circuit traces
+      for (let c = 0; c < 4; c++) {
+        const x0 = c * 128;
+        const cx = x0 + 64;
+        // outer angled plate border
+        x.beginPath();
+        x.moveTo(x0 + 14, y0 + 14);
+        x.lineTo(x0 + 114, y0 + 14);
+        x.lineTo(x0 + 122, y0 + 24);
+        x.lineTo(x0 + 122, y1 - 16);
+        x.lineTo(x0 + 112, y1 - 8);
+        x.lineTo(x0 + 16, y1 - 8);
+        x.lineTo(x0 + 6, y1 - 16);
+        x.lineTo(x0 + 6, y0 + 24);
+        x.closePath();
+        x.stroke();
+        // internal glowing circuit bar + corner nodes
+        x.beginPath();
+        x.moveTo(cx - 26, y0 + rh * 0.52);
+        x.lineTo(cx - 12, y0 + rh * 0.38);
+        x.lineTo(cx + 12, y0 + rh * 0.38);
+        x.lineTo(cx + 26, y0 + rh * 0.52);
+        x.stroke();
+        if (nodeR > 0) {
+          for (const [nx, ny] of [[cx - 26, y0 + rh * 0.52], [cx + 26, y0 + rh * 0.52]]) {
+            x.beginPath(); x.arc(nx, ny, nodeR, 0, TAU); x.fill();
+          }
+        }
+      }
+    }
+  };
+
+  const map = makeTex(S, S, x => {
+    // deep jet-obsidian satin armor base
+    const bg = x.createLinearGradient(0, 0, 0, S);
+    bg.addColorStop(0, '#0b0e16');
+    bg.addColorStop(0.5, '#07090f');
+    bg.addColorStop(1, '#040509');
+    x.fillStyle = bg;
+    x.fillRect(0, 0, S, S);
+    // subtle carbon micro-weave texture
+    x.fillStyle = 'rgba(255,255,255,0.028)';
+    for (let y = 0; y < S; y += 8) for (let xx = (y % 16 ? 4 : 0); xx < S; xx += 8) x.fillRect(xx, y, 3, 3);
+    // soft bloom halo around neon seams + razor-sharp white neon core
+    traceCircuits(x, 7, softGlow, 4.5);
+    traceCircuits(x, 2.8, neonHex, 2.6);
+  });
+
+  const emissive = makeTex(S, S, x => {
+    x.fillStyle = '#000000';
+    x.fillRect(0, 0, S, S);
+    traceCircuits(x, 8, softGlow, 5);
+    traceCircuits(x, 3.2, neonHex, 3);
+  });
+
+  const bump = makeTex(S, S, x => {
+    x.fillStyle = '#b4b4b4'; x.fillRect(0, 0, S, S);
+    traceCircuits(x, 9, '#242424', 0);
+    traceCircuits(x, 3.5, '#f0f0f0', 3.5);
+  }, false);
+
+  const rough = makeTex(S, S, x => {
+    x.fillStyle = '#4a4a4a'; x.fillRect(0, 0, S, S); // sleek satin-gloss obsidian
+    traceCircuits(x, 5, '#141414', 3.5); // mirror-bright neon channels
+  }, false);
+
+  return { map, bump, rough, emissive };
+}
 
 // ------------------------------------------------------------ procedural PBR armor textures (512x512)
 
@@ -848,50 +933,56 @@ function buildTassetPanel(
 
 // ------------------------------------------------------------ shared material factory per armor + class
 function makeClassMaterials(cls: NewClassId, a: Armor) {
-  const l = a.look!, glow = l.glow ?? 0.06;
-  const pbr = cls === 'sohei' ? soheiLamellarMaps(l) : cls === 'xia' ? xiaShanwenMaps(l) : hwarangBrigandineMaps(l);
-  const isClothFaced = cls === 'hwarang';
+  const l = a.look!, glow = l.glow ?? 0.06, isNeon = l.neon !== undefined;
+  const pbr = isNeon
+    ? tronPlateMaps(l.neon)
+    : cls === 'sohei' ? soheiLamellarMaps(l) : cls === 'xia' ? xiaShanwenMaps(l) : hwarangBrigandineMaps(l);
+  const isClothFaced = !isNeon && cls === 'hwarang';
 
   const patterned = (rx: number, ry: number) => {
     const map = pbr.map.clone(); map.repeat.set(rx, ry); map.needsUpdate = true;
     const bump = pbr.bump.clone(); bump.repeat.set(rx, ry); bump.needsUpdate = true;
     const rough = pbr.rough.clone(); rough.repeat.set(rx, ry); rough.needsUpdate = true;
+    const em = pbr.emissive ? pbr.emissive.clone() : map;
+    if (pbr.emissive) { em.repeat.set(rx, ry); em.needsUpdate = true; }
     return new THREE.MeshStandardMaterial({
       map,
       bumpMap: bump,
-      bumpScale: cls === 'xia' ? 0.018 : 0.015,
+      bumpScale: isNeon ? 0.016 : cls === 'xia' ? 0.018 : 0.015,
       roughnessMap: rough,
-      roughness: isClothFaced ? 0.62 : 0.42,
-      metalness: cls === 'xia' ? 0.46 : isClothFaced ? 0.22 : 0.28,
-      emissiveMap: map,
-      emissive: 0xffffff,
-      emissiveIntensity: glow,
+      roughness: isNeon ? 0.28 : isClothFaced ? 0.62 : 0.42,
+      metalness: isNeon ? 0.56 : cls === 'xia' ? 0.46 : isClothFaced ? 0.22 : 0.28,
+      emissiveMap: em,
+      emissive: isNeon ? l.neon! : 0xffffff,
+      emissiveIntensity: isNeon ? 2.3 : glow,
       side: THREE.DoubleSide
     });
   };
   const lacquer = new THREE.MeshStandardMaterial({
     color: l.lame,
-    roughness: 0.24,
-    metalness: cls === 'xia' ? 0.42 : 0.28,
+    roughness: isNeon ? 0.22 : 0.24,
+    metalness: isNeon ? 0.55 : cls === 'xia' ? 0.42 : 0.28,
     emissive: l.lame,
-    emissiveIntensity: glow,
+    emissiveIntensity: isNeon ? 0.04 : glow,
     side: THREE.DoubleSide
   });
   const metal = new THREE.MeshStandardMaterial({
-    color: l.metal,
-    roughness: 0.24,
-    metalness: 0.88,
-    emissive: l.metal,
-    emissiveIntensity: Math.max(0.18, glow * 1.45),
+    color: isNeon ? l.neon! : l.metal,
+    roughness: isNeon ? 0.12 : 0.24,
+    metalness: isNeon ? 0.18 : 0.88,
+    emissive: isNeon ? l.neon! : l.metal,
+    emissiveIntensity: isNeon ? 2.4 : Math.max(0.18, glow * 1.45),
     side: THREE.DoubleSide
   });
+  if (isNeon) metal.userData.noGlyphs = true;
   const lace = new THREE.MeshStandardMaterial({
-    color: l.lace,
-    roughness: 0.78,
-    emissive: l.lace,
-    emissiveIntensity: 0.14,
+    color: isNeon ? 0xdceeff : l.lace,
+    roughness: isNeon ? 0.2 : 0.78,
+    emissive: isNeon ? l.neon! : l.lace,
+    emissiveIntensity: isNeon ? 1.55 : 0.14,
     side: THREE.DoubleSide
   });
+  if (isNeon) lace.userData.noGlyphs = true;
   const silk = (color: number, tex: THREE.Texture, rx = 2, ry = 2) => {
     const t = tex.clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
     return new THREE.MeshStandardMaterial({
@@ -903,13 +994,13 @@ function makeClassMaterials(cls: NewClassId, a: Armor) {
       side: THREE.DoubleSide
     });
   };
-  return { patterned, lacquer, metal, lace, silk, l, glow };
+  return { patterned, lacquer, metal, lace, silk, l, glow, isNeon };
 }
 
 // ------------------------------------------------------------ main builder for all 3 new classes
 
 export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: ArmorBuildCtx) {
-  const { patterned, lacquer, metal, lace, silk, l } = makeClassMaterials(cls, a);
+  const { patterned, lacquer, metal, lace, silk, l, isNeon } = makeClassMaterials(cls, a);
   const { P, rigChest, rigWaist, overlay, hang, bones } = ctx;
   const hips = P('Hips');
 
@@ -946,9 +1037,46 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
         new V(0.105 * s, 0.172, -0.132 * torsoSpec.depth),
       ]);
       g.add(new THREE.Mesh(new THREE.TubeGeometry(strapCurve, 18, 0.013, 6), lacquer));
+      if (isNeon) {
+        const edge = new THREE.Mesh(new THREE.TubeGeometry(strapCurve, 18, 0.0042, 5), metal);
+        edge.position.set(0.012 * s, 0.006, 0);
+        g.add(edge);
+      }
       const stud = new THREE.Mesh(new THREE.SphereGeometry(0.011, 10, 8), metal);
       stud.position.set(0.105 * s, 0.178, 0.145 * torsoSpec.depth);
       g.add(stud);
+    }
+
+    // TRON-style twin glowing front circuit rails + luminous Identity Disc mounted on the upper back
+    if (isNeon) {
+      for (const s of [-1, 1]) {
+        const rail = new THREE.CatmullRomCurve3([
+          new V(0.072 * s, 0.228, 0.114 * torsoSpec.depth),
+          new V(0.095 * s, 0.115, 0.168 * torsoSpec.depth),
+          new V(0.076 * s, -0.045, 0.156 * torsoSpec.depth),
+          new V(0.068 * s, -0.245, 0.132 * torsoSpec.depth)
+        ]);
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(rail, 22, 0.0042, 5), metal));
+      }
+      const discGrp = new THREE.Group();
+      discGrp.position.set(0, 0.095, -0.168 * torsoSpec.depth);
+      discGrp.rotation.x = 0.08;
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.078, 0.012, 32), lacquer);
+      core.rotation.x = Math.PI / 2;
+      discGrp.add(core);
+      const outerRing = new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.007, 8, 36), metal);
+      outerRing.position.z = -0.004;
+      discGrp.add(outerRing);
+      const innerRing = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.0045, 6, 32), lace);
+      innerRing.position.z = -0.006;
+      discGrp.add(innerRing);
+      const halo = new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.018, 6, 36), new THREE.MeshBasicMaterial({
+        color: 0xdcf0ff, transparent: true, opacity: 0.34, depthWrite: false, blending: THREE.AdditiveBlending
+      }));
+      halo.position.z = -0.006;
+      halo.castShadow = halo.receiveShadow = false;
+      discGrp.add(halo);
+      g.add(discGrp);
     }
 
     // ---- CLASS-SPECIFIC TORSO SIGNATURE ELEMENTS
@@ -960,7 +1088,7 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
       g.add(nodowa);
 
       // Quilted brocade KESA stole draped diagonally over the left shoulder across the cuirass
-      const kesaColor = new THREE.Color(l.lace).lerp(new THREE.Color(l.metal), 0.22).getHex();
+      const kesaColor = isNeon ? 0x0b0e15 : new THREE.Color(l.lace).lerp(new THREE.Color(l.metal), 0.22).getHex();
       const kesaMat = silk(kesaColor, brocadeKesaTex, 1, 2.2);
       for (const back of [false, true]) {
         const z = back ? -1 : 1;
@@ -1166,7 +1294,7 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
         sk.add(ellipseArcTube(R * 1.245, R * 1.245, -h * 0.5, th, span, 0.0042, metal, 12));
       }
       // Brocade front apron panel over center tasset
-      const kesaMat = silk(new THREE.Color(l.lace).lerp(new THREE.Color(l.metal), 0.22).getHex(), brocadeKesaTex, 0.65, 1.1);
+      const kesaMat = silk(isNeon ? 0x0b0e15 : new THREE.Color(l.lace).lerp(new THREE.Color(l.metal), 0.22).getHex(), brocadeKesaTex, 0.65, 1.1);
       sk.add(buildTassetPanel(R * 1.05, R * 1.26, h * 1.12, -0.34, 0.68, 0.03, kesaMat));
       sk.add(ellipseArcTube(R * 1.265, R * 1.265, -h * 0.56, -0.34, 0.68, 0.0045, metal, 12));
 

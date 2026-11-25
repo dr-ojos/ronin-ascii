@@ -12,8 +12,9 @@ export interface Armor {
   dash?: number; run?: number; regen?: number;
   robe?: { linen: number; mantle: number; sash: number };
   /** how it looks on you (outfit.ts): lacquered plates (lame), the silk lacing that binds them (lace), the metal
-   *  fittings, size of the shoulder guards, helmet and its crest, shin guards, aura, how much it glows */
-  look?: { lame: number; lace: number; metal: number; sode: number; helmet?: 'jingasa' | 'crescent' | 'kuwagata' | 'sun'; shins?: boolean; aura?: 'foxfire' | 'gold'; glow?: number };
+   *  fittings, size of the shoulder guards, helmet and its crest, shin guards, aura, how much it glows,
+   *  and optional glowing neon edge colour (TRON-style dark plates with luminous circuit borders) */
+  look?: { lame: number; lace: number; metal: number; sode: number; helmet?: 'jingasa' | 'crescent' | 'kuwagata' | 'sun'; shins?: boolean; aura?: 'foxfire' | 'gold' | 'neon'; glow?: number; neon?: number };
 }
 export const ARMORS: Armor[] = [
   { id: 'kimono',   name: 'Kimono de viaje',        desc: 'tela y polvo del camino',                     price: 0, tier: 0,    hp: 0,   guard: 0 },
@@ -35,6 +36,8 @@ export const ARMORS: Armor[] = [
     look: { lame: 0x1a2342, lace: 0x2f78f0, metal: 0xf2c445, sode: 1.8, helmet: 'kuwagata', shins: true, glow: 0.1 } },
   { id: 'tsukuyomi', name: 'Armadura de Tsukuyomi', desc: 'lacado lunar: recuperas vida sin perder agilidad', price: 10800, tier: 2.8, hp: 75, guard: 0.26, dash: 0.74, regen: 0.8,
     look: { lame: 0x362953, lace: 0x9584e5, metal: 0xbecbfa, sode: 1.35, helmet: 'crescent', shins: true, glow: 0.16 } },
+  { id: 'neon', name: 'Coraza de Neón Blanco', desc: 'obsidiana oscura surcada por circuitos de luz blanca: veloz y precisa', price: 12400, tier: 2.9, hp: 90, guard: 0.3, dash: 0.72, run: 1.12, regen: 0.6,
+    look: { lame: 0x07080d, lace: 0xeef6ff, metal: 0xffffff, sode: 1.45, helmet: 'crescent', shins: true, aura: 'neon', glow: 0.04, neon: 0xffffff } },
   { id: 'hachiman', name: 'Armadura de Hachiman',   desc: 'bendecida: cierra tus heridas incluso en combate', price: 14000, tier: 3, hp: 100, guard: 0.35, regen: 1.5,
     look: { lame: 0xd8a21e, lace: 0xd81a22, metal: 0xffe08a, sode: 1.8, helmet: 'sun', shins: true, aura: 'gold', glow: 0.3 } },
   { id: 'kurogane', name: 'Gran coraza Kurogane', desc: 'hierro oscuro: la mayor protección, a cambio de movilidad', price: 16800, tier: 3, hp: 120, guard: 0.42, dash: 1.18, run: 0.88,

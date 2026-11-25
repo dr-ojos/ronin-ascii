@@ -65,7 +65,7 @@ export const PERKS: Perk[] = [
 /** Masa only sells these to whoever has the level (weapons.ts / armor.ts ids) */
 export const LEVEL_REQ: Record<string, number> = {
   // armour
-  oyoroi: 12, tsukuyomi: 15, hachiman: 25, kurogane: 30,
+  oyoroi: 12, tsukuyomi: 15, neon: 20, hachiman: 25, kurogane: 30,
   // the masters' blades
   susanoo: 15, 'gemelas-ocaso': 15, masamune: 25, 'espada-montana': 25, bishamon: 25, aurora: 30, guandao: 25, sainggeom: 25,
   // legendary: only by level
