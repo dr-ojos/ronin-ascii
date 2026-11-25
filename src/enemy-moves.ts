@@ -47,6 +47,8 @@ const MOVES = {
   bearRush:   { shape: 'charge', range: 6.5, length: 7.6, width: 1.22, duration: 0.53, windup: 0.97, recovery: 1.65, power: 1.12, color: 0xfa8e5b },
   boarRush:   { shape: 'charge', range: 7, length: 8.9, width: 0.77, duration: 0.48, windup: 0.8, recovery: 1.35, power: 1.08, color: 0xe5ac70 },
   web:        { shape: 'zones', range: 9.7, radius: 2.05, layout: 'single', effect: 'web', windup: 0.87, recovery: 1.12, power: 0.78, color: 0xd6bedf },
+  scorpionSting: { shape: 'arc', range: 3.1, radius: 4.1, angle: 0.76, windup: 0.62, recovery: 0.88, power: 1.05, color: 0x7ef3ff },
+  crystalShard:  { shape: 'wave', range: 9.5, length: 11.2, width: 1.05, windup: 0.78, recovery: 1.15, power: 0.90, color: 0x7ef3ff },
   crescent:   { shape: 'wave', range: 10.5, length: 12.2, width: 1.32, windup: 0.91, recovery: 1.32, power: 0.92, color: 0x9aeaff }
 } satisfies Record<string, Move>;
 export type EnemyMove = keyof typeof MOVES;

@@ -57,10 +57,10 @@ export type Collider =
 export interface XZ { x: number; z: number }
 
 /** the kinds of oni: each looks and fights differently (enemies.ts KINDS) */
-export type Wildlife = 'lobos' | 'oso' | 'jabalies' | 'aranas';
+export type Wildlife = 'lobos' | 'oso' | 'jabalies' | 'aranas' | 'escorpiones';
 export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 'acechador' | 'hechicero'
   | 'guadanero' | 'piromante' | 'duelista' | 'tambor' | 'sombra' | 'coloso'
-  | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'espectro'
+  | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'escorpion' | 'espectro'
   | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianRayo' | 'shuten' | 'enma' | 'senorBosque' | 'yukiOnna'
   | 'kensei' | 'tengu' | 'raijin';
 export type Affix = 'acorazado' | 'regenerador' | 'furioso' | 'gelido' | 'invocador' | 'errante' | 'espinoso';

@@ -194,6 +194,7 @@ function buildCamps() {
       kinds = Array.from({ length: far ? 5 : 3 + Math.floor(Math.random() * 2) }, (_, i) => far && i === 0 ? 'loboAlfa' : 'lobo');
     } else if (wildlife === 'oso') kinds = ['oso'];
     else if (wildlife === 'jabalies') kinds = Math.random() < 0.65 ? ['jabali', 'jabali'] : ['jabali', 'jabali', 'jabali'];
+    else if (wildlife === 'escorpiones') kinds = Math.random() < 0.55 ? ['escorpion', 'escorpion'] : ['escorpion', 'escorpion', 'escorpion'];
     else kinds = ['arana', 'arana'];
     camps.push(makeCamp(x, z, kinds, r, { wildlife }));
   }

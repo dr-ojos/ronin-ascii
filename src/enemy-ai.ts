@@ -25,7 +25,7 @@ import type { Camp, Enemy, Wildlife } from './types';
 
 const nav = { x: 0, z: 0 };
 const WILDLIFE_NAMES: Record<Wildlife, string> = {
-  lobos: 'JAURÍA DE LOBOS', oso: 'OSO PARDO', jabalies: 'JABALÍES', aranas: 'ARAÑAS DE SEDA'
+  lobos: 'JAURÍA DE LOBOS', oso: 'OSO PARDO', jabalies: 'JABALÍES', aranas: 'ARAÑAS DE SEDA', escorpiones: 'ESCORPIONES DE CRISTAL'
 };
 
 /** every idle oni of the camp starts fighting (one roar for the whole camp) */
@@ -40,7 +40,7 @@ export function alertCamp(camp: Camp) {
   const pan = panOf(alert.g.position.x, alert.g.position.z);
   if (camp.wildlife) {
     if (camp.wildlife === 'lobos') sfx.howl(pan);
-    else if (camp.wildlife !== 'aranas') sfx.growl(pan, camp.wildlife === 'oso');
+    else if (camp.wildlife !== 'aranas' && camp.wildlife !== 'escorpiones') sfx.growl(pan, camp.wildlife === 'oso');
     showMsg(`¡ ${WILDLIFE_NAMES[camp.wildlife]} !`, 1.5);
     return;
   }

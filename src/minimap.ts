@@ -23,7 +23,7 @@ const COL = {
   pine: '#5c9a66', cypress: '#46805a', bamboo: '#9ccd66', rock: '#858a98', snow: '#d2dbee', place: '#ffd27a', temple: '#87efbd', you: '#ffffff', oni: '#ff5a4a',
   unknown: '#151a25'
 };
-const WILDLIFE_MARK: Record<Wildlife, string> = { lobos: 'w', oso: 'U', jabalies: 'j', aranas: '8' };
+const WILDLIFE_MARK: Record<Wildlife, string> = { lobos: 'w', oso: 'U', jabalies: 'j', aranas: '8', escorpiones: 'c' };
 function hash(x: number, z: number) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
 const clamp = (v: number, a: number, b: number) => v < a ? a : v > b ? b : v;
 const smooth = (v: number, a: number, b: number) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };

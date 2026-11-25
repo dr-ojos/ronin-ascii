@@ -235,7 +235,8 @@ export function buildLandmarks() {
     ['lobos', 'claro', 225, 3], ['lobos', 'pinos', 265, 5], ['lobos', 'bosquenegro', 290, 5], ['lobos', 'llanura', 265, 4],
     ['oso', 'lago', 190, 4], ['oso', 'pinos', 255, 3], ['oso', 'bosquenegro', 285, 3],
     ['jabalies', 'cerezos', 205, 5], ['jabalies', 'bambu', 215, 4], ['jabalies', 'llanura', 225, 4],
-    ['aranas', 'bambu', 220, 5], ['aranas', 'bosquenegro', 260, 4]
+    ['aranas', 'bambu', 220, 5], ['aranas', 'bosquenegro', 260, 4],
+    ['escorpiones', 'llanura', 240, 4], ['escorpiones', 'pinos', 260, 4]
   ];
   R = seeded(8615);
   for (const [wildlife, id, reach, quota] of habitats) {
