@@ -41,7 +41,7 @@ export function techniqueRows(image?: (id: TechniqueId) => string): MenuRow[] {
     r.push({
       label: `${t.name} · ${ROMAN[k]}`, image: image?.(id),
       value: top ? 'máximo' : `mejorar · ${cost} pts`, cls: top ? 'y' : free >= cost ? 'y' : 'd',
-      note: `${'◆'.repeat(k)}${'◇'.repeat(MAX_RANK - k)} ${now} · ${next}${state.technique === id ? ' · equipada' : ''}`,
+      note: `${'◆'.repeat(k)}${'◇'.repeat(MAX_RANK - k)} ${now} · ${next}${state.technique === id ? ' · en P' : state.technique2 === id ? ' · en J' : ''}`,
       act: upgrade, right: upgrade
     });
   }

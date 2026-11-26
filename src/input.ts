@@ -73,10 +73,13 @@ addEventListener('keydown', e => {
     const w = cycleWeapon();
     showMsg(w ? `— ${w.name} —` : `solo tienes ${weapon().name} · Masa vende más en la casa del santuario`, w ? 1.2 : 2.2);
   }
-  if (!e.repeat && e.code === 'KeyP') trySpecial();
+  if (!e.repeat && e.code === 'KeyP') trySpecial(1);
+  if (!e.repeat && e.code === 'KeyJ') trySpecial(2);
+  // O changes the technique on P, SHIFT+O the one on J (never the one already in the other slot)
   if (!e.repeat && e.code === 'KeyO' && state.playing && !state.dead && !state.photo) {
-    if (state.learnedTechniques.length > 1) showMsg(`— ${cycleTechnique().name.toUpperCase()} —`, 1.2);
-    else showMsg('Aprende técnicas en los templos ◆ del mapa (N).\nLos cofres contienen sellos de jade.', 2.6);
+    const slot = e.shiftKey ? 2 : 1;
+    if (state.learnedTechniques.length > 2) showMsg(`${slot === 1 ? 'P' : 'J'} · ${cycleTechnique(slot).name.toUpperCase()}`, 1.2);
+    else showMsg('Aprende más técnicas en los templos ◆ del mapa (N).\nLos cofres contienen sellos de jade.\nO cambia la técnica de P · SHIFT+O la de J', 3);
   }
   // switches act once per press: a held key repeats ~30 times a second, and every T rebuilds the graphics
   // (quality, shadow map, shaders) — holding it froze the game for seconds and could bring the browser down

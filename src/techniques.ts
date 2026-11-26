@@ -23,20 +23,60 @@ export const TECHNIQUES = {
     description: 'Seis espadas de luz salen de tu espalda y vuelan hasta 6 onis a 15 m: cada una hiere, aturde y los empuja.' },
   petalos: { name: 'Tormenta de Pétalos', short: 'Pétalos', color: 0xff8ab8,
     description: 'Un remolino de pétalos de 10 m te rodea: hiere y aturde a los onis, te cura 4 por cada uno y te vuelve intocable 1 s.' },
+  // every class's second technique, ready on J from the first run (arts.ts)
+  iai: { name: 'Iaijutsu del Relámpago', short: 'Iai', color: 0xfff4d6,
+    description: 'Desenvainas y cruzas 12 m en un instante, intocable. Al envainar, cada oni de tu camino recibe un corte profundo y queda aturdido.' },
+  rueda: { name: 'Rueda del Dharma', short: 'Dharma', color: 0xffb347,
+    description: 'Tu bastón gira durante 2,4 s y arrastra hacia ti a los onis a 8 m, golpeándolos sin parar. Al final los despide con una onda.' },
+  palma: { name: 'Palma del Buda', short: 'Palma', color: 0xffe08a,
+    description: 'Una palma dorada gigante cae del cielo sobre el oni más cercano por delante (hasta 10 m): aplasta a todos en 5,5 m y los aturde 2 s.' },
+  flechas: { name: 'Lluvia de Flechas', short: 'Flechas', color: 0xffd6e6,
+    description: 'Durante 2,5 s llueven flechas sobre los onis más cercanos (16 m): cada una hiere y frena a quien alcanza.' },
+  // more temple lessons, bought with jade seals
+  tornado: { name: 'Ojo del Tifón', short: 'Tifón', color: 0xa8ffe8, cost: 4,
+    description: 'Un tornado avanza delante de ti durante 3,5 s: atrae a los onis a 6 m y los golpea una y otra vez.' },
+  meteoro: { name: 'Lluvia de Meteoros', short: 'Meteoros', color: 0xff7a2e, cost: 5,
+    description: 'Seis meteoros caen sobre los onis a 16 m: cada uno estalla en 3,5 m, quema y derriba.' },
+  hielo: { name: 'Aliento Glacial', short: 'Glacial', color: 0xbfefff, cost: 3,
+    description: 'Un aliento helado en abanico de 11 m congela a los onis 3 s. Cuando el hielo se rompe, vuelve a herirlos.' },
+  tierra: { name: 'Grieta del Trueno', short: 'Grieta', color: 0xd9b27a, cost: 4,
+    description: 'Golpeas la tierra y una grieta corre 18 m: colmillos de roca y chispas lanzan por los aires a cada oni del camino.' },
 } as const;
 
 export type TechniqueId = keyof typeof TECHNIQUES;
+/** each class's own techniques: never taught at a temple */
+export type ClassTechniqueId = 'tajos' | 'campana' | 'feijian' | 'petalos' | 'iai' | 'rueda' | 'palma' | 'flechas';
 /** taught (or won) at a temple: everything but the techniques a class starts with */
-export type TempleTechniqueId = Exclude<TechniqueId, 'tajos' | 'campana' | 'feijian' | 'petalos'>;
+export type TempleTechniqueId = Exclude<TechniqueId, ClassTechniqueId>;
 /** bought from a master with jade seals */
 export type JadeTechniqueId = Exclude<TempleTechniqueId, 'rayo'>;
 /** the techniques that run out from you as a wave (technique-waves.ts) */
 export type WaveTechniqueId = 'viento' | 'fuego' | 'agua' | 'campana' | 'petalos';
 
-export function cycleTechnique() {
-  const index = state.learnedTechniques.indexOf(state.technique);
-  state.technique = state.learnedTechniques[(index + 1) % state.learnedTechniques.length];
-  return TECHNIQUES[state.technique];
+/** the two slots: P (state.technique) and J (state.technique2) */
+export type Slot = 1 | 2;
+export const SLOT_KEY = { 1: 'P', 2: 'J' } as const;
+export const slotTechnique = (slot: Slot) => slot === 1 ? state.technique : state.technique2;
+/** the slot a technique is equipped in (0: none) */
+export const slotOf = (id: TechniqueId): Slot | 0 => state.technique === id ? 1 : state.technique2 === id ? 2 : 0;
+
+/** puts a known technique in a slot; if it was in the other one, the two swap */
+export function equipTechnique(id: TechniqueId, slot: Slot) {
+  const other = slot === 1 ? state.technique2 : state.technique, here = slotTechnique(slot);
+  if (here === id) return;
+  if (other === id) { state.technique = slot === 1 ? id : here; state.technique2 = slot === 1 ? here : id; return; }
+  if (slot === 1) state.technique = id; else state.technique2 = id;
+}
+
+/** next learnt technique in a slot (the one in the other slot is skipped) */
+export function cycleTechnique(slot: Slot = 1) {
+  const list = state.learnedTechniques, other = slot === 1 ? state.technique2 : state.technique;
+  const start = list.indexOf(slotTechnique(slot));
+  for (let i = 1; i <= list.length; i++) {
+    const id = list[(start + i) % list.length];
+    if (id !== other) { equipTechnique(id, slot); break; }
+  }
+  return TECHNIQUES[slotTechnique(slot)];
 }
 
 /** a technique won in battle (a temple guardian): learnt and equipped at once */

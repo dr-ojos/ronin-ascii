@@ -3,7 +3,7 @@ import { closeMenu, menuStatus, openMenu, type MenuRow } from './menu';
 import { dressUp } from './outfit';
 import { sfx } from './sfx';
 import { state } from './state';
-import { TECHNIQUES } from './techniques';
+import { equipTechnique, SLOT_KEY, slotOf, TECHNIQUES, type Slot } from './techniques';
 import { UPGRADES, lvl, roman, type UpgradeId } from './upgrades';
 import { WEAPONS, equip, owns, weaponStats } from './weapons';
 import { techniqueRows, toggleLevelMenu } from './level-menu';
@@ -14,6 +14,8 @@ const ownedWeapons = () => WEAPONS.filter(w => owns(w.id));
 /** legendary gear (progression.ts) has no picture of its own yet: it shows its closest kin */
 const IMAGE_KIN: Record<string, string> = {
   kusanagi: 'masamune', 'ame-nuboko': 'yari-marea', 'hoo-tsubasa': 'gemelas-ocaso', tenrai: 'espada-montana', mugen: 'aurora',
+  // the newer techniques borrow the picture of a kindred one
+  iai: 'tajos', rueda: 'campana', palma: 'feijian', flechas: 'petalos', tornado: 'viento', meteoro: 'cuatroLlamas', hielo: 'agua', tierra: 'rayo',
   kongo: 'tetsubo-monje', jizo: 'shakujo', fudo: 'bishamon',
   'estoque-plata': 'sakura', 'estoque-ambar': 'raiken', 'estoque-estrella': 'aurora',
   'odachi-niebla': 'nodachi', 'odachi-carmesi': 'muramasa', 'odachi-eclipse': 'susanoo',
@@ -61,17 +63,17 @@ function inventoryRows(): MenuRow[] {
   }
   rows.push({ label: 'TÉCNICAS', head: true });
   for (const id of state.learnedTechniques) {
-    const move = TECHNIQUES[id], equipped = state.technique === id;
+    const move = TECHNIQUES[id], slot = slotOf(id);
     rows.push({
-      label: `${move.name} · ${ROMAN[rank(id)]}`, value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
+      label: `${move.name} · ${ROMAN[rank(id)]}`, value: slot ? `en ${SLOT_KEY[slot]} · cambiar` : 'equipar en P', cls: slot ? 'y' : 'b',
       image: itemImage('tecnicas', id),
       note: move.description,
       act() {
-        if (!equipped) {
-          state.technique = id;
-          sfx.chime(false);
-        }
-        menuStatus('Pulsa P cuando se llene la carga.');
+        // E puts it in P; again, it moves between P and J (swapping with what was there)
+        const to: Slot = slot === 1 ? 2 : 1;
+        equipTechnique(id, to);
+        sfx.chime(false);
+        menuStatus(`${move.name} en ${SLOT_KEY[to]} · pulsa ${SLOT_KEY[to]} cuando se llene su carga`);
       }
     });
   }

@@ -56,13 +56,13 @@ export const PERKS: Perk[] = [
   { id: 'pies',       level: 5,   name: 'Pies ligeros',     desc: 'la esquiva se recupera un 12 % antes' },
   { id: 'halcon',     level: 10,  name: 'Ojo del halcón',   desc: '+8 % de probabilidad de golpe crítico' },
   { id: 'sed',        level: 15,  name: 'Sed de batalla',   desc: 'cada baja te cura 3 de vida' },
-  { id: 'meditacion', level: 20,  name: 'Meditación',       desc: 'la técnica se carga un 25 % más rápido' },
+  { id: 'meditacion', level: 20,  name: 'Meditación',       desc: 'las técnicas se cargan un 25 % más rápido' },
   { id: 'aliento',    level: 25,  name: 'Segundo aliento',  desc: 'sobrevives a un golpe mortal (una vez cada 3 min)' },
   { id: 'tigre',      level: 35,  name: 'Racha del tigre',  desc: 'la racha dura 2 s más y llega hasta x6' },
   { id: 'aura',       level: 50,  name: 'Aura del maestro', desc: 'recuperas 0,8 de vida por segundo, incluso en combate' },
   { id: 'dragon',     level: 65,  name: 'Golpe del dragón', desc: 'los críticos hacen x2,5 en lugar de x1,75' },
   { id: 'acero',      level: 80,  name: 'Piel de acero',    desc: '−12 % de daño recibido' },
-  { id: 'despertar',  level: 90,  name: 'Despertar',        desc: 'empiezas cada partida con la técnica cargada' },
+  { id: 'despertar',  level: 90,  name: 'Despertar',        desc: 'empiezas cada partida con las dos técnicas cargadas' },
   { id: 'leyenda',    level: 100, name: 'Leyenda viva',     desc: '+15 % de daño, +25 de vida máxima y un aura dorada' }
 ];
 
@@ -136,8 +136,10 @@ export const statDmg = () => (1 + 0.02 * prof.stats.fuerza) * (hasPerk('leyenda'
 export const statHurt = () => (1 - 0.006 * prof.stats.temple) * (hasPerk('acero') ? 0.88 : 1);
 export const statRun = () => 1 + 0.004 * prof.stats.agilidad;
 export const statDash = () => (1 - 0.008 * prof.stats.agilidad) * (hasPerk('pies') ? 0.88 : 1);
-export const chargeMult = () => (1 + 0.02 * prof.stats.espiritu) * (hasPerk('meditacion') ? 1.25 : 1) * rankCharge(rank(state.technique));
-export const techMult = () => (1 + 0.015 * prof.stats.espiritu) * rankPower(rank(state.technique));
+/** how fast a technique charges (its own rank: the one in the slot being filled) */
+export const chargeMult = (t: TechniqueId = state.technique) => (1 + 0.02 * prof.stats.espiritu) * (hasPerk('meditacion') ? 1.25 : 1) * rankCharge(rank(t));
+/** technique damage: the rank of the one cast last (state.casting) */
+export const techMult = () => (1 + 0.015 * prof.stats.espiritu) * rankPower(rank(state.casting));
 export const monMult = () => 1 + 0.02 * prof.stats.fortuna;
 export const xpMult = () => 1 + 0.01 * prof.stats.fortuna;
 export const critChance = () => 0.05 + (hasPerk('halcon') ? 0.08 : 0) + 0.003 * prof.stats.fortuna;
@@ -250,7 +252,7 @@ export const levelGrace = () => state.time < graceUntil;
 export function startRun() {
   windReady = 0; graceUntil = 0;
   state.mon += stipend();
-  if (hasPerk('despertar')) state.special = 1;
+  if (hasPerk('despertar')) state.special = state.special2 = 1;
 }
 /** damage.ts asks before you fall: true if the second wind keeps you standing */
 export function secondWind() {

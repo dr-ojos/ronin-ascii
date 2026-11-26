@@ -22,38 +22,39 @@ export interface CharacterClass {
   /** life at the start of a run, share of damage shrugged off (0..1), running speed multiplier,
    *  dodge cooldown multiplier (<1 = dodges more often) */
   hp: number; guard: number; run: number; dash?: number;
-  /** the weapon forms it can wield, the weapon and technique it starts with; `own`: only the weapons forged
-   *  for it (Weapon.cls), not every weapon of those forms */
+  /** the weapon forms it can wield, the weapon and the two techniques it starts with (P and J); `own`: only the
+   *  weapons forged for it (Weapon.cls), not every weapon of those forms */
   forms: readonly WeaponForm[];
   own?: boolean;
   weapon: string;
   technique: TechniqueId;
+  technique2: TechniqueId;
 }
 
 export const CLASSES: Record<ClassId, CharacterClass> = {
   ronin: {
     id: 'ronin', name: 'Ronin', kanji: '浪人', address: 'ronin', wanderer: 'un ronin cualquiera de los caminos',
-    desc: 'samurái sin señor · katanas, lanzas y espadas · empieza con la Danza de los Mil Tajos',
+    desc: 'samurái sin señor · katanas, lanzas y espadas · empieza con la Danza de los Mil Tajos y el Iaijutsu',
     hp: 100, guard: 0, run: 1,
-    forms: ['katana', 'spear', 'broad', 'dual', 'odachi', 'rapier', 'cleaver'], weapon: 'katana', technique: 'tajos'
+    forms: ['katana', 'spear', 'broad', 'dual', 'odachi', 'rapier', 'cleaver'], weapon: 'katana', technique: 'tajos', technique2: 'iai'
   },
   sohei: {
     id: 'sohei', name: 'Sōhei', kanji: '僧兵', address: 'monje', wanderer: 'un monje cualquiera de las montañas',
-    desc: 'monje guerrero · más vida y aguante, algo más lento · su bastón aturde · empieza con la Campana del Templo',
+    desc: 'monje guerrero · más vida y aguante, algo más lento · su bastón aturde · empieza con la Campana del Templo y la Rueda del Dharma',
     hp: 130, guard: 0.1, run: 0.93,
-    forms: ['staff'], weapon: 'bo', technique: 'campana'
+    forms: ['staff'], weapon: 'bo', technique: 'campana', technique2: 'rueda'
   },
   xia: {
     id: 'xia', name: 'Xiákè', kanji: '侠客', address: 'viajero', wanderer: 'un espadachín errante de los ríos y los lagos',
-    desc: 'espadachín errante chino · rápido y esquivo, pero frágil · jian, dao y guandao · empieza con las Espadas Voladoras',
+    desc: 'espadachín errante chino · rápido y esquivo, pero frágil · jian, dao y guandao · empieza con las Espadas Voladoras y la Palma del Buda',
     hp: 90, guard: 0, run: 1.1, dash: 0.8,
-    forms: ['katana', 'dual', 'spear'], own: true, weapon: 'jian', technique: 'feijian'
+    forms: ['katana', 'dual', 'spear'], own: true, weapon: 'jian', technique: 'feijian', technique2: 'palma'
   },
   hwarang: {
     id: 'hwarang', name: 'Hwarang', kanji: '花郎', address: 'caballero', wanderer: 'un caballero flor cualquiera de Silla',
-    desc: 'caballero flor coreano · equilibrado y firme · espada de anilla, woldo y espadas gemelas · empieza con la Tormenta de Pétalos',
+    desc: 'caballero flor coreano · equilibrado y firme · espada de anilla, woldo y espadas gemelas · empieza con la Tormenta de Pétalos y la Lluvia de Flechas',
     hp: 110, guard: 0.05, run: 1.02, dash: 0.92,
-    forms: ['katana', 'dual', 'spear'], own: true, weapon: 'hwandu', technique: 'petalos'
+    forms: ['katana', 'dual', 'spear'], own: true, weapon: 'hwandu', technique: 'petalos', technique2: 'flechas'
   }
 };
 export const CLASS_IDS = Object.keys(CLASSES) as ClassId[];

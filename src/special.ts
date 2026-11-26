@@ -1,5 +1,6 @@
-// P spends the shared charge on the equipped technique. Raijin's bolts also serve the thunder oni.
-// The sword dance is the technique you start with; the lightning is won at the Templo del Rayo.
+// Two technique slots, each with its own charge: P spends the first, J the second. Raijin's bolts also serve
+// the thunder oni. Every class starts with two techniques of its own (classes.ts); the lightning is won at the
+// Templo del Rayo, the rest are taught at the temples for jade seals. The newer ones live in arts.ts.
 import * as THREE from 'three';
 import { scene } from './renderer';
 import { enemies } from './enemies';
@@ -14,7 +15,8 @@ import { player, state } from './state';
 import { clearBladeDance, startBladeDance, updateBladeDance } from './blade-dance';
 import { clearFourFlames, startFourFlames, updateFourFlames } from './four-flames';
 import { clearTechniqueWaves, startTechniqueWave, updateTechniqueWaves } from './technique-waves';
-import { TECHNIQUES } from './techniques';
+import { SLOT_KEY, slotTechnique, TECHNIQUES, type Slot } from './techniques';
+import { clearArts, isArt, startArt, updateArts } from './arts';
 import { rnd } from './utils';
 import { clearFlares, flare, updateFlares } from './flare';
 import { clearSutras, startSutras, updateSutras } from './sutra-shield';
@@ -28,11 +30,14 @@ const KILL_BONUS = 0.04;    // each kill fills this much more
 const RANGE = 15;           // metres around you the lightning reaches
 const MAX_BOLTS = 8;
 
-/** fill the charge (time passing, or a kill) */
+/** fill both charges (time passing, or a kill); each fills at the pace of its own technique's rank */
 export function charge(amount: number) {
-  if (state.special >= 1) return;
-  state.special = Math.min(1, state.special + amount * chargeMult());
-  if (state.special >= 1) { sfx.chime(false); showMsg(`— ${TECHNIQUES[state.technique].name.toUpperCase()} —\nCarga lista · pulsa P`, 1.6); }
+  for (const slot of [1, 2] as const) {
+    const key = slot === 1 ? 'special' : 'special2';
+    if (state[key] >= 1) continue;
+    state[key] = Math.min(1, state[key] + amount * chargeMult(slotTechnique(slot)));
+    if (state[key] >= 1) { sfx.chime(false); showMsg(`— ${TECHNIQUES[slotTechnique(slot)].name.toUpperCase()} —\nCarga lista · pulsa ${SLOT_KEY[slot]}`, 1.6); }
+  }
 }
 export const chargeKill = () => charge(KILL_BONUS);
 
@@ -82,16 +87,22 @@ let flashT = 0;
 /** light the sky for an instant */
 export const skyFlash = (k = 0.25) => { flashT = Math.max(flashT, k); };
 
-/** P pressed */
-export function trySpecial() {
+/** P (slot 1) or J (slot 2) pressed */
+export function trySpecial(slot: Slot = 1) {
   if (!state.playing || state.dead || state.photo || state.menu) return;
-  if (state.special < 1) { showMsg(`Cargando ${TECHNIQUES[state.technique].name} · ${Math.floor(state.special * 100)} %`, 1.2); return; }
+  const key = slot === 1 ? 'special' : 'special2', id = slotTechnique(slot);
+  if (state[key] < 1) { showMsg(`Cargando ${TECHNIQUES[id].name} · ${Math.floor(state[key] * 100)} %`, 1.2); return; }
   if (player.dancing) return;
-  state.special = 0;
-  const id = state.technique;
+  state[key] = 0;
+  state.casting = id;   // its rank sets the damage (progression.ts)
   if (id === 'tajos') {
     showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
     startBladeDance();
+    return;
+  }
+  if (isArt(id)) {
+    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
+    startArt(id);
     return;
   }
   Object.assign(player, { combo: id === 'viento' || id === 'sutras' ? 0 : id === 'agua' ? 1 : 2, attackT: 0, attackDur: id === 'campana' ? 0.62 : 0.55,
@@ -154,6 +165,7 @@ export function updateSpecial(dt: number) {
   updateFlares(dt);
   updateSutras(dt);
   updateFlyingSwords(dt);
+  updateArts(dt);
   for (let i = pending.length - 1; i >= 0; i--) { const p = pending[i]; if ((p.t -= dt) <= 0) { pending.splice(i, 1); p.fn(); } }
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.life -= dt;
@@ -169,11 +181,14 @@ export function updateSpecial(dt: number) {
 function removeBolt(b: Bolt) { scene.remove(b.g); b.core.dispose(); b.glow.dispose(); }
 
 export function resetSpecial() {
-  // the class's own technique and every one already learnt (vault.ts); the jade seals belong to the run
-  const start = cls().technique, v = readVault();
-  const learned = [start, ...v.techniques.filter(t => t !== start && t in TECHNIQUES)];
+  // the class's own two techniques and every one already learnt (vault.ts); the jade seals belong to the run
+  const start = cls().technique, start2 = cls().technique2, v = readVault();
+  const learned = [start, start2, ...v.techniques.filter(t => t !== start && t !== start2 && t in TECHNIQUES)];
   const technique = v.technique && learned.includes(v.technique) ? v.technique : start;
-  Object.assign(state, { special: 0, jade: 0, technique, learnedTechniques: learned });
+  let technique2 = v.technique2 && learned.includes(v.technique2) ? v.technique2 : start2;
+  if (technique2 === technique) technique2 = technique === start2 ? start : start2;
+  Object.assign(state, { special: 0, special2: 0, jade: 0, technique, technique2, casting: technique, learnedTechniques: learned });
+  clearArts();
   clearSutras();
   clearFlyingSwords();
   clearBladeDance();

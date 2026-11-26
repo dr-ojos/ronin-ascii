@@ -36,11 +36,14 @@ export function updateHud(dt: number) {
   const gain = state.gainT > 0 ? `<span class="y" style="opacity:${Math.min(1, state.gainT).toFixed(2)}">${state.gain}</span>` : '';
   const lairs = camps.filter(c => !c.route && !c.temp && !c.wildlife), cleared = lairs.filter(c => !c.roster.length).length;
   const ups = upgradeList();
-  const rf = Math.floor(state.special * 12);
-  const equipped = TECHNIQUES[state.technique];
-  const special = `<span style="color:#${equipped.color.toString(16)}">${equipped.short.toUpperCase()}</span>  ` + (state.special >= 1
-    ? `[<span class="y">${'#'.repeat(12)}</span>] <span class="y">P · lista</span>`
-    : `[<span class="b">${'#'.repeat(rf)}</span>${'-'.repeat(12 - rf)}] <span class="d">${Math.floor(state.special * 100)} %</span>`);
+  // one line per technique slot: its name, its charge, and its key once full
+  const slotLine = (id: typeof state.technique, charge: number, key: string) => {
+    const t = TECHNIQUES[id], rf = Math.floor(charge * 12);
+    return `<span class="d">${key}</span> <span style="color:#${t.color.toString(16).padStart(6, '0')}">${t.short.toUpperCase().padEnd(13)}</span>` + (charge >= 1
+      ? `[<span class="y">${'#'.repeat(12)}</span>] <span class="y">lista</span>`
+      : `[<span class="b">${'#'.repeat(rf)}</span>${'-'.repeat(12 - rf)}] <span class="d">${Math.floor(charge * 100)} %</span>`);
+  };
+  const special = `${slotLine(state.technique, state.special, 'P')}\n${slotLine(state.technique2, state.special2, 'J')}`;
   // Major boss health takes priority when a nearby guardian is also fighting.
   let foe: (typeof enemies)[number] | null = null, fd = 40;
   for (const e of enemies) {

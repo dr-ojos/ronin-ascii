@@ -17,8 +17,9 @@ const SECTIONS: [string, [string, string][]][] = [
     ['Combo de tajos', 'clic / K'],
     ['Golpe fuerte', 'L'],
     ['Cambiar de arma', 'Q'],
-    ['Usar la técnica cargada', 'P'],
-    ['Cambiar de técnica', 'O']
+    ['Usar la técnica principal', 'P'],
+    ['Usar la técnica secundaria', 'J'],
+    ['Cambiar técnica de P / de J', 'O / ⇧O']
   ]],
   ['MUNDO', [
     ['Hablar · abrir cofres', 'E'],

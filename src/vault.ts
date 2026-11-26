@@ -11,7 +11,7 @@ import type { TechniqueId } from './techniques';
 
 export interface Vault {
   weapons: string[]; armors: string[]; techniques: TechniqueId[];
-  weapon?: string; armor?: string; technique?: TechniqueId;
+  weapon?: string; armor?: string; technique?: TechniqueId; technique2?: TechniqueId;
 }
 export const VAULT_PREFIX = 'ronin-ascii.items.';
 const key = (id: ClassId) => VAULT_PREFIX + id;
@@ -24,7 +24,8 @@ export function parseVault(raw: string | null): Vault {
     const v = JSON.parse(raw || 'null');
     if (v && typeof v === 'object') return {
       weapons: strings(v.weapons), armors: strings(v.armors), techniques: strings(v.techniques) as TechniqueId[],
-      weapon: str(v.weapon), armor: str(v.armor), technique: str(v.technique) as TechniqueId | undefined
+      weapon: str(v.weapon), armor: str(v.armor), technique: str(v.technique) as TechniqueId | undefined,
+      technique2: str(v.technique2) as TechniqueId | undefined
     };
   } catch { /* broken save */ }
   return { weapons: [], armors: [], techniques: [] };
@@ -37,7 +38,8 @@ const union = <T>(a: T[], b: T[]) => [...new Set([...a, ...b])];
 export function mergeVaults(a: Vault, b: Vault): Vault {
   return {
     weapons: union(a.weapons, b.weapons), armors: union(a.armors, b.armors), techniques: union(a.techniques, b.techniques),
-    weapon: b.weapon ?? a.weapon, armor: b.armor ?? a.armor, technique: b.technique ?? a.technique
+    weapon: b.weapon ?? a.weapon, armor: b.armor ?? a.armor, technique: b.technique ?? a.technique,
+    technique2: b.technique2 ?? a.technique2
   };
 }
 
@@ -50,12 +52,12 @@ export function holdVault() { ready = false; }
 
 export function saveVault() {
   if (!ready) return;
-  const sig = [state.cls, state.owned, state.ownedArmor, state.learnedTechniques, state.weapon, state.armor, state.technique].join('|');
+  const sig = [state.cls, state.owned, state.ownedArmor, state.learnedTechniques, state.weapon, state.armor, state.technique, state.technique2].join('|');
   if (sig === lastSig) return;
   lastSig = sig;
   const now: Vault = {
     weapons: state.owned.slice(), armors: state.ownedArmor.slice(), techniques: state.learnedTechniques.slice(),
-    weapon: state.weapon, armor: state.armor, technique: state.technique
+    weapon: state.weapon, armor: state.armor, technique: state.technique, technique2: state.technique2
   };
   try { localStorage.setItem(key(state.cls), JSON.stringify(mergeVaults(readVault(), now))); } catch { /* no storage */ }
 }

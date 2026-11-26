@@ -29,11 +29,13 @@ export const state = {
   mon: 0, weapon: 'katana' as string, owned: ['katana'] as string[], armor: 'kimono' as string, ownedArmor: ['kimono'] as string[],
   // inside Masa's shop (the shrine at the start): its roof hides and the camera comes closer
   indoors: false,
-  // An open menu pauses the fight. All techniques draw on the same charge (0..1).
+  // An open menu pauses the fight. Two technique slots, each with its own charge (0..1): P (technique, special)
+  // and J (technique2, special2). `casting` is the last one cast: its rank sets the damage (progression.ts).
   menu: null as MenuId | null,
   /** the title screen is up: the camera frames the chosen warrior on the right (title.ts, camera.ts) */
   showcase: false,
-  special: 0, jade: 0, technique: 'tajos' as TechniqueId, learnedTechniques: ['tajos'] as TechniqueId[],
+  special: 0, jade: 0, technique: 'tajos' as TechniqueId, learnedTechniques: ['tajos', 'iai'] as TechniqueId[],
+  special2: 0, technique2: 'iai' as TechniqueId, casting: 'tajos' as TechniqueId,
   // feel
   shake: 0, hitStop: 0, time: 0,
   // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes

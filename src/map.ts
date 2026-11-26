@@ -14,7 +14,7 @@ export type P2 = [number, number];
 /** places with their own name (HUD + minimap). flat: radius of the levelled ground around it */
 export interface Place { id: string; name: string; x: number; z: number; r: number; flat: number; blend: number; level?: number; glyph: string }
 export interface TemplePlace extends Place {
-  technique: TempleTechniqueId; lesson?: JadeTechniqueId; master: string; facing: number; crest: string;
+  technique: TempleTechniqueId; lessons?: JadeTechniqueId[]; master: string; facing: number; crest: string;
   /** a technique this master only teaches to the sōhei (classes.ts) */
   monkLesson?: JadeTechniqueId;
   /** a temple whose technique is won, not bought: this guardian waits in its courtyard */
@@ -23,13 +23,13 @@ export interface TemplePlace extends Place {
 export const TEMPLE_GLYPH = '◆';
 export const TEMPLES: TemplePlace[] = [
   { id: 'templo-viento', name: 'TEMPLO DEL VIENTO', x: -181, z: -72, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'viento', monkLesson: 'sutras', master: 'Haru', facing: Math.PI / 2, crest: '風' },
+    technique: 'viento', lessons: ['tornado'], monkLesson: 'sutras', master: 'Haru', facing: Math.PI / 2, crest: '風' },
   { id: 'templo-brasas', name: 'TEMPLO DE LAS BRASAS', x: 238, z: -21, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'fuego', lesson: 'cuatroLlamas', master: 'Enji', facing: -Math.PI / 2, crest: '火' },
+    technique: 'fuego', lessons: ['cuatroLlamas', 'meteoro'], master: 'Enji', facing: -Math.PI / 2, crest: '火' },
   { id: 'templo-marea', name: 'TEMPLO DE LA MAREA', x: 97, z: 272, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'agua', master: 'Nami', facing: Math.PI / 2, crest: '水' },
+    technique: 'agua', lessons: ['hielo'], master: 'Nami', facing: Math.PI / 2, crest: '水' },
   { id: 'templo-rayo', name: 'TEMPLO DEL RAYO', x: 345, z: -305, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'rayo', master: 'Shiden', facing: 0, crest: '雷', guardian: 'guardianRayo' },
+    technique: 'rayo', lessons: ['tierra'], master: 'Shiden', facing: 0, crest: '雷', guardian: 'guardianRayo' },
 ];
 export const PLACES: Place[] = [
   { id: 'claro', name: 'EL CLARO DEL SANTUARIO', x: 0, z: -8, r: 50, flat: 62, blend: 55, level: 0, glyph: 'H' },
