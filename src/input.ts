@@ -17,7 +17,6 @@ import { cycleWeapon, resetWeapons, weapon } from './weapons';
 import { resetArmor } from './armor';
 import { dressUp } from './outfit';
 import { sfx } from './sfx';
-import { toggleRain } from './world';
 import { showMsg, overlay } from './hud';
 import { state, keys } from './state';
 import { resetMinimap, zoomBigMap } from './minimap';
@@ -94,7 +93,6 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyT') state.asciiOn = !state.asciiOn;
   if (e.code === 'KeyG') toggleSurfaceGlyphs();   // letters on the figures' surface <-> screen-grid characters
   if (e.code === 'KeyM') sfx.setMuted(!sfx.muted);
-  if (e.code === 'KeyR') toggleRain();
   if (e.code === 'KeyN') state.bigMap = !state.bigMap;
   if (e.code === 'KeyF') {
     // photo mode orbits the camera; leaving it puts the camera (and the minimap's north) back where it was

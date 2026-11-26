@@ -9,11 +9,12 @@ import { groundY } from './terrain';
 import { shopCameraPos, shopFocus, shopStageActive } from './shop-stage';
 import { player, state } from './state';
 import { rnd } from './utils';
-import { cineCam } from './cinematic';
+import { bossFocus, cineCam } from './cinematic';
 
 const tmp = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 const shopRight = new THREE.Vector3();
+const lookTarget = new THREE.Vector3();
 const camRay = new THREE.Raycaster();
 export function updateCamera(dt: number) {
   // the look menu (custom.ts) and the title screen frame the samurai close up, like the photo mode
@@ -39,9 +40,12 @@ export function updateCamera(dt: number) {
   }
   // a technique's cinematic pushes the camera in, a little lower (cinematic.ts)
   const cine = state.photo || dress ? null : cineCam();
-  const pt = state.photo ? (0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025)) * (1 - close) - 0.03 * close : dress ? 0.32 : state.pitch + (cine?.pitch ?? 0), cp = Math.cos(pt);
+  const focus = state.photo || dress ? null : bossFocus();
+  const fw = focus ? focus.weight : 0;
+  const basePt = state.photo ? (0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025)) * (1 - close) - 0.03 * close : dress ? 0.32 : state.pitch + (cine?.pitch ?? 0);
+  const pt = THREE.MathUtils.lerp(basePt, 0.22, fw), cp = Math.cos(pt);
   // inside Masa's shop the camera comes in closer (its roof is hidden, shop.ts)
-  const camDist = (state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.camDistUser) * (cine?.dist ?? 1);
+  const camDist = (state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.camDistUser) * (cine?.dist ?? 1) * (1 + 0.15 * fw);
   camera.position.set(
     camTarget.x + Math.sin(state.yaw) * cp * camDist,
     camTarget.y + Math.sin(pt) * camDist,
@@ -64,8 +68,13 @@ export function updateCamera(dt: number) {
     camera.lookAt(tmp.set(Math.cos(state.yaw), 0, -Math.sin(state.yaw)).multiplyScalar(-halfWidth * 0.42).add(camTarget));
     return;
   }
-  camera.lookAt(camTarget);
-  if (cine?.roll) camera.rotateZ(cine.roll);   // a slight Dutch angle while a technique plays
+  if (fw > 0.002 && focus) {
+    lookTarget.copy(camTarget).lerp(tmp.set(focus.pos.x, focus.pos.y + 3.1, focus.pos.z), fw * 0.78);
+    camera.lookAt(lookTarget);
+  } else {
+    camera.lookAt(camTarget);
+  }
+  if (cine?.roll) camera.rotateZ(cine.roll);   // a slight Dutch angle while a technique or boss reveal plays
 }
 
 const _l0 = new THREE.Vector3(), _l1 = new THREE.Vector3();

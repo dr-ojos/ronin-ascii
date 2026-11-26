@@ -4,6 +4,7 @@ import { scene } from './renderer';
 import { CLS, tagMat } from './materials';
 import { rnd } from './utils';
 import { groundY } from './terrain';
+import { makeShockRingMat, softGlowTex } from './vfx-art';
 
 const bursts: { pts: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>; v: THREE.Vector3[]; life: number; max: number; floor: number }[] = [];
 export function burst(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 60, speed = 7, size = 0.16) {
@@ -14,15 +15,18 @@ export function burst(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 
     v.push(d);
   }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
-  const pts = new THREE.Points(geo, tagMat(new THREE.PointsMaterial({ color, size, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx));
+  const pts = new THREE.Points(geo, tagMat(new THREE.PointsMaterial({
+    color, size: size * 1.9, map: softGlowTex, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx));
   scene.add(pts); bursts.push({ pts, v, life: 0.9, max: 0.9, floor: groundY(pos.x, pos.z) + 0.05 });
 }
 
 // ------------------------------------------------------------ dodge halo: glowing after-images along the dash
 const GHOST_BODY = new THREE.CapsuleGeometry(0.32, 0.95, 4, 10), GHOST_HEAD = new THREE.SphereGeometry(0.2, 10, 8);
-const GHOST_RING = new THREE.RingGeometry(0.5, 0.75, 32);
+const SHOCK_PLANE = new THREE.PlaneGeometry(2, 2);
 const ghostMat = tagMat(new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
-const ghosts: { g: THREE.Object3D; mat: THREE.MeshBasicMaterial; life: number; max: number; peak: number; grow: number }[] = [];
+const ghosts: { g: THREE.Object3D; mat: THREE.MeshBasicMaterial | THREE.ShaderMaterial; life: number; max: number; peak: number; grow: number }[] = [];
 /** one after-image of the samurai where it is now */
 export function dashGhost(pos: THREE.Vector3, face: number, k = 1) {
   const mat = ghostMat.clone(), g = new THREE.Group();
@@ -33,24 +37,26 @@ export function dashGhost(pos: THREE.Vector3, face: number, k = 1) {
 }
 /** a ring of light that spreads from your feet when you start the dodge */
 export function dashRing(pos: THREE.Vector3) {
-  const mat = ghostMat.clone(), m = new THREE.Mesh(GHOST_RING, mat);
+  const mat = makeShockRingMat(0xffffff, 0x7fd8ff, 0.85), m = new THREE.Mesh(SHOCK_PLANE, mat);
   m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.08, pos.z); scene.add(m);
-  ghosts.push({ g: m, mat, life: 0.4, max: 0.4, peak: 0.7, grow: 2.6 });
+  ghosts.push({ g: m, mat, life: 0.42, max: 0.42, peak: 0.85, grow: 2.2 });
 }
 
 /** a ring of light that runs along the ground from a heavy landing */
 export function impactRing(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 4) {
-  const mat = ghostMat.clone(); mat.color.set(color);
-  const m = new THREE.Mesh(GHOST_RING, mat);
-  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.08, pos.z); scene.add(m);
-  ghosts.push({ g: m, mat, life: 0.5, max: 0.5, peak: 0.9, grow: size });
+  const mat = makeShockRingMat(0xffffff, color, 0.95);
+  const m = new THREE.Mesh(SHOCK_PLANE, mat);
+  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.09, pos.z); scene.add(m);
+  ghosts.push({ g: m, mat, life: 0.5, max: 0.5, peak: 0.95, grow: size });
 }
 
 export function updateFx(dt: number) {
   for (let i = ghosts.length - 1; i >= 0; i--) {
     const h = ghosts[i]; h.life -= dt;
     const k = Math.max(0, h.life / h.max);
-    h.mat.opacity = h.peak * k; h.g.scale.setScalar(1 + (1 - k) * h.grow);
+    if (h.mat instanceof THREE.ShaderMaterial) h.mat.uniforms.uOpacity.value = h.peak * k;
+    else h.mat.opacity = h.peak * k;
+    h.g.scale.setScalar(1 + (1 - k) * h.grow);
     if (h.life <= 0) { scene.remove(h.g); h.mat.dispose(); ghosts.splice(i, 1); }
   }
   for (let i = bursts.length - 1; i >= 0; i--) {

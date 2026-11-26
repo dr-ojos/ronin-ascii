@@ -17,6 +17,14 @@ export interface OniLook {
   spikes?: boolean;
   /** a third, glowing eye on the brow */
   thirdEye?: boolean;
+  /** colossal event-boss regalia: layered ō-yoroi, glowing core & grand proportions */
+  colossal?: boolean;
+  /** mythic imperial crown for colossal calamity bosses */
+  crown?: 'eclipse' | 'solar' | 'tempest';
+  /** iconic ring of floating taiko storm-drums arched behind the shoulders */
+  drums?: boolean;
+  /** regal tattered warlord back banners / jimbaori strips */
+  cape?: boolean;
 }
 
 const TAU = Math.PI * 2;
@@ -222,7 +230,45 @@ function carveHead(look: OniLook, mask: THREE.Material, eye: THREE.Material, clo
     mesh(taper([[side * 0.235, 0.44, -0.05], [side * 0.19, 0.52, -0.04], [side * 0.17, 0.58, -0.05]], 0.011, 0.002), bone, g);
   }
   if (look.thirdEye) inlay(g, eye, [[0, 0.052], [0.013, 0.073], [0, 0.094], [-0.013, 0.073]], 0.017);
-  if (heavy) g.scale.set(1.16, 1.05, 1.13);
+  if (look.crown === 'eclipse') {
+    // towering blood-moon eclipse crown: twin obsidian-gold horns + double crescent ring + floating diamond sigils
+    for (const side of [-1, 1]) {
+      mesh(taper([[side * 0.078, 0.075, -0.01], [side * 0.22, 0.14, 0.02], [side * 0.34, 0.31, 0.05], [side * 0.30, 0.52, 0.02]], 0.048, 0.002), iron, g);
+      mesh(new THREE.TorusGeometry(0.046, 0.011, 6, 14), brass, g, side * 0.13, 0.10, 0.0).rotation.y = Math.PI / 2;
+      mesh(new THREE.OctahedronGeometry(0.032), eye, g, side * 0.27, 0.36, -0.08).scale.set(0.65, 1.35, 0.5);
+    }
+    mesh(new THREE.TorusGeometry(0.28, 0.016, 8, 36), brass, g, 0, 0.23, -0.15);
+    mesh(new THREE.TorusGeometry(0.21, 0.009, 6, 32), eye, g, 0, 0.23, -0.155);
+    mesh(new THREE.OctahedronGeometry(0.048), eye, g, 0, 0.23, -0.15).scale.set(0.75, 1.4, 0.4);
+  }
+  if (look.crown === 'tempest') {
+    // storm-god crest: sweeping forked lightning horns + feathered storm-wings behind the kabuto
+    for (const side of [-1, 1]) {
+      mesh(taper([[side * 0.06, 0.09, 0.07], [side * 0.15, 0.20, 0.09], [side * 0.11, 0.31, 0.08], [side * 0.23, 0.46, 0.10]], 0.028, 0.003), brass, g);
+      mesh(taper([[side * 0.15, 0.20, 0.09], [side * 0.24, 0.25, 0.08], [side * 0.31, 0.34, 0.07]], 0.018, 0.002), eye, g);
+      for (let i = 0; i < 5; i++) {
+        const end = 0.19 + i * 0.042;
+        const wing = mesh(taper([[side * 0.08, 0.03, -0.07], [side * (end - 0.04), 0.19 - i * 0.022, -0.09],
+          [side * end, 0.34 - i * 0.058, -0.11]], 0.038, 0.001), i % 2 ? eye : bright, g);
+        wing.scale.z = 0.65;
+      }
+    }
+    mesh(new THREE.OctahedronGeometry(0.042), eye, g, 0, 0.17, 0.11).scale.set(0.7, 1.25, 0.35);
+  }
+  if (look.crown === 'solar') {
+    // imperial solar-forge corona: blazing sun-rays + grand curved golden horns
+    for (let i = 0; i < 11; i++) {
+      const a = (i - 5) * 0.28, r0 = 0.14, len = 0.22 + (i % 2 === 0 ? 0.16 : 0.06);
+      const x0 = Math.sin(a) * r0, y0 = 0.11 + Math.cos(a) * 0.07;
+      mesh(taper([[x0, y0, -0.09], [x0 * 1.45, y0 + Math.cos(a) * len * 0.55, -0.11],
+        [Math.sin(a) * (r0 + len * 0.9), y0 + Math.cos(a) * len, -0.13]], 0.028, 0.002), i % 2 ? brass : eye, g);
+    }
+    for (const side of [-1, 1]) {
+      mesh(taper([[side * 0.08, 0.07, 0.01], [side * 0.21, 0.11, 0.04], [side * 0.32, 0.26, 0.08], [side * 0.29, 0.44, 0.11]], 0.046, 0.003), brass, g);
+    }
+    mesh(new THREE.TorusGeometry(0.24, 0.015, 7, 32), eye, g, 0, 0.20, -0.13);
+  }
+  if (heavy || look.colossal) g.scale.set(1.18, 1.07, 1.15);
   return g;
 }
 
@@ -242,15 +288,21 @@ const scales = (() => {
   return tex;
 })();
 
-function bodyArmor(look: OniLook, cloth: THREE.Material, lacquer: THREE.Material, lames: THREE.Material) {
+function bodyArmor(look: OniLook, cloth: THREE.Material, lacquer: THREE.Material, lames: THREE.Material, eye: THREE.Material) {
   const chest = new THREE.Group(), belt = new THREE.Group();
-  const heavy = look.big || look.plated, bound = heavy || look.shield || look.weapon === 'spear' || look.crest === 'crescent';
+  const heavy = look.big || look.plated || look.colossal, bound = heavy || look.shield || look.weapon === 'spear' || look.crest === 'crescent';
   if (bound) {
     const dō = mesh(openCyl(0.248, 0.204, 0.35, -1.84, 3.68, 26), lames, chest, 0, -0.24, 0.029);
     dō.scale.z = 0.87;
     mesh(openCyl(0.232, 0.25, 0.076, -1.82, 3.64, 24), lacquer, chest, 0, -0.071, 0.03).scale.z = 0.89;
     mesh(new THREE.RingGeometry(0.028, 0.039, 18), brass, chest, 0, -0.126, 0.248);
-    mesh(new THREE.OctahedronGeometry(0.024), lacquer, chest, 0, -0.126, 0.249).scale.z = 0.35;
+    mesh(new THREE.OctahedronGeometry(0.024), look.colossal ? eye : lacquer, chest, 0, -0.126, 0.249).scale.z = 0.35;
+    if (look.colossal) {
+      // ornate imperial collar guard (nodowa) & glowing core seal on the cuirass
+      mesh(openCyl(0.18, 0.235, 0.09, -1.65, 3.3, 22), brass, chest, 0, -0.03, 0.035).scale.z = 0.92;
+      mesh(new THREE.RingGeometry(0.056, 0.072, 24), brass, chest, 0, -0.18, 0.244);
+      mesh(new THREE.OctahedronGeometry(0.044), eye, chest, 0, -0.18, 0.248).scale.set(0.85, 1.15, 0.35);
+    }
   } else {
     const fold = mesh(openCyl(0.149, 0.257, 0.193, -1.85, 3.7, 20), cloth, chest, 0, -0.098, 0.038);
     fold.scale.z = 0.9;
@@ -262,18 +314,47 @@ function bodyArmor(look: OniLook, cloth: THREE.Material, lacquer: THREE.Material
     }
   }
   for (const side of [-1, 1]) {
-    const shoulder = grp(chest, side * (heavy ? 0.215 : 0.184), -0.03, -0.012);
-    shoulder.rotation.z = side * -0.52;
-    const count = heavy ? 3 : bound ? 2 : 1;
+    const shoulder = grp(chest, side * (look.colossal ? 0.24 : heavy ? 0.215 : 0.184), look.colossal ? -0.015 : -0.03, -0.012);
+    shoulder.rotation.z = side * (look.colossal ? -0.44 : -0.52);
+    const count = look.colossal ? 4 : heavy ? 3 : bound ? 2 : 1;
     for (let i = 0; i < count; i++) {
-      const part = mesh(openCyl(0.122 + i * 0.015, 0.154 + i * 0.02, 0.098, -1.34, 2.68, 14), i === 0 ? lacquer : lames, shoulder, 0, -i * 0.063, 0.039);
-      part.scale.z = 0.82;
+      const part = mesh(openCyl(0.122 + i * 0.016, 0.154 + i * 0.022, 0.098, -1.34, 2.68, 14), i === 0 ? lacquer : i === count - 1 && look.colossal ? brass : lames, shoulder, 0, -i * 0.062, 0.039);
+      part.scale.z = 0.84;
     }
     mesh(stud, brass, shoulder, 0, -0.009, 0.15);
     if (look.spikes) for (let i = -1; i <= 1; i++) {
       const t = i * 0.75, r = heavy ? 0.14 : 0.125;
-      const spike = mesh(new THREE.ConeGeometry(0.024, 0.14 - Math.abs(i) * 0.03, 6), iron, shoulder, Math.sin(t) * r * 0.4, 0.075, Math.cos(t) * r * 0.6 + 0.02);
+      const spike = mesh(new THREE.ConeGeometry(look.colossal ? 0.03 : 0.024, (look.colossal ? 0.19 : 0.14) - Math.abs(i) * 0.03, 6), look.colossal ? brass : iron, shoulder, Math.sin(t) * r * 0.4, 0.085, Math.cos(t) * r * 0.6 + 0.02);
       spike.rotation.x = t * 0.5;
+    }
+  }
+  if (look.drums) {
+    // iconic Raijin/war-god arch of 6 lacquered taiko drums suspended behind the shoulders
+    const archR = 0.46;
+    mesh(new THREE.TorusGeometry(archR, 0.013, 6, 36, Math.PI * 1.18), brass, chest, 0, 0.06, -0.24).rotation.z = -Math.PI * 0.09;
+    for (let i = 0; i < 6; i++) {
+      const a = -0.14 + (i / 5) * (Math.PI + 0.28);
+      const dx = Math.cos(a) * archR, dy = 0.06 + Math.sin(a) * archR;
+      const dGrp = grp(chest, dx, dy, -0.24);
+      dGrp.rotation.z = a - Math.PI / 2;
+      mesh(new THREE.CylinderGeometry(0.082, 0.082, 0.072, 14), lacquer, dGrp).rotation.x = Math.PI / 2;
+      mesh(new THREE.CircleGeometry(0.074, 14), bone, dGrp, 0, 0, 0.038);
+      mesh(new THREE.CircleGeometry(0.074, 14), bone, dGrp, 0, 0, -0.038).rotation.y = Math.PI;
+      mesh(new THREE.TorusGeometry(0.082, 0.011, 5, 16), brass, dGrp, 0, 0, 0.034);
+      mesh(new THREE.OctahedronGeometry(0.024), eye, dGrp, 0, 0, 0.042).scale.z = 0.35;
+    }
+  }
+  if (look.cape) {
+    // layered regal warlord back banners / tattered jimbaori panels flowing from the shoulders
+    for (let i = -2; i <= 2; i++) {
+      const w = i === 0 ? 0.14 : 0.095, len = i === 0 ? 0.95 : 0.78 - Math.abs(i) * 0.08;
+      const panel = new THREE.Shape();
+      panel.moveTo(-w * 0.5, 0); panel.lineTo(w * 0.5, 0);
+      panel.quadraticCurveTo(w * 0.65, -len * 0.55, w * 0.45, -len);
+      panel.lineTo(0, -len * 0.86); panel.lineTo(-w * 0.45, -len);
+      panel.quadraticCurveTo(-w * 0.65, -len * 0.55, -w * 0.5, 0);
+      const strip = mesh(new THREE.ShapeGeometry(panel), Math.abs(i) % 2 === 0 ? cloth : lacquer, chest, i * 0.105, -0.04, -0.19 - Math.abs(i) * 0.012);
+      strip.rotation.set(0.22 + Math.abs(i) * 0.03, i * 0.14, i * 0.06);
     }
   }
   const sash = mesh(new THREE.TorusGeometry(0.21, 0.024, 7, 26), cord, belt); sash.rotation.x = Math.PI / 2; sash.scale.y = 0.79;
@@ -331,8 +412,9 @@ export function oniCostume(look: OniLook) {
       metalness: 0.26, roughness: 0.51, side: THREE.DoubleSide
     });
     const lames = new THREE.MeshStandardMaterial({ map: scales, color: bright.color, side: THREE.DoubleSide, metalness: 0.24, roughness: 0.55 });
-    const { chest, belt } = bodyArmor(look, cloth, bright, lames);
-    outfit = { head: packed(carveHead(look, lacquer, oniEye(look.eye ?? 0xffd040), cloth, bright)), chest: packed(chest), belt: packed(belt) };
+    const eyeMat = oniEye(look.eye ?? 0xffd040);
+    const { chest, belt } = bodyArmor(look, cloth, bright, lames, eyeMat);
+    outfit = { head: packed(carveHead(look, lacquer, eyeMat, cloth, bright)), chest: packed(chest), belt: packed(belt) };
     costumes.set(key, outfit);
   }
   return { head: outfit.head.clone(), chest: outfit.chest.clone(), belt: outfit.belt.clone() };

@@ -12,37 +12,25 @@ import { specialDamage } from './special-damage';
 import { dmgMult } from './upgrades';
 import { TECHNIQUES } from './techniques';
 import { player, state } from './state';
+import { makeTalismanTex, softGlowTex } from './vfx-art';
 
 const COUNT = 6, DURATION = 12, RADIUS = 1.25, BURST_R = 4;
 const GLYPHS = ['般', '若', '心', '経', '南', '無'];
-
-function glyphTex(ch: string, blur: number) {
-  const c = document.createElement('canvas'); c.width = 64; c.height = 128;
-  const x = c.getContext('2d')!;
-  x.filter = blur ? `blur(${blur}px)` : 'none';
-  x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.font = 'bold 52px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif';
-  x.fillText(ch, 32, 40);
-  x.font = 'bold 30px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif';
-  x.fillText('卍', 32, 96);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
 
 const ring = new THREE.Group();
 ring.visible = false;
 scene.add(ring);
 const color = new THREE.Color(TECHNIQUES.sutras.color);
 const slips = GLYPHS.map(ch => {
-  // a glowing paper slip (an ofuda) with its character burning bright on it
+  // an ornate glowing ofuda talisman with crisp calligraphy, border frame, seal stamp & soft golden aura
   const g = new THREE.Group();
   const fx = (o: THREE.MeshBasicMaterialParameters) => tagMat(new THREE.MeshBasicMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, ...o }), CLS.fx);
-  const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.62), fx({ color: 0xffd98a, opacity: 0.32 }));
-  const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.95), fx({ map: glyphTex(ch, 8), color: 0xffc860, opacity: 0.9 }));
-  const core = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.64), fx({ map: glyphTex(ch, 0), color: color.clone().multiplyScalar(1.4) }));
-  paper.position.z = -0.012; halo.position.z = -0.006;
-  g.add(paper, halo, core);
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false, ...o }), CLS.fx);
+  const tex = makeTalismanTex(ch);
+  const aura = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 1.18), fx({ map: softGlowTex, color: 0xffc860, opacity: 0.42 }));
+  const core = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.72), fx({ map: tex, color: color.clone().multiplyScalar(1.35) }));
+  aura.position.z = -0.01;
+  g.add(aura, core);
   ring.add(g);
   return g;
 });

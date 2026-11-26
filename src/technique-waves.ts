@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { provoke, staggerEnemy } from './enemy-ai';
 import { enemies } from './enemies';
-import { burst } from './fx';
+import { burst, impactRing } from './fx';
 import { CLS, tagMat } from './materials';
 import { scene } from './renderer';
 import { panOf, sfx } from './sfx';
@@ -105,10 +105,11 @@ export function startTechniqueWave(id: WaveTechniqueId) {
   // the star opens above the ronin's head (ahead of him for the waves that travel), so his own figure never hides its core
   const star = origin.clone().addScaledVector(forward, round ? 0 : 2.4).add(new THREE.Vector3(0, round ? 2.3 : 1.7, 0));
   flare(star, TECHNIQUES[id].color, { size: round ? 1.25 : 1, life: round ? 0.6 : 0.5 });
+  impactRing(origin, TECHNIQUES[id].color, round ? WAVES[id].range * 0.95 : 4.5);
   if (id === 'campana') {
     // the bronze keeps ringing: two fainter rings follow the first, and the ground shakes
     addWave(id, 0.22, true); addWave(id, 0.46, true);
-    burst(origin.clone().setY(origin.y + 0.2), 0xc9b38a, 40, 5, 0.15);
+    burst(origin.clone().setY(origin.y + 0.2), 0xc9b38a, 45, 5.5, 0.18);
     state.shake = Math.max(state.shake, 0.55);
     sfx.templeBell();
     sfx.taiko(0.9);

@@ -49,7 +49,9 @@ const MOVES = {
   web:        { shape: 'zones', range: 9.7, radius: 2.05, layout: 'single', effect: 'web', windup: 0.87, recovery: 1.12, power: 0.78, color: 0xd6bedf },
   scorpionSting: { shape: 'arc', range: 3.1, radius: 4.1, angle: 0.76, windup: 0.62, recovery: 0.88, power: 1.05, color: 0x7ef3ff },
   crystalShard:  { shape: 'wave', range: 9.5, length: 11.2, width: 1.05, windup: 0.78, recovery: 1.15, power: 0.90, color: 0x7ef3ff },
-  crescent:   { shape: 'wave', range: 10.5, length: 12.2, width: 1.32, windup: 0.91, recovery: 1.32, power: 0.92, color: 0x9aeaff }
+  crescent:   { shape: 'wave', range: 10.5, length: 12.2, width: 1.32, windup: 0.91, recovery: 1.32, power: 0.92, color: 0x9aeaff },
+  eclipseSlash: { shape: 'arc', range: 5.4, radius: 6.6, angle: 1.78, windup: 0.96, recovery: 1.15, power: 1.24, color: 0xff2848 },
+  cataclysm:  { shape: 'arc', range: 7.4, radius: 8.8, innerRadius: 2.3, angle: Math.PI, windup: 1.28, recovery: 1.55, power: 1.32, color: 0xff9438 }
 } satisfies Record<string, Move>;
 export type EnemyMove = keyof typeof MOVES;
 export const moveDef = (id: EnemyMove): Move => MOVES[id];

@@ -23,6 +23,7 @@ import { showMsg } from './hud';
 import { sfx } from './sfx';
 import { resetSpecial } from './special';
 import { isTownLiberated, registerTownCamp, resetLiberation, type TownId } from './liberation';
+import { activeWorldEvent, resetWorldEvents } from './world-events';
 import { player, state } from './state';
 import { rnd } from './utils';
 import type { Camp, EnemyKind } from './types';
@@ -262,6 +263,7 @@ export function reset() {
   resetBattle();
   resetScore();
   resetLiberation();
+  resetWorldEvents();
   discovered.clear(); discovered.add('claro');
   ambushT = rnd(20, 35);
 }
@@ -313,11 +315,11 @@ export function updateEncounters(dt: number) {
           c.roster = c.kinds.slice(); c.threat = undefined; c.clearedAt = -1;
         }
       } else if (!c.active && d < SPAWN_R && Math.hypot(c.x, c.z) > SAFE_R) activate(c);
-      else if (c.active && d > DESPAWN_R && !busy) deactivate(c);
+      else if (c.active && d > DESPAWN_R && !busy && !c.worldEvent) deactivate(c);
     }
-    // nothing around for a while? an ambush
+    // nothing around for a while? an ambush (paused during a colossal world event)
     const fighting = enemies.some(e => e.state !== 'idle' && e.state !== 'return');
-    if (!fighting && (ambushT -= 0.25) <= 0) ambushT = tryAmbush() ? rnd(28, 50) : rnd(4, 8);
+    if (!fighting && !activeWorldEvent() && (ambushT -= 0.25) <= 0) ambushT = tryAmbush() ? rnd(28, 50) : rnd(4, 8);
   }
   // heal slowly when nobody is fighting you and you have not been hit for a while
   const fighting = enemies.some(e => e.state !== 'idle' && e.state !== 'return');

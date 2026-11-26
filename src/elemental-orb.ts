@@ -25,24 +25,36 @@ import { showMsg } from './hud';
 import { impactFlash, rangedPulse, screenSlash } from './cinematic';
 import { rnd } from './utils';
 import type { Enemy } from './types';
+import {
+  makeCrescentSlashMat, makeEnergyPillarMat, makeFresnelShellMat,
+  makeShockRingMat, mandalaTex, spawnCinematicBolt, spawnMiniArc,
+} from './vfx-art';
 
 export type OrbElement = 'fuego' | 'rayo' | 'agua' | 'viento';
 export const ORB_ELEMENTS: readonly OrbElement[] = ['fuego', 'rayo', 'agua', 'viento'];
 
 export const MAX_RANGED_CHARGES = 3;
-const RECHARGE_TIME = 7.5;    // seconds per orb on its dedicated ranged recharge
-const CHARGE_DUR = 0.32;      // pre-launch gathering animation before the orb fires
+const RECHARGE_TIME = 22;     // slower dedicated recharge per orb (seconds)
+const CHARGE_DUR = 0.45;      // pre-launch gathering animation before the orb fires
 const AUTO_AIM_RANGE = 28;    // metres to lock onto an oni
 
 export const ORB_INFO: Record<OrbElement, {
-  name: string; short: string; kanji: string;
+  name: string; short: string; kanji: string; cost: number; desc: string;
   color: number; core: number; rim: number;
   speed: number; range: number; dmg: number; radius: number;
 }> = {
-  fuego:  { name: 'Bola de Fuego',    short: 'Fuego',  kanji: '炎', color: 0xff6b2b, core: 0xfff5cc, rim: 0xff2200, speed: 24, range: 26, dmg: 2.3, radius: 4.2 },
-  rayo:   { name: 'Orbe de Rayo',     short: 'Rayo',   kanji: '雷', color: 0x7ec8ff, core: 0xffffff, rim: 0x3b68ff, speed: 34, range: 28, dmg: 2.1, radius: 2.2 },
-  agua:   { name: 'Esfera de Agua',   short: 'Agua',   kanji: '水', color: 0x38c6ff, core: 0xe6faff, rim: 0x0b5eff, speed: 22, range: 25, dmg: 2.0, radius: 4.5 },
-  viento: { name: 'Ciclón de Viento', short: 'Viento', kanji: '風', color: 0x7effc4, core: 0xf2fff8, rim: 0x1aa874, speed: 29, range: 29, dmg: 1.9, radius: 2.1 },
+  fuego:  { name: 'Bola de Fuego',    short: 'Fuego',  kanji: '炎', cost: 2,
+    desc: 'Ataque a distancia (Ñ · 3 cargas). Arroja una esfera solar que estalla en 4 m y quema a los onis.',
+    color: 0xff6b2b, core: 0xfff5cc, rim: 0xff2200, speed: 24, range: 26, dmg: 2.3, radius: 4.2 },
+  rayo:   { name: 'Orbe de Rayo',     short: 'Rayo',   kanji: '雷', cost: 3,
+    desc: 'Ataque a distancia (Ñ · 3 cargas). Lanza plasma veloz que aturde y encadena rayos hasta a 2 onis cercanos.',
+    color: 0x7ec8ff, core: 0xffffff, rim: 0x3b68ff, speed: 34, range: 28, dmg: 2.1, radius: 2.2 },
+  agua:   { name: 'Esfera de Agua',   short: 'Agua',   kanji: '水', cost: 3,
+    desc: 'Ataque a distancia (Ñ · 3 cargas). Una ola expansiva empuja a los onis y te cura al impactar.',
+    color: 0x38c6ff, core: 0xe6faff, rim: 0x0b5eff, speed: 22, range: 25, dmg: 2.0, radius: 4.5 },
+  viento: { name: 'Ciclón de Viento', short: 'Viento', kanji: '風', cost: 2,
+    desc: 'Ataque a distancia (Ñ · 3 cargas). Un ciclón de cuchillas atraviesa a todos los onis en línea recta.',
+    color: 0x7effc4, core: 0xf2fff8, rim: 0x1aa874, speed: 29, range: 29, dmg: 1.9, radius: 2.1 },
 };
 
 // ------------------------------------------------------------ shared geometries & light
@@ -51,14 +63,11 @@ const ICO = new THREE.IcosahedronGeometry(1, 1);
 const OCTA = new THREE.OctahedronGeometry(1, 0);
 const TORUS = new THREE.TorusGeometry(1, 0.09, 6, 28);
 const TORUS_THIN = new THREE.TorusGeometry(1, 0.045, 5, 28);
-const RING = new THREE.RingGeometry(0.86, 1, 48);
-const RING_THIN = new THREE.RingGeometry(0.94, 1, 48);
 const ARC = new THREE.RingGeometry(0.68, 1, 24, 1, 0, Math.PI * 0.88);
 const CONE = new THREE.ConeGeometry(0.28, 1, 5);
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 const DOME = new THREE.SphereGeometry(1, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2);
 const COLUMN = new THREE.CylinderGeometry(1, 1, 1, 16, 1, true);
-const UP = new THREE.Vector3(0, 1, 0);
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 
@@ -107,88 +116,64 @@ function orient(m: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, w: number
   m.scale.set(w, h, len);
 }
 
+const PLANE_2 = new THREE.PlaneGeometry(2, 2);
+
 function spawnRing(at: THREE.Vector3, color: number, r: number, life = 0.42, opacity = 0.85, normal?: THREE.Vector3) {
-  const mat = glowMat(color, opacity);
-  const m = new THREE.Mesh(RING, mat);
+  const mat = makeShockRingMat(0xffffff, color, opacity);
+  const m = new THREE.Mesh(PLANE_2, mat);
   m.position.copy(at);
   if (normal) m.lookAt(tmpA.copy(at).add(normal));
   else m.rotation.x = -Math.PI / 2;
   addProp(m, [mat], life, p => {
     const k = p.t / p.life;
     m.scale.setScalar(0.25 + r * (1 - (1 - k) ** 3));
-    mat.opacity = opacity * (1 - k);
+    mat.uniforms.uOpacity.value = opacity * (1 - k);
   });
 }
 
-function spawnDome(at: THREE.Vector3, color: number, r: number, life = 0.45, opacity = 0.52) {
-  const mat = glowMat(color, opacity);
+function spawnDome(at: THREE.Vector3, color: number, r: number, life = 0.45, opacity = 0.62) {
+  const mat = makeFresnelShellMat(0xffffff, color, opacity, 2.0);
   const m = new THREE.Mesh(DOME, mat);
   m.position.set(at.x, surfaceY(at.x, at.z), at.z);
   addProp(m, [mat], life, p => {
     const k = p.t / p.life, e = 1 - (1 - k) ** 3;
     const s = r * e + 0.05;
     m.scale.set(s, s * (0.78 - 0.35 * k), s);
-    mat.opacity = opacity * (1 - k) ** 1.5;
+    mat.uniforms.uOpacity.value = opacity * (1 - k) ** 1.5;
   });
 }
 
-function spawnPillar(at: THREE.Vector3, color: number, h: number, w: number, life = 0.5, opacity = 0.65) {
-  const mat = glowMat(color, opacity);
+function spawnPillar(at: THREE.Vector3, color: number, h: number, w: number, life = 0.5, opacity = 0.72) {
+  const mat = makeEnergyPillarMat(0xffffff, color, opacity);
   const m = new THREE.Mesh(COLUMN, mat);
   m.position.set(at.x, at.y + h * 0.5, at.z);
   m.scale.set(w, 0.01, w);
   addProp(m, [mat], life, p => {
     const k = p.t / p.life;
-    m.scale.set(w * (1 - k * 0.8), h * Math.min(1, p.t / 0.05 + 0.02), w * (1 - k * 0.8));
-    mat.opacity = opacity * (1 - k);
+    m.scale.set(w * (1 - k * 0.75), h * Math.min(1, p.t / 0.05 + 0.02), w * (1 - k * 0.75));
+    mat.uniforms.uOpacity.value = opacity * (1 - k);
   });
 }
 
 function spawnCrescent(at: THREE.Vector3, color: number, r: number, yaw: number, roll: number, life = 0.34) {
-  const mat = glowMat(color, 0.95);
-  const m = new THREE.Mesh(ARC, mat);
+  const mat = makeCrescentSlashMat(0xffffff, color, 0.95);
+  const m = new THREE.Mesh(PLANE_2, mat);
   const g = new THREE.Group();
   m.rotation.x = -Math.PI / 2;
   g.add(m);
   g.position.copy(at);
   g.rotation.set(0, yaw, roll);
-  g.scale.setScalar(r * 0.7);
+  g.scale.setScalar(r * 0.75);
   addProp(g, [mat], life, p => {
     const k = p.t / p.life;
-    g.scale.setScalar(r * (0.7 + 0.45 * k));
-    mat.opacity = 0.95 * (1 - k * k);
+    g.scale.setScalar(r * (0.75 + 0.45 * k));
+    mat.uniforms.uOpacity.value = 0.95 * (1 - k * k);
   });
 }
 
-/** jagged 3D lightning arc between two points (for chain lightning and sky strikes) */
+/** volumetric jagged 3D lightning arc between two points (chain lightning and flight crackle) */
 function spawnArc(a: THREE.Vector3, b: THREE.Vector3, color: number, coreColor = 0xffffff, segs = 7, jitter = 0.55, life = 0.34) {
-  const g = new THREE.Group();
-  const cMat = glowMat(coreColor, 1);
-  const gMat = glowMat(color, 0.42);
-  const pts: THREE.Vector3[] = [];
-  for (let i = 0; i <= segs; i++) {
-    const k = i / segs;
-    const p = a.clone().lerp(b, k);
-    if (i > 0 && i < segs) {
-      const s = Math.sin(k * Math.PI) * jitter;
-      p.x += rnd(-s, s); p.y += rnd(-s * 0.7, s * 0.7); p.z += rnd(-s, s);
-    }
-    pts.push(p);
-  }
-  for (let i = 0; i < segs; i++) {
-    const d = tmpA.subVectors(pts[i + 1], pts[i]), len = Math.max(0.01, d.length());
-    const mid = pts[i].clone().addScaledVector(d, 0.5);
-    const q = new THREE.Quaternion().setFromUnitVectors(UP, d.normalize());
-    for (const [mat, w] of [[cMat, 0.065], [gMat, 0.22]] as const) {
-      const m = new THREE.Mesh(BOX, mat);
-      m.position.copy(mid); m.quaternion.copy(q); m.scale.set(w, len, w);
-      g.add(m);
-    }
-  }
-  addProp(g, [cMat, gMat], life, p => {
-    const k = 1 - p.t / p.life, flick = Math.random() < 0.8 ? 1 : 0.3;
-    cMat.opacity = k * flick; gMat.opacity = 0.42 * k * flick;
-  });
+  spawnMiniArc(a, b, coreColor, color, { steps: segs, spread: jitter, radius: 0.055, life, fork: segs >= 6 });
 }
 
 /** vertical arcane summoning seal that opens in front of the warrior during the charge-up */
@@ -196,36 +181,20 @@ function buildSeal(color: number, coreColor: number, r = 1.25) {
   const outer = new THREE.Group();
   const spin = new THREE.Group();
   outer.add(spin);
-  const mat = glowMat(color, 0.85);
-  const coreMat = glowMat(coreColor, 0.9);
-  const addR = (s: number, thin: boolean, m: THREE.Material) => {
-    const mesh = new THREE.Mesh(thin ? RING_THIN : RING, m);
-    mesh.scale.setScalar(r * s);
-    spin.add(mesh);
-  };
-  addR(1, false, mat);
-  addR(0.82, true, coreMat);
-  addR(0.42, true, mat);
-  // 4-point + 4-point star
-  const R = r * 0.78;
-  for (let t = 0; t < 2; t++) for (let i = 0; i < 4; i++) {
-    const a0 = t * Math.PI / 4 + i * Math.PI / 2, a1 = a0 + Math.PI / 2;
-    const ax = Math.cos(a0) * R, ay = Math.sin(a0) * R;
-    const bx = Math.cos(a1) * R, by = Math.sin(a1) * R;
-    const bar = new THREE.Mesh(BOX, mat);
-    bar.position.set((ax + bx) * 0.5, (ay + by) * 0.5, 0);
-    bar.rotation.z = Math.atan2(by - ay, bx - ax);
-    bar.scale.set(Math.hypot(bx - ax, by - ay), r * 0.028, 0.01);
-    spin.add(bar);
-  }
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    const tick = new THREE.Mesh(BOX, coreMat);
-    tick.position.set(Math.cos(a) * r * 0.91, Math.sin(a) * r * 0.91, 0);
-    tick.rotation.z = a;
-    tick.scale.set(r * 0.13, r * 0.028, 0.01);
-    spin.add(tick);
-  }
+  const mat = tagMat(new THREE.MeshBasicMaterial({
+    map: mandalaTex, color, transparent: true, opacity: 0.88,
+    depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx);
+  const coreMat = tagMat(new THREE.MeshBasicMaterial({
+    map: mandalaTex, color: coreColor, transparent: true, opacity: 0.65,
+    depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx);
+  const outerDisc = new THREE.Mesh(PLANE_2, mat);
+  outerDisc.scale.setScalar(r);
+  const innerDisc = new THREE.Mesh(PLANE_2, coreMat);
+  innerDisc.scale.setScalar(r * 0.62);
+  innerDisc.position.z = 0.02;
+  spin.add(outerDisc, innerDisc);
   return { outer, spin, mats: [mat, coreMat] };
 }
 
@@ -496,10 +465,11 @@ function detonateOrb(orb: FlyingOrb, directHit: Enemy | null) {
   }
 
   if (orb.el === 'rayo') {
-    // Sky bolt on impact + chain lightning leaping to up to 2 nearby enemies + heavy stun
-    const sky = new THREE.Vector3(at.x + rnd(-2, 2), at.y + 18, at.z + rnd(-2, 2));
-    spawnArc(sky, at, info.color, info.core, 9, 1.35, 0.42);
-    spawnRing(groundAt, info.color, 3.6, 0.4, 0.9);
+    // Cinematic sky bolt on impact + chain lightning leaping to up to 2 nearby enemies + heavy stun
+    spawnCinematicBolt(at, {
+      coreColor: info.core, glowColor: info.color, outerColor: info.rim,
+      skyHeight: 22, life: 0.45, radius: 0.1, branches: 3, groundImpact: true, skyPortal: true,
+    });
     burst(at, info.core, 32, 8.5, 0.15);
     burst(at, info.color, 36, 7, 0.14);
 
@@ -561,6 +531,7 @@ function detonateOrb(orb: FlyingOrb, directHit: Enemy | null) {
 // ------------------------------------------------------------ public API
 /** boost the dedicated ranged special recharge (called by passive time, melee hits, and kills) */
 export function chargeRanged(amount: number) {
+  if (!state.rangedElement) { state.rangedCharge = 0; return; }
   if (state.rangedCharges >= MAX_RANGED_CHARGES) {
     state.rangedCharge = 0;
     return;
@@ -576,10 +547,21 @@ export function chargeRanged(amount: number) {
   }
 }
 
-/** SHIFT+Ñ: cycle between Fuego, Rayo, Agua, Viento */
+/** SHIFT+Ñ: cycle between learned elemental orbs */
 export function cycleRangedElement() {
-  const idx = ORB_ELEMENTS.indexOf(state.rangedElement);
-  const next = ORB_ELEMENTS[(idx + 1) % ORB_ELEMENTS.length];
+  const list = state.learnedOrbs;
+  if (!list.length) {
+    showMsg('Compra ataques a distancia (Ñ) en los templos ◆ del mapa (N)', 2.4);
+    sfx.warn(0);
+    return null;
+  }
+  if (list.length === 1) {
+    const only = ORB_INFO[list[0]];
+    showMsg(`Solo tienes ${only.name} · compra más elementos en los templos ◆ (N)`, 2.2);
+    return only;
+  }
+  const idx = state.rangedElement ? list.indexOf(state.rangedElement) : -1;
+  const next = list[(idx + 1) % list.length];
   state.rangedElement = next;
   const info = ORB_INFO[next];
   sfx.chime(false);
@@ -593,13 +575,18 @@ export function cycleRangedElement() {
 export function tryElementalOrb() {
   if (!state.playing || state.dead || state.photo || state.menu || player.dancing) return;
   if (charging) return;
+  const el = state.rangedElement;
+  if (!el) {
+    showMsg('Compra ataques a distancia (Ñ) en los templos ◆ del mapa (N)', 2.4);
+    sfx.warn(0);
+    return;
+  }
   if (state.rangedCharges < 1) {
-    showMsg(`Recargando ataque a distancia · ${Math.floor(state.rangedCharge * 100)} %`, 1.1);
+    showMsg(`Recargando ${ORB_INFO[el].name} · ${Math.floor(state.rangedCharge * 100)} %`, 1.1);
     sfx.warn(0);
     return;
   }
 
-  const el = state.rangedElement;
   const info = ORB_INFO[el];
   const target = pickTarget();
   if (target) {

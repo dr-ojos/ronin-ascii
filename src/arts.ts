@@ -29,6 +29,11 @@ import type { Enemy } from './types';
 import { dmgMult } from './upgrades';
 import { rnd } from './utils';
 import { impactFlash, screenSlash, slowMo } from './cinematic';
+import {
+  makeCrescentSlashMat, makeEnergyPillarMat, makeFireBladeMat, makeFresnelShellMat,
+  makeShockRingMat, makeStormPortalMat, makeVolumetricBeamMat, makeVortexFunnelMat,
+  mandalaTex, scorchTex, spawnMiniArc,
+} from './vfx-art';
 
 export type ArtId = 'iai' | 'rueda' | 'palma' | 'flechas' | 'tornado' | 'meteoro' | 'hielo' | 'tierra';
 const ART_IDS: readonly string[] = ['iai', 'rueda', 'palma', 'flechas', 'tornado', 'meteoro', 'hielo', 'tierra'];
@@ -38,15 +43,18 @@ type V3 = THREE.Vector3;
 
 // ------------------------------------------------------------ shared pieces
 const BOX = new THREE.BoxGeometry(1, 1, 1);
-const RING = new THREE.RingGeometry(0.9, 1, 64);
-const RING_THIN = new THREE.RingGeometry(0.96, 1, 64);
-const TORUS = new THREE.TorusGeometry(1, 0.07, 5, 32);
+const PLANE_2 = new THREE.PlaneGeometry(2, 2);
+const TORUS = new THREE.TorusGeometry(1, 0.07, 8, 36);
 const ROCK = new THREE.IcosahedronGeometry(1, 0);
 const ICE = new THREE.OctahedronGeometry(1, 0);
 const FANG = new THREE.ConeGeometry(0.42, 1.9, 5);
-const DOME = new THREE.SphereGeometry(1, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2);
-const COLUMN = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
-const ARC = new THREE.RingGeometry(0.82, 1, 48, 1, 0, Math.PI);   // a crescent: the trace of a sweeping cut
+const DOME = new THREE.SphereGeometry(1, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+const COLUMN = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true);
+const BEAM_CYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, true).rotateX(Math.PI / 2);
+const FUNNEL = new THREE.CylinderGeometry(2.6, 0.45, 5.8, 28, 1, true);
+const REENTRY_CONE = new THREE.ConeGeometry(1.4, 3.6, 20, 1, true).rotateX(Math.PI / 2);
+const CAPSULE = new THREE.CapsuleGeometry(0.5, 1.0, 6, 12);
+const SPHERE_HI = new THREE.SphereGeometry(1, 16, 12);
 const stone = tagMat(new THREE.MeshStandardMaterial({ color: 0x80705c, roughness: 0.95, flatShading: true }), CLS.ground);
 const glow = (c: THREE.ColorRepresentation, opacity = 1) => tagMat(new THREE.MeshBasicMaterial({
   color: c, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false }), CLS.fx);
@@ -110,74 +118,83 @@ function orient(m: THREE.Object3D, a: V3, b: V3, w: number, h = w) {
   const len = Math.max(0.01, a.distanceTo(b));
   m.position.copy(a).lerp(b, 0.5); m.lookAt(b); m.scale.set(w, h, len);
 }
-/** a bar of light from a to b that fades */
+/** a volumetric bar of light from a to b that fades softly at its edges */
 function beam(a: V3, b: V3, c: number, w = 0.06, life = 0.25, opacity = 1) {
-  const mat = glow(c, opacity), m = new THREE.Mesh(BOX, mat);
-  orient(m, a, b, w);
-  addProp(m, [mat], life, p => { mat.opacity = opacity * (1 - p.t / p.life); });
+  const mat = makeVolumetricBeamMat(0xffffff, c, opacity), m = new THREE.Mesh(BEAM_CYL, mat);
+  orient(m, a, b, w * 2.2);
+  addProp(m, [mat], life, p => { mat.uniforms.uOpacity.value = opacity * (1 - p.t / p.life); });
 }
-/** a ring of light on the ground that opens out to `r` and fades */
-function groundRing(at: V3, c: THREE.ColorRepresentation, r: number, life = 0.5, opacity = 0.8) {
-  const mat = glow(c, opacity), m = new THREE.Mesh(RING, mat);
+/** a smooth radial shockwave ring on the ground that opens out to `r` and fades */
+function groundRing(at: V3, c: THREE.ColorRepresentation, r: number, life = 0.5, opacity = 0.85) {
+  const mat = makeShockRingMat(0xffffff, c, opacity), m = new THREE.Mesh(PLANE_2, mat);
   m.rotation.x = -Math.PI / 2; m.position.set(at.x, surfaceY(at.x, at.z) + 0.1, at.z);
-  addProp(m, [mat], life, p => { const k = p.t / p.life; m.scale.setScalar(0.2 + r * (1 - (1 - k) ** 3)); mat.opacity = opacity * (1 - k); });
+  addProp(m, [mat], life, p => {
+    const k = p.t / p.life;
+    m.scale.setScalar(0.25 + r * (1 - (1 - k) ** 3));
+    mat.uniforms.uOpacity.value = opacity * (1 - k);
+  });
 }
-/** a half-sphere shockwave swelling out of the ground */
-function dome(at: V3, c: number, r: number, life = 0.45, opacity = 0.55) {
-  const mat = glow(c, opacity), m = new THREE.Mesh(DOME, mat);
+/** a luminous Fresnel half-sphere shockwave swelling out of the ground */
+function dome(at: V3, c: number, r: number, life = 0.45, opacity = 0.65) {
+  const mat = makeFresnelShellMat(0xffffff, c, opacity, 2.0), m = new THREE.Mesh(DOME, mat);
   m.position.set(at.x, surfaceY(at.x, at.z), at.z);
   addProp(m, [mat], life, p => {
     const k = p.t / p.life, e = 1 - (1 - k) ** 3;
-    m.scale.set(r * e + 0.01, (r * e + 0.01) * (0.7 - 0.4 * k), r * e + 0.01); mat.opacity = opacity * (1 - k) ** 1.5;
+    m.scale.set(r * e + 0.01, (r * e + 0.01) * (0.75 - 0.35 * k), r * e + 0.01);
+    mat.uniforms.uOpacity.value = opacity * (1 - k) ** 1.5;
   });
 }
-/** a column of light standing on `at` that thins out */
-function pillar(at: V3, c: number, h: number, w = 1, life = 0.6, opacity = 0.7) {
-  const mat = glow(c, opacity), m = new THREE.Mesh(COLUMN, mat);
+/** a volumetric column of scrolling energy standing on `at` that thins out */
+function pillar(at: V3, c: number, h: number, w = 1, life = 0.6, opacity = 0.78) {
+  const mat = makeEnergyPillarMat(0xffffff, c, opacity), m = new THREE.Mesh(COLUMN, mat);
   m.position.set(at.x, at.y + h / 2, at.z);
   m.scale.set(w, 0.01, w);
   addProp(m, [mat], life, p => {
-    const k = p.t / p.life; m.scale.set(w * (1 - k * 0.85), h * Math.min(1, p.t / 0.06 + 0.01), w * (1 - k * 0.85)); mat.opacity = opacity * (1 - k);
+    const k = p.t / p.life;
+    m.scale.set(w * (1 - k * 0.75), h * Math.min(1, p.t / 0.06 + 0.01), w * (1 - k * 0.75));
+    mat.uniforms.uOpacity.value = opacity * (1 - k);
   });
 }
-/** the trace of a sweeping cut: a crescent of light at `at`, turned by `yaw` and tipped by `roll` */
+/** the trace of a sweeping cut: a razor-edged cinematic crescent slash at `at` */
 function crescent(at: V3, c: number, r: number, yaw: number, roll: number, life = 0.35, opacity = 0.95) {
-  const mat = glow(c, opacity), m = new THREE.Mesh(ARC, mat), g = new THREE.Group();
+  const mat = makeCrescentSlashMat(0xffffff, c, opacity), m = new THREE.Mesh(PLANE_2, mat), g = new THREE.Group();
   m.rotation.x = -Math.PI / 2; g.add(m);
-  g.position.copy(at); g.rotation.set(0, yaw, roll); g.scale.setScalar(r * 0.75);
-  addProp(g, [mat], life, p => { const k = p.t / p.life; g.scale.setScalar(r * (0.75 + 0.35 * k)); mat.opacity = opacity * (1 - k * k); });
+  g.position.copy(at); g.rotation.set(0, yaw, roll); g.scale.setScalar(r * 0.82);
+  addProp(g, [mat], life, p => {
+    const k = p.t / p.life;
+    g.scale.setScalar(r * (0.82 + 0.38 * k));
+    mat.uniforms.uOpacity.value = opacity * (1 - k * k);
+  });
 }
-/** a magic circle: two rings, a six-pointed star and ticks. Returns the spinning part. */
-function rune(r: number, mat: THREE.Material) {
-  const outer = new THREE.Group(), spin = new THREE.Group();
-  spin.rotation.x = -Math.PI / 2; outer.add(spin);
-  const ring = (k: number, thin = false) => { const m = new THREE.Mesh(thin ? RING_THIN : RING, mat); m.scale.setScalar(r * k); spin.add(m); };
-  ring(1); ring(0.8, true); ring(0.34, true);
-  const R = r * 0.78;
-  for (let t = 0; t < 2; t++) for (let i = 0; i < 3; i++) {
-    const a0 = t * Math.PI / 3 + i * Math.PI * 2 / 3, a1 = a0 + Math.PI * 2 / 3;
-    const ax = Math.cos(a0) * R, ay = Math.sin(a0) * R, bx = Math.cos(a1) * R, by = Math.sin(a1) * R;
-    const s = new THREE.Mesh(BOX, mat);
-    s.position.set((ax + bx) / 2, (ay + by) / 2, 0); s.rotation.z = Math.atan2(by - ay, bx - ax);
-    s.scale.set(Math.hypot(bx - ax, by - ay), r * 0.025, 0.01); spin.add(s);
-  }
-  for (let i = 0; i < 16; i++) {
-    const a = i / 16 * Math.PI * 2, s = new THREE.Mesh(BOX, mat);
-    s.position.set(Math.cos(a) * r * 0.9, Math.sin(a) * r * 0.9, 0); s.rotation.z = a;
-    s.scale.set(r * 0.12, r * 0.03, 0.01); spin.add(s);
-  }
-  return { outer, spin };
-}
-/** a magic circle that opens at `at` (on the ground, or high up) for `life` seconds; `follow` keeps it on a moving point */
-function runeCircle(at: V3, c: number, r: number, life: number, opacity = 0.75, turn = 1.5, follow?: () => V3) {
-  const mat = glow(c, opacity), { outer, spin } = rune(r, mat);
-  outer.position.copy(at); outer.scale.setScalar(0.4);
-  addProp(outer, [mat], life, (p, dt) => {
+/** an ornate double-layered calligraphic mandala magic circle that opens at `at` */
+function runeCircle(at: V3, c: number, r: number, life: number, opacity = 0.82, turn = 1.5, follow?: () => V3) {
+  const outerMat = tagMat(new THREE.MeshBasicMaterial({
+    map: mandalaTex, color: c, transparent: true, opacity, depthWrite: false,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx);
+  const innerMat = tagMat(new THREE.MeshBasicMaterial({
+    map: mandalaTex, color: 0xffffff, transparent: true, opacity: opacity * 0.55, depthWrite: false,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx);
+  const outer = new THREE.Group();
+  const layerA = new THREE.Mesh(PLANE_2, outerMat);
+  layerA.rotation.x = -Math.PI / 2;
+  layerA.scale.setScalar(r);
+  const layerB = new THREE.Mesh(PLANE_2, innerMat);
+  layerB.rotation.x = -Math.PI / 2;
+  layerB.position.y = 0.02;
+  layerB.scale.setScalar(r * 0.62);
+  outer.add(layerA, layerB);
+  outer.position.copy(at); outer.scale.setScalar(0.35);
+  addProp(outer, [outerMat, innerMat], life, (p, dt) => {
     if (follow) outer.position.copy(follow());
-    spin.rotation.z += dt * turn;
+    layerA.rotation.z += dt * turn;
+    layerB.rotation.z -= dt * turn * 1.45;
     const open = Math.min(1, p.t / 0.15), close = Math.min(1, (p.life - p.t) / 0.25);
-    outer.scale.setScalar(0.4 + 0.6 * (1 - (1 - open) ** 3));
-    mat.opacity = opacity * Math.min(open, close) * (0.85 + 0.15 * Math.sin(p.t * 30));
+    outer.scale.setScalar(0.35 + 0.65 * (1 - (1 - open) ** 3));
+    const pulse = Math.min(open, close) * (0.85 + 0.15 * Math.sin(p.t * 28));
+    outerMat.opacity = opacity * pulse;
+    innerMat.opacity = opacity * 0.55 * pulse;
   });
 }
 /** chunks thrown into the air that fall, bounce once and crumble */
@@ -289,16 +306,19 @@ function startIai() {
 
 function sheath(a: V3, b: V3) {
   const c = color('iai'), dx = b.x - a.x, dz = b.z - a.z, len = Math.max(0.1, Math.hypot(dx, dz)), yaw = Math.atan2(dx, dz);
-  // the path stays drawn in the air: a white-hot core in a soft halo, then it splits open
-  const coreMat = glow(0xffffff, 1), haloMat = glow(c, 0.45), g = new THREE.Group();
-  const core = new THREE.Mesh(BOX, coreMat), halo = new THREE.Mesh(BOX, haloMat);
-  core.scale.set(0.05, 0.05, len); halo.scale.set(0.5, 0.18, len * 1.04); g.add(core, halo);
+  // the path stays drawn in the air: a white-hot core in a volumetric halo + crackling lightning arcs along the cut
+  const coreMat = makeVolumetricBeamMat(0xffffff, c, 1), haloMat = makeVolumetricBeamMat(c, 0x88b8ff, 0.55), g = new THREE.Group();
+  const core = new THREE.Mesh(BEAM_CYL, coreMat), halo = new THREE.Mesh(BEAM_CYL, haloMat);
+  core.scale.set(0.11, 0.11, len); halo.scale.set(0.75, 0.28, len * 1.04); g.add(core, halo);
   g.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + 1.1, (a.z + b.z) / 2); g.rotation.y = yaw;
   addProp(g, [coreMat, haloMat], IAI_SHEATH + 0.5, p => {
-    if (p.t < IAI_SHEATH) { haloMat.opacity = 0.45 * (0.7 + 0.3 * Math.sin(p.t * 60)); return; }
+    if (p.t < IAI_SHEATH) { haloMat.uniforms.uOpacity.value = 0.55 * (0.7 + 0.3 * Math.sin(p.t * 60)); return; }
     const k = (p.t - IAI_SHEATH) / (p.life - IAI_SHEATH);
-    core.scale.y = 0.05 + k * 1.6; halo.scale.y = 0.18 + k * 3; coreMat.opacity = 1 - k; haloMat.opacity = 0.45 * (1 - k);
+    core.scale.y = 0.11 + k * 2.1; halo.scale.y = 0.28 + k * 3.8;
+    coreMat.uniforms.uOpacity.value = 1 - k; haloMat.uniforms.uOpacity.value = 0.55 * (1 - k);
   });
+  // Crackling electric filament along the Iaijutsu dash line
+  spawnMiniArc(lift(a, 1.1), lift(b, 1.1), 0xffffff, c, { steps: 10, spread: 0.45, radius: 0.055, life: IAI_SHEATH + 0.2, fork: true });
   const victims = enemies.filter(e => {
     if (e.hp <= 0) return false;
     const p = e.g.position, s = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (len * len)));
@@ -432,21 +452,44 @@ function wheelPulse(c: number) {
 // ------------------------------------------------------------ Palma del Buda
 const PALM_AHEAD = 6, PALM_REACH = 10, PALM_R = 5.5, PALM_FALL = 0.5, PALM_SKY = 18;
 
-function palmMesh(mat: THREE.Material) {
+function palmMesh(mat: THREE.Material, sealMat?: THREE.Material) {
   const g = new THREE.Group();
-  const part = (w: number, h: number, l: number, x: number, z: number, ry = 0, y = 0) => {
-    const m = new THREE.Mesh(BOX, mat); m.scale.set(w, h, l); m.position.set(x, y, z); m.rotation.y = ry; g.add(m);
-  };
-  part(3.4, 0.55, 3.6, 0, 0);                                         // the palm, face down
-  [-1.25, -0.42, 0.42, 1.25].forEach((x, i) => {                      // four fingers, two joints each
-    const long = i === 1 || i === 2 ? 2.8 : 2.3;
-    part(0.66, 0.48, long * 0.55, x, 1.8 + long * 0.27);
-    part(0.6, 0.44, long * 0.45, x, 1.8 + long * 0.55 + long * 0.22, 0, -0.06);
+  // Sculpted rounded palm using spheres & capsules instead of flat boxes
+  const palmCore = new THREE.Mesh(SPHERE_HI, mat);
+  palmCore.scale.set(1.85, 0.44, 1.9);
+  g.add(palmCore);
+  const heel = new THREE.Mesh(SPHERE_HI, mat);
+  heel.scale.set(1.45, 0.42, 0.95); heel.position.set(0, 0.02, -1.7);
+  g.add(heel);
+  // Four articulated rounded fingers (proximal + distal phalanx)
+  [-1.22, -0.41, 0.41, 1.22].forEach((x, i) => {
+    const long = i === 1 || i === 2 ? 2.85 : 2.35;
+    const f1 = new THREE.Mesh(CAPSULE, mat);
+    f1.rotation.x = Math.PI / 2;
+    f1.scale.set(0.62, long * 0.34, 0.48);
+    f1.position.set(x, 0, 1.6 + long * 0.25);
+    const f2 = new THREE.Mesh(CAPSULE, mat);
+    f2.rotation.x = Math.PI / 2 + 0.12;
+    f2.scale.set(0.54, long * 0.28, 0.42);
+    f2.position.set(x, -0.08, 1.6 + long * 0.56 + long * 0.18);
+    g.add(f1, f2);
   });
-  part(0.75, 0.5, 2.0, 2.15, 0.9, -0.6);                              // the thumb
-  part(2.6, 0.5, 1.6, 0, -2.4);                                       // the wrist
+  // Sculpted thumb
+  const thumb = new THREE.Mesh(CAPSULE, mat);
+  thumb.rotation.set(Math.PI / 2, 0, 0.58);
+  thumb.scale.set(0.7, 0.95, 0.5);
+  thumb.position.set(2.05, -0.02, 0.72);
+  g.add(thumb);
+  // Glowing lotus dharma seal embossed on the underside of the palm
+  if (sealMat) {
+    const seal = new THREE.Mesh(PLANE_2, sealMat);
+    seal.rotation.x = Math.PI / 2;
+    seal.position.set(0, -0.46, 0.1);
+    seal.scale.setScalar(1.35);
+    g.add(seal);
+  }
   const band = new THREE.Mesh(TORUS, mat);                            // a sutra band round the wrist
-  band.scale.set(1.5, 0.45, 1); band.position.z = -2.9; g.add(band);
+  band.scale.set(1.5, 0.48, 1); band.position.z = -2.75; g.add(band);
   return g;
 }
 
@@ -462,20 +505,26 @@ function startPalma() {
   player.face = Math.atan2(dir.x, dir.z);
   const at = ground(player.pos.x + dir.x * reach, player.pos.z + dir.z * reach);
   // a mandala opens in the sky above the mark, a thread of light drops from it, the circle below answers
-  runeCircle(lift(at, PALM_SKY + 1), c, 4.6, PALM_FALL + 0.45, 0.85, 2.2);
-  runeCircle(lift(at, 0.08), c, PALM_R, PALM_FALL + 0.1, 0.5, -2.5);
-  pillar(at, c, PALM_SKY, 0.15, PALM_FALL, 0.8);
+  runeCircle(lift(at, PALM_SKY + 1), c, 4.8, PALM_FALL + 0.45, 0.88, 2.2);
+  runeCircle(lift(at, 0.08), c, PALM_R, PALM_FALL + 0.1, 0.55, -2.5);
+  pillar(at, c, PALM_SKY, 0.25, PALM_FALL, 0.8);
   flare(at, c, { pre: PALM_FALL, life: 0, lift: 0.3 });
-  const mat = glow(c, 0.9), halo = glow(0xffffff, 0.35), palm = palmMesh(mat), shine = palmMesh(halo);
-  shine.scale.setScalar(1.12); palm.add(shine);
+  const mat = makeFresnelShellMat(0xfff8dc, c, 0.92, 1.65);
+  const halo = makeFresnelShellMat(0xffffff, c, 0.42, 2.6);
+  const sealMat = tagMat(new THREE.MeshBasicMaterial({
+    map: mandalaTex, color: 0xffffff, transparent: true, opacity: 0.95,
+    depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx);
+  const palm = palmMesh(mat, sealMat), shine = palmMesh(halo);
+  shine.scale.setScalar(1.14); palm.add(shine);
   palm.rotation.y = player.face;
   palm.position.set(at.x, at.y + PALM_SKY, at.z); palm.scale.setScalar(0.6);
   let trail = 0;
-  addProp(palm, [mat, halo], PALM_FALL + 0.9, (p, dt) => {
+  addProp(palm, [mat, halo, sealMat], PALM_FALL + 0.9, (p, dt) => {
     if (p.t < PALM_FALL) {
       const k = p.t / PALM_FALL;
       palm.position.y = at.y + 0.35 + PALM_SKY * (1 - k * k);
-      palm.scale.setScalar(0.6 + 0.4 * k);
+      palm.scale.setScalar(0.6 + 0.42 * k);
       if ((trail -= dt) <= 0) {   // streaks of speed above it
         trail = 0.03;
         const x = at.x + rnd(-1.7, 1.7), z = at.z + rnd(-1.7, 1.7), y = palm.position.y + 0.6;
@@ -485,9 +534,11 @@ function startPalma() {
     }
     // pressed into the earth a moment, then it rises and fades
     const k = (p.t - PALM_FALL) / 0.9;
-    palm.scale.setScalar(1);
+    palm.scale.setScalar(1.02);
     palm.position.y = at.y + 0.35 + Math.max(0, k - 0.45) * 5;
-    mat.opacity = 0.9 * (1 - k); halo.opacity = 0.35 * (1 - k);
+    mat.uniforms.uOpacity.value = 0.92 * (1 - k);
+    halo.uniforms.uOpacity.value = 0.42 * (1 - k);
+    sealMat.opacity = 0.95 * (1 - k);
   });
   sfx.swing({ power: 1.4, pan: 0 });
   after(PALM_FALL, () => {
@@ -601,40 +652,52 @@ const TWISTER_TIME = 3.5, TWISTER_SPEED = 5, TWISTER_PULL = 6.5, TWISTER_HIT = 2
 
 function startTornado() {
   const c = color('tornado'), dir = ahead(), pos = player.pos.clone().addScaledVector(dir, 2);
-  const g = new THREE.Group(), mats = [glow(c, 0.6), glow(0xffffff, 0.35)];
+  const g = new THREE.Group();
+  const funnelMat = makeVortexFunnelMat(0xffffff, c, 0.76);
+  const innerFunnelMat = makeVortexFunnelMat(c, 0x26b88e, 0.48);
+  const baseMat = makeShockRingMat(0xffffff, c, 0.72);
+  const mats: THREE.Material[] = [funnelMat, innerFunnelMat, baseMat, glow(c, 0.45)];
+  // Smooth volumetric helical wind funnels (outer + counter-spinning inner core)
+  const funnel = new THREE.Mesh(FUNNEL, funnelMat);
+  funnel.position.y = 2.9;
+  g.add(funnel);
+  const innerFunnel = new THREE.Mesh(FUNNEL, innerFunnelMat);
+  innerFunnel.position.y = 2.75;
+  innerFunnel.scale.set(0.6, 0.95, 0.6);
+  g.add(innerFunnel);
+  // Whirling wind rings for layered depth
   const rings: THREE.Mesh[] = [];
-  for (let i = 0; i < 11; i++) {
-    const ring = new THREE.Mesh(TORUS, mats[i % 2]);
-    ring.rotation.x = Math.PI / 2; ring.position.y = 0.15 + i * 0.5; ring.scale.setScalar(0.35 + i * 0.27);
-    g.add(ring); rings.push(ring);
-  }
-  // streaks of wind winding up the funnel
   for (let i = 0; i < 7; i++) {
-    const s = new THREE.Mesh(BOX, mats[0]), a = i / 7 * Math.PI * 2;
-    s.scale.set(0.05, 4.4, 0.05); s.position.set(Math.sin(a) * 1.3, 2.6, Math.cos(a) * 1.3); s.rotation.set(0.42 * Math.cos(a), 0, 0.42 * Math.sin(a));
-    g.add(s);
+    const ring = new THREE.Mesh(TORUS, mats[3]);
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.25 + i * 0.8; ring.scale.setScalar(0.5 + i * 0.34);
+    g.add(ring); rings.push(ring);
   }
   // what it has swallowed: stones and leaves whirling round it
   const leafMat = fixedGlow(0x9dffb0, 0.9);
   const caught: { m: THREE.Mesh; a: number; h: number; w: number }[] = [];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 22; i++) {
     const leaf = i % 3 === 0, m = new THREE.Mesh(leaf ? BOX : ROCK, leaf ? leafMat : stone);
-    if (leaf) m.scale.set(0.2, 0.02, 0.12); else m.scale.setScalar(rnd(0.12, 0.26));
-    g.add(m); caught.push({ m, a: rnd(0, Math.PI * 2), h: rnd(0.2, 5), w: rnd(5, 9) });
+    if (leaf) m.scale.set(0.22, 0.02, 0.12); else m.scale.setScalar(rnd(0.12, 0.26));
+    g.add(m); caught.push({ m, a: rnd(0, Math.PI * 2), h: rnd(0.2, 5.4), w: rnd(5, 9.5) });
   }
-  const base = new THREE.Mesh(RING, mats[0]); base.rotation.x = -Math.PI / 2; base.scale.setScalar(2.6); base.position.y = 0.1; g.add(base);
+  const base = new THREE.Mesh(PLANE_2, baseMat); base.rotation.x = -Math.PI / 2; base.scale.setScalar(2.9); base.position.y = 0.1; g.add(base);
   g.position.set(pos.x, surfaceY(pos.x, pos.z), pos.z); g.scale.set(1, 0.3, 1);
   addProp(g, mats, TWISTER_TIME + 0.35, (p, dt) => {
     g.position.set(pos.x, surfaceY(pos.x, pos.z), pos.z);
-    g.rotation.y += dt * 11;
-    rings.forEach((r, i) => { r.position.x = Math.sin(p.t * 6 + i * 0.8) * 0.1 * i; r.position.z = Math.cos(p.t * 5 + i) * 0.08 * i; });
+    g.rotation.y += dt * 9;
+    innerFunnel.rotation.y -= dt * 15;
+    rings.forEach((r, i) => { r.position.x = Math.sin(p.t * 6 + i * 0.9) * 0.14 * i; r.position.z = Math.cos(p.t * 5 + i) * 0.11 * i; });
     for (const s of caught) {
-      s.a += dt * s.w; s.h = (s.h + dt * 1.6) % 5.2;
-      const r = 0.5 + s.h * 0.33;
+      s.a += dt * s.w; s.h = (s.h + dt * 1.7) % 5.4;
+      const r = 0.55 + s.h * 0.36;
       s.m.position.set(Math.sin(s.a) * r, s.h, Math.cos(s.a) * r); s.m.rotation.x += dt * 8; s.m.rotation.z += dt * 6;
     }
     const k = p.t > TWISTER_TIME ? 1 - (p.t - TWISTER_TIME) / 0.35 : Math.min(1, p.t / 0.2), wide = p.t > TWISTER_TIME ? 2 - k : 1;
-    mats[0].opacity = 0.6 * k; mats[1].opacity = 0.35 * k; g.scale.set(wide, 0.3 + 0.7 * k, wide);
+    funnelMat.uniforms.uOpacity.value = 0.76 * k;
+    innerFunnelMat.uniforms.uOpacity.value = 0.48 * k;
+    baseMat.uniforms.uOpacity.value = 0.72 * k;
+    (mats[3] as THREE.MeshBasicMaterial).opacity = 0.45 * k;
+    g.scale.set(wide, 0.3 + 0.7 * k, wide);
   });
   flare(lift(pos, 2.5), c, { size: 1.1, life: 0.5 });
   sfx.swing({ power: 1.5, pan: 0 });
@@ -682,16 +745,22 @@ function startTornado() {
 
 // ------------------------------------------------------------ Lluvia de Meteoros
 const METEORS = 6, METEOR_RANGE = 16, METEOR_R = 3.5, METEOR_FALL = 0.5, BURN_TICKS = 3, BURN_EVERY = 0.6, RIFT_H = 30;
-const scorchMat = tagMat(new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }), CLS.ground);
-const SCORCH = new THREE.CircleGeometry(1, 24);
+const scorchMat = tagMat(new THREE.MeshBasicMaterial({ map: scorchTex, transparent: true, opacity: 0.78, depthWrite: false }), CLS.ground);
 
 function startMeteoro() {
   const c = color('meteoro'), ts = nearest(METEOR_RANGE, METEORS), sky = lift(player.pos, RIFT_H);
-  // a burning rift opens high above, a wide glow hanging under it
-  const time = 0.12 + METEORS * 0.2 + 0.3;
-  runeCircle(sky, c, 9, time, 0.85, 1.2);
-  runeCircle(lift(sky, -0.5), 0xffd089, 5.5, time, 0.6, -2);
-  pillar(lift(sky, -8), c, 8, 7, time, 0.12);
+  // a burning swirling rift opens high above, a wide glow hanging under it
+  const time = 0.12 + METEORS * 0.2 + 0.35;
+  const riftMat = makeStormPortalMat(0xfff0c0, c, 0.9);
+  const rift = new THREE.Mesh(PLANE_2, riftMat);
+  rift.rotation.x = Math.PI / 2; rift.position.copy(sky); rift.scale.setScalar(11);
+  addProp(rift, [riftMat], time, (p, dt) => {
+    rift.rotation.z += dt * 1.8;
+    const open = Math.min(1, p.t / 0.18), close = Math.min(1, (p.life - p.t) / 0.4);
+    riftMat.uniforms.uOpacity.value = 0.9 * Math.min(open, close);
+  });
+  runeCircle(lift(sky, -0.5), 0xffd089, 6.2, time, 0.65, -2);
+  pillar(lift(sky, -9), c, 9, 6.5, time, 0.2);
   for (let i = 0; i < METEORS; i++) {
     const e = ts.length ? ts[i % ts.length] : null;
     after(0.12 + i * 0.2, () => {
@@ -708,20 +777,22 @@ function startMeteoro() {
 function meteor(at: V3, sky: V3, first: boolean) {
   const c = color('meteoro');
   flare(at, c, { pre: METEOR_FALL, life: 0, lift: 0.3 });
-  runeCircle(lift(at, 0.08), c, METEOR_R, METEOR_FALL, 0.45, 3);
-  const core = glow(0xfff0c0, 1), fire = glow(c, 0.5), tail = glow(c, 0.35), g = new THREE.Group();
-  const rock = new THREE.Mesh(ROCK, core), mantle = new THREE.Mesh(ROCK, fire), streak = new THREE.Mesh(BOX, tail);
-  rock.scale.setScalar(0.75); mantle.scale.setScalar(1.6);
-  streak.scale.set(1.1, 1.1, 3); streak.position.z = -4.6;   // the long fiery tail behind it
-  g.add(rock, mantle, streak);
+  runeCircle(lift(at, 0.08), c, METEOR_R, METEOR_FALL, 0.52, 3);
+  const core = makeFresnelShellMat(0xfff8d0, 0xff9a38, 1.0, 1.4);
+  const fire = makeFireBladeMat(0xfff4c0, c, 0xcc1a00, 0.85);
+  const g = new THREE.Group();
+  const rock = new THREE.Mesh(ROCK, core); rock.scale.setScalar(0.85);
+  const cone = new THREE.Mesh(REENTRY_CONE, fire); cone.position.z = -1.6;
+  const tail = new THREE.Mesh(REENTRY_CONE, fire); tail.scale.set(0.7, 0.7, 2.2); tail.position.z = -4.2;
+  g.add(rock, cone, tail);
   const start = sky.clone().add(new THREE.Vector3(rnd(-6, 6), 0, rnd(-6, 6)));
   g.position.copy(start); g.lookAt(at);
-  addProp(g, [core, fire, tail], METEOR_FALL, (p, dt) => {
+  addProp(g, [core, fire], METEOR_FALL, (p, dt) => {
     const k = p.t / p.life;
     g.position.lerpVectors(start, at, k * k);
-    rock.rotation.x += dt * 9; mantle.rotation.z += dt * 7;
-    streak.scale.z = 3 + 6 * k;
-    burst(g.position.clone(), Math.random() < 0.5 ? c : 0xffd089, 5, 2, 0.22);
+    rock.rotation.x += dt * 9; cone.rotation.z += dt * 11;
+    tail.scale.z = 1.8 + 2.4 * k;
+    burst(g.position.clone(), Math.random() < 0.5 ? c : 0xffd089, 5, 2.5, 0.22);
   });
   after(METEOR_FALL, () => {
     let hits = 0;
@@ -730,15 +801,16 @@ function meteor(at: V3, sky: V3, first: boolean) {
       if (e.hp > 0) burning.set(e, { ticks: BURN_TICKS, t: BURN_EVERY });
       hits++;
     }
-    pillar(at, c, 9, 1.4, 0.45, 0.8);
-    dome(at, c, METEOR_R + 1, 0.4, 0.6); groundRing(at, c, METEOR_R + 1.5, 0.55);
-    // the crater: a scorched disc with a ring of embers that cools
-    const scorch = new THREE.Mesh(SCORCH, scorchMat);
-    scorch.rotation.x = -Math.PI / 2; scorch.position.set(at.x, at.y + 0.05, at.z); scorch.scale.setScalar(METEOR_R * 0.7);
-    addProp(scorch, [], 3.5, p => scorch.scale.setScalar(METEOR_R * 0.7 * Math.min(1, (p.life - p.t) / 0.8 + 0.2)));
-    const emberMat = glow(c, 0.8), ember = new THREE.Mesh(RING, emberMat);
-    ember.rotation.x = -Math.PI / 2; ember.position.set(at.x, at.y + 0.08, at.z); ember.scale.setScalar(METEOR_R * 0.75);
-    addProp(ember, [emberMat], 3.2, p => { emberMat.opacity = 0.8 * (1 - p.t / p.life) * (0.75 + 0.25 * Math.sin(p.t * 17)); });
+    pillar(at, c, 10, 1.6, 0.45, 0.85);
+    dome(at, c, METEOR_R + 1.2, 0.45, 0.68); groundRing(at, c, METEOR_R + 1.8, 0.55);
+    // the crater: a charred cracked decal with a cooling ring of embers
+    const scorch = new THREE.Mesh(PLANE_2, scorchMat);
+    scorch.rotation.x = -Math.PI / 2; scorch.rotation.z = rnd(0, Math.PI * 2);
+    scorch.position.set(at.x, at.y + 0.05, at.z); scorch.scale.setScalar(METEOR_R * 0.85);
+    addProp(scorch, [], 3.5, p => scorch.scale.setScalar(METEOR_R * 0.85 * Math.min(1, (p.life - p.t) / 0.8 + 0.2)));
+    const emberMat = makeShockRingMat(0xffd089, c, 0.82), ember = new THREE.Mesh(PLANE_2, emberMat);
+    ember.rotation.x = -Math.PI / 2; ember.position.set(at.x, at.y + 0.08, at.z); ember.scale.setScalar(METEOR_R * 0.82);
+    addProp(ember, [emberMat], 3.2, p => { emberMat.uniforms.uOpacity.value = 0.82 * (1 - p.t / p.life) * (0.75 + 0.25 * Math.sin(p.t * 17)); });
     debris(at, 9, 10); dust(at, 40, 7);
     burst(lift(at, 0.5), c, 90, 9, 0.2);
     burst(lift(at, 0.4), 0xffd089, 40, 6, 0.16);
@@ -752,7 +824,8 @@ function meteor(at: V3, sky: V3, first: boolean) {
 
 // ------------------------------------------------------------ Aliento Glacial
 const FROST_RANGE = 11, FROST_HALF = 0.9, FROST_TIME = 0.45, FROZEN = 3, FROZEN_BIG = 1.3;
-const iceMat = fixedGlow(TECHNIQUES.hielo.color, 0.55), iceWhite = fixedGlow(0xffffff, 0.5);
+const iceMat = makeFresnelShellMat(0xffffff, TECHNIQUES.hielo.color, 0.72, 1.7);
+const iceWhite = makeFresnelShellMat(0xffffff, 0x9be8ff, 0.62, 2.2);
 
 function startHielo() {
   const c = color('hielo'), origin = player.pos.clone(), dir = ahead(), face = player.face, cos = Math.cos(FROST_HALF);
@@ -822,10 +895,10 @@ function freeze(e: Enemy) {
   const hold = e.big ? FROZEN_BIG : FROZEN;
   strike('hielo', e, 3, hold / (e.big ? 0.45 : 1));
   e.knock.set(0, 0, 0);
-  // a cluster of crystals locks it in
-  const mat = glow(c, 0.42), edge = glow(0xffffff, 0.22), g = new THREE.Group();
+  // a cluster of Fresnel-glowing crystals locks it in
+  const mat = makeFresnelShellMat(0xffffff, c, 0.68, 1.7), edge = makeFresnelShellMat(0xffffff, 0x9be8ff, 0.45, 2.4), g = new THREE.Group();
   const shell = new THREE.Mesh(ICE, mat), rime = new THREE.Mesh(ICE, edge);
-  shell.scale.set(0.8, 1.3, 0.8); rime.scale.set(0.86, 1.4, 0.86); rime.rotation.y = 0.5; g.add(shell, rime);
+  shell.scale.set(0.8, 1.3, 0.8); rime.scale.set(0.88, 1.42, 0.88); rime.rotation.y = 0.5; g.add(shell, rime);
   for (let i = 0; i < 5; i++) {
     const s = new THREE.Mesh(ICE, mat), a = i / 5 * Math.PI * 2;
     s.position.set(Math.sin(a) * 0.55, rnd(-0.6, 0.4), Math.cos(a) * 0.55);
@@ -837,7 +910,7 @@ function freeze(e: Enemy) {
     if (!alive(e)) { p.t = p.life; return; }
     g.position.set(e.g.position.x, e.g.position.y + 1.05 * e.scale, e.g.position.z);
     g.scale.setScalar(e.scale * Math.min(1, p.t / 0.12 + 0.01));
-    mat.opacity = 0.42 + 0.08 * Math.sin(p.t * 9);
+    mat.uniforms.uOpacity.value = 0.68 + 0.12 * Math.sin(p.t * 9);
   }, () => {
     // the ice shatters and cuts once more
     const at = g.position.clone();
@@ -877,11 +950,12 @@ function startTierra() {
       fang(ground(origin.x + dir.x * nextFang + dir.z * side, origin.z + dir.z * nextFang - dir.x * side), c, 1);
       nextFang += CRACK_STEP;
     }
-    // lightning crackles out of the crack
+    // volumetric lightning crackles out of the fissure
     if ((sparkT -= dt) <= 0) {
-      sparkT = 0.04;
-      let p = lift(crackAt, 0.1);
-      for (let s = 0; s < 3; s++) { const q = p.clone().add(new THREE.Vector3(rnd(-0.5, 0.5), rnd(0.4, 0.9), rnd(-0.5, 0.5))); beam(p, q, 0xdfe8ff, 0.03, 0.1, 1); p = q; }
+      sparkT = 0.055;
+      const base = lift(crackAt, 0.12);
+      const top = base.clone().add(new THREE.Vector3(rnd(-1.2, 1.2), rnd(1.8, 3.6), rnd(-1.2, 1.2)));
+      spawnMiniArc(base, top, 0xffffff, 0x9fd0ff, { steps: 5, spread: 0.42, radius: 0.04, life: 0.18, fork: true });
     }
     impactLight(crackAt, c, 60, 0.15);
     let hits = 0;

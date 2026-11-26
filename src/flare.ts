@@ -7,7 +7,10 @@
 //   golpe         the full star snaps open in a few hundredths of a second;
 //   final         the horizontal streak shrinks first and the vertical beam lingers, thinning out.
 import * as THREE from 'three';
-import { camera, renderer } from './renderer';
+import { camera, renderer, scene } from './renderer';
+import { state } from './state';
+import { CLS, tagMat } from './materials';
+import { anamorphicFlareTex, softGlowTex } from './vfx-art';
 
 export const MAX_FLARES = 8;
 const ATTACK = 0.05;   // seconds for the star to snap fully open
@@ -22,6 +25,63 @@ interface Flare {
   t: number;
 }
 const flares: Flare[] = [];
+
+// 3D optical anamorphic flares for T-mode (direct WebGL): hidden in ASCII mode where ascii.ts draws character flares
+const flarePool = Array.from({ length: MAX_FLARES }, () => {
+  const starMat = tagMat(new THREE.SpriteMaterial({
+    map: anamorphicFlareTex, color: 0xffffff, transparent: true, opacity: 0,
+    depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx);
+  const coreMat = tagMat(new THREE.SpriteMaterial({
+    map: softGlowTex, color: 0xffffff, transparent: true, opacity: 0,
+    depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx);
+  const star = new THREE.Sprite(starMat);
+  const core = new THREE.Sprite(coreMat);
+  star.renderOrder = 998;
+  core.renderOrder = 999;
+  star.visible = core.visible = false;
+  scene.add(star, core);
+  return { star, core, starMat, coreMat };
+});
+
+function sync3dFlares() {
+  const show = !state.asciiOn;
+  for (let i = 0; i < MAX_FLARES; i++) {
+    const slot = flarePool[i];
+    const f = show ? flares[i] : undefined;
+    if (!f) {
+      slot.star.visible = slot.core.visible = false;
+      continue;
+    }
+    const px = f.at.x, py = f.at.y + f.lift, pz = f.at.z;
+    slot.star.position.set(px, py, pz);
+    slot.core.position.set(px, py, pz);
+    if (f.t < f.pre) {
+      // aviso: pulsing star glint marking the incoming strike
+      const p = f.t / Math.max(0.01, f.pre);
+      const flick = Math.random() < 0.85 ? 1 : 0.45;
+      const s = (0.7 + 0.9 * p) * f.size;
+      slot.star.scale.set(s * 2.1, s * 1.15, 1);
+      slot.core.scale.set(s * 0.55, s * 0.55, 1);
+      slot.starMat.color.copy(f.color);
+      slot.starMat.opacity = (0.35 + 0.55 * p) * flick;
+      slot.coreMat.opacity = (0.45 + 0.45 * p) * flick;
+    } else {
+      const s = f.t - f.pre, u = Math.min(1, s / Math.max(0.01, f.life));
+      const open = Math.min(1, s / ATTACK), e = 1 - u;
+      const k = open * Math.pow(e, 1.15);
+      const w = (3.4 + 2.6 * open) * f.size * (0.45 + 0.55 * e);
+      const h = (1.6 + 1.4 * open) * f.size * Math.pow(e, 0.7);
+      slot.star.scale.set(w, h, 1);
+      slot.core.scale.set(w * 0.28, w * 0.28, 1);
+      slot.starMat.color.copy(f.color);
+      slot.starMat.opacity = Math.min(1, k * 1.15);
+      slot.coreMat.opacity = Math.min(1, k * 0.95);
+    }
+    slot.star.visible = slot.core.visible = true;
+  }
+}
 
 export const flareUniforms = {
   uFlareA: { value: Array.from({ length: MAX_FLARES }, () => new THREE.Vector4()) },   // x, y (device px, y up), half-length across, half-length up/down (< 0: upwards only)
@@ -45,9 +105,13 @@ export function flare(at: THREE.Vector3, color: THREE.ColorRepresentation, o: Fl
 
 export function updateFlares(dt: number) {
   for (let i = flares.length - 1; i >= 0; i--) if ((flares[i].t += dt) >= flares[i].pre + flares[i].life) flares.splice(i, 1);
+  sync3dFlares();
 }
 
-export function clearFlares() { flares.length = 0; }
+export function clearFlares() {
+  flares.length = 0;
+  sync3dFlares();
+}
 
 const _p = new THREE.Vector3(), _v = new THREE.Vector3(), _buf = new THREE.Vector2();
 /** every frame, after the camera moved: the flares' screen positions and shapes for ascii.ts */

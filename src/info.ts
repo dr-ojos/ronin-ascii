@@ -39,7 +39,6 @@ const SECTIONS: [string, [string, string][]][] = [
     ['Letras del guerrero', 'G'],
     ['Paleta de colores', 'C'],
     ['Densidad de letras', '+ / −'],
-    ['Lluvia', 'R'],
     ['Sonido', 'M']
   ]]
 ];

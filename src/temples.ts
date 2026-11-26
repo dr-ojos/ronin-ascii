@@ -5,6 +5,7 @@ import { player, state } from './state';
 import { KINDS } from './enemies';
 import type { TemplePlace } from './map';
 import { equipTechnique, SLOT_KEY, slotOf, TECHNIQUES, type Slot, type TempleTechniqueId } from './techniques';
+import { MAX_RANGED_CHARGES, ORB_INFO, type OrbElement } from './elemental-orb';
 import { templeMasters } from './temple-grounds';
 import { angDiff } from './utils';
 
@@ -50,6 +51,30 @@ function lessonRow(id: TempleTechniqueId, temple: TemplePlace) {
   };
 }
 
+function orbRow(el: OrbElement) {
+  const orb = ORB_INFO[el], learned = state.learnedOrbs.includes(el), active = state.rangedElement === el;
+  return {
+    label: `Ñ · ${orb.kanji} ${orb.name}`,
+    value: active ? 'en Ñ · activa' : learned ? 'equipar en Ñ' : jadeLabel(orb.cost),
+    cls: active ? 'y' : learned ? 'b' : state.jade < orb.cost ? 'r' : 'y',
+    note: orb.desc,
+    act() {
+      if (!learned && state.jade < orb.cost) {
+        sfx.warn(); return menuStatus(`Te faltan ${jadeLabel(orb.cost - state.jade)}. Búscalos en cofres.`);
+      }
+      const first = !state.rangedElement;
+      if (!learned) {
+        state.jade -= orb.cost;
+        state.learnedOrbs.push(el);
+      }
+      state.rangedElement = el;
+      if (first) { state.rangedCharges = MAX_RANGED_CHARGES; state.rangedCharge = 0; }
+      sfx.chime(!learned);
+      menuStatus(`${learned ? 'Orbe equipado' : 'Orbe aprendido'} en Ñ · pulsa Ñ para cargar y lanzar · ⇧Ñ cambia de elemento`);
+    },
+  };
+}
+
 export function tryTalkTemple() {
   if (!state.playing || state.dead || state.menu || state.photo) return false;
   const nearby = templeMasters.find(({ x, z }) => Math.hypot(player.pos.x - x, player.pos.z - z) < TALK_RANGE);
@@ -60,10 +85,14 @@ export function tryTalkTemple() {
     id: 'temple', title: temple.name,
     sub: () => `${temple.master} · <span class="y">${jadeLabel(state.jade)}</span>`,
     foot: '↑ ↓ elegir · E / ENTER confirmar · ESC salir',
-    rows: () => [lessonRow(temple.technique, temple), ...(temple.lessons ?? []).map(id => lessonRow(id, temple)),
-      ...(temple.monkLesson && state.cls === 'sohei' ? [lessonRow(temple.monkLesson, temple)] : []), {
+    rows: () => [
+      lessonRow(temple.technique, temple),
+      ...(temple.lessons ?? []).map(id => lessonRow(id, temple)),
+      ...(temple.monkLesson && state.cls === 'sohei' ? [lessonRow(temple.monkLesson, temple)] : []),
+      orbRow(temple.orb),
+      {
         label: 'Despedirse',
-        note: temple.guardian ? 'Esta técnica no se enseña: se gana en combate.' : 'Los sellos de jade se encuentran en cofres del mundo.',
+        note: temple.guardian ? 'El rayo se gana en combate; el resto se aprende con sellos de jade.' : 'Los sellos de jade se encuentran en cofres del mundo.',
         act: closeMenu,
     }],
   });

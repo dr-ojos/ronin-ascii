@@ -11,6 +11,7 @@ import { enemies, KINDS } from './enemies';
 import { showMsg } from './hud';
 import { discovered, camps } from './encounters';
 import { isTownLiberated, isTownMissionStarted, townCampsOf, type TownId } from './liberation';
+import { activeWorldEvent } from './world-events';
 import { POIS } from './landmarks';
 import { chests } from './loot';
 import { smithPos } from './shop';
@@ -267,6 +268,31 @@ function stamp(ctx: CanvasRenderingContext2D, proj: Proj, fs: number, isBig: boo
     ctx.fillStyle = kind.beast ? '#ffc381' : COL.oni;
     text(kind.glyph, x, z);
   }
+  // active random calamity boss event: always visible with a pulsing beacon ring (even in fog)
+  const ev = activeWorldEvent();
+  if (ev) {
+    const [ex, ey] = proj(ev.x, ev.z);
+    const pulse = (state.time * 0.9) % 1;
+    ctx.save();
+    ctx.strokeStyle = ev.colorHex;
+    ctx.lineWidth = isBig ? 2.2 : 1.8;
+    ctx.globalAlpha = (1 - pulse) * 0.85;
+    ctx.beginPath();
+    ctx.arc(ex, ey, fs * (0.7 + pulse * 1.4), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#05060a';
+    ctx.beginPath();
+    ctx.arc(ex, ey, fs * 0.62, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = ev.colorHex;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = ev.colorHex;
+    ctx.font = `bold ${Math.round(fs * 0.95)}px ${FONT}`;
+    ctx.fillText(ev.kanji, ex, ey);
+    ctx.restore();
+  }
   // the samurai: an arrow pointing where they face (map rotated by `rot`)
   const [px, py] = proj(player.pos.x, player.pos.z);
   const u = Math.sin(player.face), v = Math.cos(player.face), cr = Math.cos(rot), sr = Math.sin(rot);
@@ -310,6 +336,24 @@ function drawMinimap() {
   ctx.font = `bold 9px ${FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
   flush(ctx);
   stamp(ctx, proj, 12, false, mapYaw);
+  // if a colossal world event is outside the minimap frame, pin a pulsing directional indicator on the rim
+  const ev = activeWorldEvent();
+  if (ev) {
+    const [ex, ey] = proj(ev.x, ev.z);
+    const dx = ex - W / 2, dy = ey - H / 2;
+    if (Math.abs(dx) > W / 2 - 12 || Math.abs(dy) > H / 2 - 12) {
+      const kEv = Math.min((W / 2 - 11) / Math.max(1e-3, Math.abs(dx)), (H / 2 - 11) / Math.max(1e-3, Math.abs(dy)));
+      const rx = W / 2 + dx * kEv, ry = H / 2 + dy * kEv;
+      ctx.save();
+      ctx.fillStyle = '#05060a';
+      ctx.strokeStyle = ev.colorHex;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(rx, ry, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.font = `bold 10px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = ev.colorHex; ctx.fillText(ev.kanji, rx, ry);
+      ctx.restore();
+    }
+  }
   // north marker on the rim
   const nx = Math.sin(mapYaw), ny = -Math.cos(mapYaw), k = Math.min((W / 2 - 8) / Math.max(1e-3, Math.abs(nx)), (H / 2 - 8) / Math.max(1e-3, Math.abs(ny)));
   ctx.font = `bold 12px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

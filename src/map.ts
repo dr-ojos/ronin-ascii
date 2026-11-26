@@ -3,6 +3,7 @@
 // Pure data + a few lookups: terrain.ts, structures.ts, chunks.ts and the minimap all read from here.
 import * as THREE from 'three';
 import type { JadeTechniqueId, TempleTechniqueId } from './techniques';
+import type { OrbElement } from './elemental-orb';
 import type { EnemyKind } from './types';
 
 /** world square is [-HALF, HALF]²; the walkable area is a disc of radius WORLD_R (mountains beyond) */
@@ -15,6 +16,8 @@ export type P2 = [number, number];
 export interface Place { id: string; name: string; x: number; z: number; r: number; flat: number; blend: number; level?: number; glyph: string }
 export interface TemplePlace extends Place {
   technique: TempleTechniqueId; lessons?: JadeTechniqueId[]; master: string; facing: number; crest: string;
+  /** elemental ranged orb (Ñ) sold at this temple */
+  orb: OrbElement;
   /** a technique this master only teaches to the sōhei (classes.ts) */
   monkLesson?: JadeTechniqueId;
   /** a temple whose technique is won, not bought: this guardian waits in its courtyard */
@@ -23,13 +26,13 @@ export interface TemplePlace extends Place {
 export const TEMPLE_GLYPH = '◆';
 export const TEMPLES: TemplePlace[] = [
   { id: 'templo-viento', name: 'TEMPLO DEL VIENTO', x: -181, z: -72, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'viento', lessons: ['tornado'], monkLesson: 'sutras', master: 'Haru', facing: Math.PI / 2, crest: '風' },
+    technique: 'viento', orb: 'viento', lessons: ['tornado'], monkLesson: 'sutras', master: 'Haru', facing: Math.PI / 2, crest: '風' },
   { id: 'templo-brasas', name: 'TEMPLO DE LAS BRASAS', x: 238, z: -21, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'fuego', lessons: ['cuatroLlamas', 'meteoro'], master: 'Enji', facing: -Math.PI / 2, crest: '火' },
+    technique: 'fuego', orb: 'fuego', lessons: ['cuatroLlamas', 'meteoro'], master: 'Enji', facing: -Math.PI / 2, crest: '火' },
   { id: 'templo-marea', name: 'TEMPLO DE LA MAREA', x: 97, z: 272, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'agua', lessons: ['hielo'], master: 'Nami', facing: Math.PI / 2, crest: '水' },
+    technique: 'agua', orb: 'agua', lessons: ['hielo'], master: 'Nami', facing: Math.PI / 2, crest: '水' },
   { id: 'templo-rayo', name: 'TEMPLO DEL RAYO', x: 345, z: -305, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'rayo', lessons: ['tierra'], master: 'Shiden', facing: 0, crest: '雷', guardian: 'guardianRayo' },
+    technique: 'rayo', orb: 'rayo', lessons: ['tierra'], master: 'Shiden', facing: 0, crest: '雷', guardian: 'guardianRayo' },
 ];
 export const PLACES: Place[] = [
   { id: 'claro', name: 'EL CLARO DEL SANTUARIO', x: 0, z: -8, r: 50, flat: 62, blend: 55, level: 0, glyph: 'H' },

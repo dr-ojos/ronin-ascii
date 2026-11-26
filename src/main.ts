@@ -26,6 +26,8 @@ import './level-menu';
 import './account';
 import './title';
 import { devSetLevel, gainXp } from './progression';
+import { activeWorldEvent, resetWorldEvents, showcaseWorldEvent, triggerWorldEvent } from './world-events';
+import { enemies } from './enemies';
 
 const clock = new THREE.Clock();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
@@ -74,6 +76,15 @@ addEventListener('resize', () => {
 });
 
 // dev only: lets the browser console move the samurai around the world (__ronin.player.pos.set(x, 0, z))
-if (import.meta.env.DEV) Object.assign(window, { __ronin: { state, player, scene, renderer, camera, THREE, progress: { gainXp, setLevel: devSetLevel } } });
+if (import.meta.env.DEV) {
+  Object.assign(window, { __ronin: { state, player, scene, renderer, camera, THREE, enemies, progress: { gainXp, setLevel: devSetLevel }, triggerEvent: triggerWorldEvent, showcaseEvent: showcaseWorldEvent, activeEvent: activeWorldEvent, resetEvents: resetWorldEvents } });
+  // Dev-only hotkeys (7 / 8 / 9) to summon and inspect each colossal world-event boss right in front of you
+  addEventListener('keydown', e => {
+    if (e.repeat || !state.playing || state.dead || state.menu) return;
+    if (e.code === 'Digit7') showcaseWorldEvent('eclipse');
+    else if (e.code === 'Digit8') showcaseWorldEvent('tempestad');
+    else if (e.code === 'Digit9') showcaseWorldEvent('forja');
+  });
+}
 
 frame();

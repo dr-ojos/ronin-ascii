@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { sam } from './avatar';
 import { enemies, KINDS } from './enemies';
 import { provoke, staggerEnemy } from './enemy-ai';
-import { burst, dashGhost, dashRing } from './fx';
+import { burst, dashGhost, dashRing, impactRing } from './fx';
 import { sparkBurst } from './katana-fx';
 import { collide } from './physics';
 import { panOf, sfx } from './sfx';
@@ -18,6 +18,8 @@ import { dmgMult } from './upgrades';
 import { specialDamage } from './special-damage';
 import { flare } from './flare';
 import { weapon } from './weapons';
+import { impactFlash } from './cinematic';
+import { spawnMiniArc } from './vfx-art';
 
 const RANGE = 13;          // metres: who the dance can reach
 const MAX_TARGETS = 6;
@@ -94,6 +96,12 @@ function nextFlash(d: Dance) {
 function cutAlong(d: Dance) {
   const ax = d.from.x, az = d.from.z, bx = player.pos.x, bz = player.pos.z;
   const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+  // Luminous silver-blue slash arc tracing the flash through the air
+  spawnMiniArc(
+    new THREE.Vector3(ax, d.from.y + 1.15, az),
+    new THREE.Vector3(bx, player.pos.y + 1.15, bz),
+    0xffffff, COLOR, { steps: 6, spread: 0.18, radius: 0.042, life: 0.24 },
+  );
   const force = dmgMult() * weapon().dmg;
   let hits = 0, pan = 0;
   for (const e of enemies) {
@@ -135,10 +143,12 @@ function finishingBlow(d: Dance) {
     e.flash = 1;
     burst(at, 0xffffff, doomed.has(e) ? 40 : 26, 6, 0.14);
     burst(at, COLOR, 22, 4, 0.18);
-    flare(at, COLOR, { size: doomed.has(e) ? 1 : 0.8, life: 0.5 });
+    impactRing(p, COLOR, doomed.has(e) ? 3.8 : 2.6);
+    flare(at, COLOR, { size: doomed.has(e) ? 1.15 : 0.9, life: 0.55 });
     hits++;
   }
   if (hits) {
+    impactFlash(COLOR, doomed.size ? 0.55 : 0.32);
     sfx.hit({ heavy: true, pan: 0, count: hits });
     state.hitStop = doomed.size ? 0.22 : 0.1; state.shake = Math.max(state.shake, 0.5);
   }

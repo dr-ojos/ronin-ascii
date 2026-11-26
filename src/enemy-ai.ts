@@ -18,6 +18,7 @@ import { chargeKill, bolt, skyFlash } from './special';
 import { circle, onEnrage, onKill, takeTurn } from './battle';
 import { affixLabel } from './boss-mechanics';
 import { onTownCampCleared, startTownMission } from './liberation';
+import { onWorldEventBossDefeat, onWorldEventBossEnrage } from './world-events';
 import { earnTechnique, TECHNIQUES } from './techniques';
 import { CLS, tagMat } from './materials';
 import { player, state } from './state';
@@ -348,11 +349,12 @@ export function updateEnemies(dt: number) {
     const leaving = fromHome > camp.leash || youFromHome > camp.leash + 4 || state.dead;
     if (def.boss && !en.enraged && en.hp <= en.maxHp * 0.5 && en.state !== 'idle' && en.state !== 'return' && !leaving) {
       en.enraged = true;
-      burst(g.position.clone().add(new THREE.Vector3(0, 1.25, 0)), def.boss.aura, 90, 7, 0.16);
-      if (en.aura) en.aura.intensity = 4;
+      burst(g.position.clone().add(new THREE.Vector3(0, 1.25 * en.scale, 0)), def.boss.aura, 90, 7, 0.16);
+      if (en.aura) en.aura.intensity = !def.beast && def.look.colossal ? 7.2 : 4;
       sfx.roar({ big: true, pan: panOf(g.position.x, g.position.z) });
       onEnrage(en);
-      showMsg(`¡ ${def.name.toUpperCase()} ENFURECIDO !\nllama a sus refuerzos`, 2);
+      if (camp.worldEvent) onWorldEventBossEnrage(en);
+      else showMsg(`¡ ${def.name.toUpperCase()} ENFURECIDO !\nllama a sus refuerzos`, 2);
     }
     const speed = en.speed * (en.enraged ? 1.13 : 1) * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));
     en.t -= dt; en.cd -= dt;
@@ -380,7 +382,7 @@ export function updateEnemies(dt: number) {
         heading = Math.atan2(step.x, step.z);
       } else if (!home && en.t <= 0) { pickWander(en); en.t = rnd(1.5, 5); }   // got there: rest a while, then pick a new spot
       // notice the player (only while idle: a returning oni ignores you until it is home)
-      const sight = (def.boss || ranged || camp.wildlife === 'lobos' ? 16 : def.heavy || def.elite ? 14 : 11) * (state.dead ? 0 : 1);
+      const sight = ((!def.beast && def.look.colossal) ? 22 : def.boss || ranged || camp.wildlife === 'lobos' ? 16 : def.heavy || def.elite ? 14 : 11) * (state.dead ? 0 : 1);
       if (!home && d < sight && youFromHome < camp.leash) alertCamp(camp);
     } else if (leaving) {
       clearEnemyAttack(en);
@@ -516,9 +518,10 @@ function kill(en: Enemy, i: number, gy: number) {
   if (en.big) state.shake = 0.6;
   dropLoot(g.position.x, g.position.z, camp.tier, !!(def.boss || def.elite));
   const relicName = def.boss ? dropBossRelic(en.kind, g.position.x, g.position.z) : null;
+  const eventVictory = !!(camp.worldEvent && def.boss) && onWorldEventBossDefeat(en);
   const r = camp.roster.indexOf(en.kind); if (r >= 0) camp.roster.splice(r, 1);
-  if (camp.roster.length === 0) campCleared(camp, en.kind, relicName);
-  else if (def.boss) {
+  if (camp.roster.length === 0) campCleared(camp, en.kind, relicName, eventVictory);
+  else if (def.boss && !eventVictory) {
     const escort = camp.chest?.state === 'sealed' ? '\nel cofre se abrirá cuando caiga su escolta' : '';
     const drop = relicName ? `\n✦ Ha soltado: ${relicName}` : '';
     showMsg(`¡ ${def.name.toUpperCase()} ABATIDO !${drop}${escort}`, relicName ? 3.2 : 2.2);
@@ -529,8 +532,9 @@ function kill(en: Enemy, i: number, gy: number) {
   }
 }
 
-function campCleared(camp: Camp, last: Enemy['kind'], relicName: string | null = null) {
+function campCleared(camp: Camp, last: Enemy['kind'], relicName: string | null = null, eventVictory = false) {
   camp.clearedAt = state.time;
+  if (eventVictory) { state.campsCleared++; return; }
   if (camp.wildlife) {
     const bonus = 55 * camp.size;
     addPoints(bonus, WILDLIFE_NAMES[camp.wildlife].toLowerCase());

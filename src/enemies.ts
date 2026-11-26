@@ -128,6 +128,19 @@ export const KINDS: Record<EnemyKind, KindDef> = {
   taikoDemonio: { name: 'Oni del Tambor Carmesí', scale: 1.68, hp: 30, speed: [2.8, 3.1], dmg: 24, reach: 3.7, windup: 0.78, heavy: true, points: 1200, glyph: 'G',
                   look: { tint: 0x3b1520, mask: 0xd9a036, eye: 0xff5a36, weapon: 'drum', crest: 'halo', plated: true, spikes: true }, robe: 0x5c1a24, maskC: 0xd9a036,
                   moves: ['rally', 'shockwave', 'slam'], boss: { aura: 0xffb840, enraged: ['rally', 'quake', 'storm', 'shockwave'] } },
+  // --- colossal calamity event bosses (world-events.ts): towering mythic titans with bespoke 3D regalia ---
+  gashadokuro: { name: 'Gashadokuro, Soberano del Eclipse', scale: 2.45, hp: 48, speed: [3.1, 3.3], dmg: 32, reach: 4.5, windup: 0.78, heavy: true, points: 2400, glyph: 'Ω',
+                 look: { tint: 0x160a12, mask: 0xb81d2c, eye: 0xff3b58, weapon: 'sword', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'eclipse', cape: true },
+                 robe: 0x240b14, maskC: 0xb81d2c,
+                 moves: ['bladeRush', 'eclipseSlash', 'fire', 'quake'], boss: { aura: 0xff2848, enraged: ['cataclysm', 'bladeRush', 'eclipseSlash', 'storm'] } },
+  susanooTempestad: { name: 'Susanoo, Titán de la Tempestad', scale: 2.35, hp: 46, speed: [3.2, 3.5], dmg: 30, reach: 4.4, windup: 0.8, heavy: true, points: 2300, glyph: 'Ψ',
+                      look: { tint: 0x101c3a, mask: 0xd6e6ff, eye: 0x5ce1ff, weapon: 'scythe', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'tempest', drums: true, cape: true },
+                      robe: 0x182a54, maskC: 0xd6e6ff,
+                      moves: ['storm', 'hook', 'shockwave', 'crescent'], boss: { aura: 0x5ce1ff, enraged: ['cataclysm', 'storm', 'whirlwind', 'thunder'] } },
+  amaterasuCeniza: { name: 'Kijin Kōtei, Emperador de la Forja', scale: 2.55, hp: 54, speed: [2.7, 2.9], dmg: 35, reach: 4.6, windup: 0.86, heavy: true, points: 2600, glyph: 'Φ',
+                     look: { tint: 0x241008, mask: 0xe68422, eye: 0xffe26a, weapon: 'bigclub', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'solar', drums: true, cape: true },
+                     robe: 0x3b170a, maskC: 0xe68422,
+                     moves: ['quake', 'fire', 'crush', 'slam'], boss: { aura: 0xff9828, enraged: ['cataclysm', 'quake', 'shockwave', 'fire'] } },
   // --- the sub-bosses that guard chests (encounters.ts) ---
   // a spear master: three lunges in a row, barely a breath between them, then a long pause (your turn)
   kensei:   { name: 'kensei de la lanza', scale: 1.14, hp: 9, speed: [4.6, 4.6], dmg: 13, reach: 2.5, windup: 0.42, heavy: false, points: 450, glyph: 'K',
@@ -247,7 +260,11 @@ export function spawnEnemy(camp: Camp, kind: EnemyKind, x: number, z: number) {
 /** bosses and guardians carry their own light */
 function glow(en: Enemy) {
   const def = KINDS[en.kind], e = def.boss ?? def.elite;
-  if (e) en.aura = addLight({ x: en.g.position.x, y: en.g.position.y + 2, z: en.g.position.z, color: e.aura, intensity: 2.6, distance: 9, decay: 1.4, flicker: 0.6, owner: en });
+  const colossal = !def.beast && !!def.look.colossal;
+  if (e) en.aura = addLight({
+    x: en.g.position.x, y: en.g.position.y + 2 * en.scale, z: en.g.position.z,
+    color: e.aura, intensity: colossal ? 4.8 : 2.6, distance: colossal ? 18 : 9, decay: 1.4, flicker: 0.6, owner: en
+  });
 }
 /** take an oni out of the world (killed, or its camp left behind) */
 export function despawn(en: Enemy) { clearEnemyAttack(en); scene.remove(en.g); removeLights(en); en.model?.dispose?.(); }

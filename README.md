@@ -40,7 +40,7 @@ npm run preview    # servir dist/ para probarla
 ## Controles
 
 WASD moverse · SHIFT correr · ESPACIO saltar · clic / K combo · L golpe fuerte · clic derecho / V esquivar · E o tajo abrir cofre · E hablar con Masa o un maestro · I abrir el inventario · Q cambiar de arma · P usar técnica cargada · O cambiar de técnica · N mapa del mundo ·
-C paleta · T vista sin ASCII · G letras del ronin (sobre su superficie o en rejilla) · F modo foto · R lluvia · M sonido · + / - densidad de caracteres.
+C paleta · T vista sin ASCII · G letras del ronin (sobre su superficie o en rejilla) · F modo foto · M sonido · + / - densidad de caracteres.
 
 Pulsa **I** o haz clic en **Inventario** para equipar armas, armaduras y técnicas que hayas conseguido en la partida. También puedes consultar las mejoras pasivas de los cofres. El combate se pausa mientras el inventario está abierto. Pulsa **I** o **Esc** para volver.
 

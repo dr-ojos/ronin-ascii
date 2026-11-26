@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { provoke, staggerEnemy } from './enemy-ai';
 import { enemies } from './enemies';
-import { burst } from './fx';
-import { CLS, tagMat } from './materials';
+import { burst, impactRing } from './fx';
 import { scene } from './renderer';
 import { panOf, sfx } from './sfx';
 import { player, state } from './state';
@@ -12,6 +11,7 @@ import type { Enemy } from './types';
 import { dmgMult } from './upgrades';
 import { specialDamage } from './special-damage';
 import { flare } from './flare';
+import { makeFireBladeMat } from './vfx-art';
 
 const RANGE = 14;
 const WINDUP = 0.32, FADE = 0.31;
@@ -27,17 +27,12 @@ const blade = (() => {
   return new THREE.ShapeGeometry(shape, 24).rotateX(Math.PI / 2);
 })();
 
-function fireMaterial(color: number) {
-  return tagMat(new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false,
-    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false }), CLS.fx);
-}
-
 interface Flame { target?: Enemy; point: THREE.Vector3; angle: number; visual: THREE.Group }
 interface Cast {
   group: THREE.Group;
   flames: Flame[];
-  outer: THREE.MeshBasicMaterial;
-  core: THREE.MeshBasicMaterial;
+  outer: THREE.ShaderMaterial;
+  core: THREE.ShaderMaterial;
   time: number;
   force: number;
 }
@@ -46,13 +41,13 @@ const burning = new Map<Enemy, { ticks: number; remaining: number; damage: numbe
 
 function drawFlames(cast: Cast) {
   const travel = THREE.MathUtils.smoothstep(cast.time, 0, WINDUP), fade = 1 - Math.max(0, cast.time - WINDUP) / FADE;
-  cast.outer.opacity = 0.78 * fade;
-  cast.core.opacity = 0.94 * fade;
+  cast.outer.uniforms.uOpacity.value = 0.88 * fade;
+  cast.core.uniforms.uOpacity.value = 0.96 * fade;
   for (const { point, angle, visual } of cast.flames) {
     const offset = 5.6 * (1 - travel);
     visual.position.set(point.x - Math.sin(angle) * offset, point.y + 1.95 * (1 - travel), point.z - Math.cos(angle) * offset);
     visual.rotation.set(-0.26 + travel * 0.2, angle, 0.6, 'YXZ');
-    visual.scale.setScalar(0.8 + travel * 0.45);
+    visual.scale.setScalar(0.85 + travel * 0.5);
   }
 }
 
@@ -64,7 +59,8 @@ export function startFourFlames() {
   const forwardX = Math.sin(player.face), forwardZ = Math.cos(player.face);
   const x = player.pos.x + forwardX * 5, z = player.pos.z + forwardZ * 5;
   const group = new THREE.Group(); group.name = TECHNIQUES.cuatroLlamas.name;
-  const outer = fireMaterial(FIRE), core = fireMaterial(GOLD);
+  const outer = makeFireBladeMat(0xfff4c2, FIRE, 0xc81a00, 0.88);
+  const core = makeFireBladeMat(0xffffff, GOLD, FIRE, 0.96);
   const cast: Cast = { group, flames: [], outer, core, time: 0, force: dmgMult() };
   for (let i = 0; i < 4; i++) {
     const target = nearest[nearest.length >= 3 ? i % nearest.length : 0]?.enemy;
@@ -96,8 +92,9 @@ function ignite(cast: Cast) {
   for (const flame of cast.flames) {
     const { target, point } = flame;
     if (target && enemies.includes(target) && target.hp > 0) strikes.set(target, (strikes.get(target) ?? 0) + 1);
-    burst(point, FIRE, 28, 5.5, 0.18);
-    burst(point, GOLD, 12, 4, 0.13);
+    burst(point, FIRE, 32, 6, 0.2);
+    burst(point, GOLD, 16, 4.5, 0.16);
+    impactRing(point, FIRE, 3.2);
   }
   for (const [enemy, hits] of strikes) {
     specialDamage(enemy, hits * HIT_DAMAGE * cast.force);

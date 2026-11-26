@@ -66,6 +66,7 @@ export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 
   | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'escorpion' | 'espectro'
   | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianRayo' | 'shuten' | 'enma' | 'senorBosque' | 'yukiOnna'
   | 'kagutsuchi' | 'daimyoHueso' | 'taikoDemonio'
+  | 'gashadokuro' | 'susanooTempestad' | 'amaterasuCeniza'
   | 'kensei' | 'tengu' | 'raijin';
 export type Affix = 'acorazado' | 'regenerador' | 'furioso' | 'gelido' | 'invocador' | 'errante' | 'espinoso';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
@@ -152,6 +153,8 @@ export interface Camp {
   technique?: TechniqueId;
   /** town liberation mission this occupation camp belongs to (liberation.ts) */
   town?: 'aldea' | 'pueblo';
+  /** random colossal boss world event id (world-events.ts) */
+  worldEvent?: string;
 }
 /** a chest in the world (loot.ts) */
 export interface Chest {

@@ -324,7 +324,7 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
   if (!hits) return;
   if (w.heal) player.hp = Math.min(player.maxHp, player.hp + w.heal * hits);
   if (w.charge) charge(w.charge * hits);
-  chargeRanged(0.1 * hits);
+  chargeRanged(0.035 * hits);
   state.hitStop = (heavy ? 0.09 : strike.power < 0.9 ? 0.035 : 0.06) + (crits ? 0.05 : 0);
   if (crits) { state.gain = '¡ CRÍTICO !'; state.gainT = 0.9; }
   state.shake = Math.max(state.shake, heavy ? 0.35 : strike.power < 0.9 ? 0.12 : 0.2);

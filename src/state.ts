@@ -37,12 +37,12 @@ export const state = {
   showcase: false,
   special: 0, jade: 0, technique: 'tajos' as TechniqueId, learnedTechniques: ['tajos', 'iai'] as TechniqueId[],
   special2: 0, technique2: 'iai' as TechniqueId, casting: 'tajos' as TechniqueId,
-  // ranged elemental orb attack (Ñ): 3 charges with its own special recharge, SHIFT+Ñ cycles the element
-  rangedElement: 'fuego' as OrbElement, rangedCharges: 3, rangedCharge: 0,
+  // ranged elemental orb attack (Ñ): bought at elemental temples, 3 charges with slow dedicated recharge
+  rangedElement: null as OrbElement | null, learnedOrbs: [] as OrbElement[], rangedCharges: 0, rangedCharge: 0,
   // feel
   shake: 0, hitStop: 0, time: 0,
   // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes
-  raining: false, rainAmt: 0, rainT: 140 + Math.random() * 160,
+  raining: false, rainAmt: 0, rainT: 120 + Math.random() * 240,
   // toggles (Modo T 3D is default; press T to toggle ASCII mode)
   asciiOn: false, colorMode: 0, photo: false, bigMap: false
 };

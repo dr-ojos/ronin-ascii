@@ -15,26 +15,50 @@ import { TECHNIQUES } from './techniques';
 import { dmgMult } from './upgrades';
 import { player, state } from './state';
 import type { Enemy } from './types';
+import { makeFresnelShellMat, makeVolumetricBeamMat } from './vfx-art';
 
 const COUNT = 6, RANGE = 15, SPEED = 30, RISE = 0.28, STAGGER = 0.9, DAMAGE = 5.5;
 const color = new THREE.Color(TECHNIQUES.feijian.color);
 
-// one sword: a white-jade blade, a guard and a soft green halo (built once, cloned per cast)
+// one sculpted spirit sword: faceted diamond-section jade blade, ornate crescent guard, pommel gem & volumetric aura
 const proto = new THREE.Group();
 {
   const glow = (c: THREE.ColorRepresentation, o: number) => tagMat(new THREE.MeshBasicMaterial({
-    color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.fx);
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.012, 0.72), glow(0xeafff4, 1));
-  blade.position.z = 0.26;
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.024, 0.12, 4), glow(0xeafff4, 1));
-  tip.rotation.x = Math.PI / 2; tip.position.z = 0.68;
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.02, 0.03), glow(color.clone().multiplyScalar(1.3), 1));
-  guard.position.z = -0.11;
-  const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.2), glow(color, 0.9));
+    color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }), CLS.fx);
+  const auraMat = makeFresnelShellMat(0xffffff, color, 0.52, 2.0);
+  const trailMat = makeVolumetricBeamMat(0xffffff, color, 0.55);
+
+  // Tapered diamond-section jian blade
+  const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.036, 0.82, 4), glow(0xf2fff8, 1));
+  blade.rotation.x = Math.PI / 2;
+  blade.scale.set(1.35, 1, 0.35);
+  blade.position.z = 0.3;
+
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.18, 4), glow(0xffffff, 1));
+  tip.rotation.x = Math.PI / 2;
+  tip.scale.set(1.15, 1, 0.45);
+  tip.position.z = 0.78;
+
+  // Ornate swept guard + hilt + pommel crystal
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.014, 6, 16, Math.PI), glow(color.clone().multiplyScalar(1.35), 1));
+  guard.rotation.x = Math.PI / 2;
+  guard.position.z = -0.09;
+  const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.22, 6), glow(color, 0.95));
+  hilt.rotation.x = Math.PI / 2;
   hilt.position.z = -0.22;
-  const halo = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 1.1), glow(color, 0.28));
-  halo.position.z = 0.2;
-  proto.add(blade, tip, guard, hilt, halo);
+  const pommel = new THREE.Mesh(new THREE.OctahedronGeometry(0.032, 0), glow(0xffffff, 1));
+  pommel.position.z = -0.35;
+
+  // Soft volumetric Fresnel aura sleeve + trailing energy wake
+  const aura = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.95, 5, 10), auraMat);
+  aura.rotation.x = Math.PI / 2;
+  aura.scale.set(1.2, 1, 0.65);
+  aura.position.z = 0.26;
+  const wake = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.01, 1.35, 8, 1, true), trailMat);
+  wake.rotation.x = Math.PI / 2;
+  wake.position.z = -0.82;
+
+  proto.add(blade, tip, guard, hilt, pommel, aura, wake);
 }
 
 interface Sword { g: THREE.Group; target?: Enemy; dir: THREE.Vector3; t: number; wait: number; life: number }

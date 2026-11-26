@@ -502,7 +502,7 @@ petals.frustumCulled = false; scene.add(petals);
 
 tagTree(scene, CLS.ground); // anything left untagged
 
-// rain: streaks that follow the player. Showers come and go on their own (R forces a change).
+// rain: streaks that follow the player. Brief showers come and go at random on their own.
 const RAIN = 2600;
 const rainPos = new Float32Array(RAIN * 6), rainSpd = new Float32Array(RAIN);
 for (let i = 0; i < RAIN; i++) {
@@ -512,17 +512,11 @@ for (let i = 0; i < RAIN; i++) {
 const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
 const rain = new THREE.LineSegments(rainGeo, tagMat(new THREE.LineBasicMaterial({ color: 0x9fb2d8, transparent: true, opacity: 0.55, depthWrite: false }), CLS.fx));
 rain.frustumCulled = false; scene.add(rain);
-const SHOWER = [35, 70], DRY = [210, 390], FADE = 10; // seconds: a shower, a dry spell, easing in / out
+const SHOWER = [15, 35], DRY = [180, 420], FADE = 6; // seconds: brief shower, random dry spell, easing in / out
 let rainSent = -1;
 function toggleWeather() { // the cycle's own change: eases in / out instead of snapping
   state.raining = !state.raining;
   state.rainT = state.raining ? rnd(SHOWER[0], SHOWER[1]) : rnd(DRY[0], DRY[1]);
-}
-/** R key: start or stop the rain right away, then the cycle carries on from there */
-export function toggleRain() {
-  state.raining = !state.raining; state.rainAmt = state.raining ? 1 : 0;
-  state.rainT = state.raining ? rnd(SHOWER[0], SHOWER[1]) : rnd(DRY[0], DRY[1]);
-  applyAtmosphere(state.rainAmt);
 }
 export function updateRain(dt: number) {
   state.rainT -= dt;

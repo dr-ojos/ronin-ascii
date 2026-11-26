@@ -6,6 +6,7 @@ import { updatePlayer } from './player';
 import { updateEnemies } from './enemy-ai';
 import { updateBattle } from './battle';
 import { updateEncounters } from './encounters';
+import { updateWorldEvents } from './world-events';
 import { updateLiberation } from './liberation';
 import { updateFx } from './fx';
 import { updateSpecial } from './special';
@@ -42,6 +43,7 @@ export function update(dt: number) {
   updateEnemies(dt);
   updateBattle(dt);
   updateEncounters(dt);
+  updateWorldEvents(dt);
   updateLiberation(dt);
   updateShop(dt);
   updateTemples(dt);

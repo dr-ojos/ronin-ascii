@@ -994,7 +994,13 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
       const st = mesh(new THREE.ConeGeometry(0.011, 0.03, 5), oniMats.stud, club, Math.cos(a) * rad, y, Math.sin(a) * rad);
       st.lookAt(Math.cos(a) * 2, y, Math.sin(a) * 2); st.rotateX(Math.PI / 2);
     }
-    if (look.weapon === 'bigclub') club.scale.set(1.7, 1.35, 1.7);
+    if (look.weapon === 'bigclub') club.scale.set(look.colossal ? 2.1 : 1.7, look.colossal ? 1.65 : 1.35, look.colossal ? 2.1 : 1.7);
+    if (look.colossal) {
+      for (const y of [0.32, 0.58, 0.82]) {
+        const glowBand = mesh(new THREE.TorusGeometry(0.055 + y * 0.025, 0.012, 6, 16), mEye, club, 0, y, 0);
+        glowBand.rotation.x = Math.PI / 2;
+      }
+    }
     club.rotation.x = Math.PI / 2; // points forward from the fist
     club.position.set(rHand.x - side * 0.05, rHand.y - 0.02, rHand.z - 0.12);
     attach('RightHand', club);
@@ -1012,7 +1018,12 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
     mesh(new THREE.CylinderGeometry(0.022, 0.025, 0.29, 8), oniMats.hair, sword).rotation.x = Math.PI / 2;
     mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.024, 8), MAT.gold, sword, 0, 0, 0.15).rotation.x = Math.PI / 2;
     mesh(bladeGeometry(), MAT.steel, sword);
-    if (big) sword.scale.set(1.6, 1.6, 1.7);
+    if (big) sword.scale.set(look.colossal ? 2.05 : 1.6, look.colossal ? 2.05 : 1.6, look.colossal ? 2.25 : 1.7);
+    if (look.colossal) {
+      // glowing cursed fuller & halo guard ring on the colossal odachi
+      mesh(new THREE.TorusGeometry(0.092, 0.012, 6, 20), mEye, sword, 0, 0, 0.15).rotation.x = Math.PI / 2;
+      mesh(new THREE.BoxGeometry(0.012, 0.016, 0.92), mEye, sword, 0, 0.012, 0.65);
+    }
     sword.position.copy(rHand);
     attach('RightHand', sword);
   } else if (look.weapon === 'staff') {
@@ -1024,6 +1035,11 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
     attach('RightHand', staff);
   } else if (look.weapon === 'scythe') {
     const scythe = oniScythe();
+    if (look.colossal) {
+      scythe.scale.set(1.5, 1.55, 1.5);
+      mesh(new THREE.TorusGeometry(0.11, 0.015, 6, 18), mEye, scythe, 0, 1.32, 0);
+      mesh(new THREE.OctahedronGeometry(0.085), mEye, scythe, 0, 1.52, 0);
+    }
     scythe.position.copy(rHand);
     scythe.rotation.x = Math.PI / 2;
     attach('RightHand', scythe);
