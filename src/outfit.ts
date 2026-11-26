@@ -18,14 +18,14 @@ import type { ClassId } from './classes';
 import { mangaFinish, roninRobe } from './manga-art';
 import {
   buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps,
-  roninHachiMaps, roninMonTex,
-  buildContouredTorso, ellipseArcTube, buildForearmVambrace, buildContouredGreave, buildTassetPanel,
+  roninHachiMaps,
+  buildForearmVambrace, buildContouredGreave,
   type NewClassId
 } from './class-armor';
 import {
   buildMasterLamellarPBR, makeArmorPlateMat,
   getForgedMetalPBR, getUrushiLacquerPBR, getBraidedSilkPBR,
-  addSamuraiTorsoRelief, buildMenpoMask, attachArmorSignature,
+  buildRealisticSamuraiCuirass, buildRealisticKusazuri, buildRealisticSode,
 } from './armor-art';
 import { makeFresnelShellMat, softGlowTex, anamorphicFlareTex } from './vfx-art';
 
@@ -152,106 +152,47 @@ function build(a: Armor) {
   if (isNeon) lace.userData.noGlyphs = true;
 
   const hips = P('Hips');
+  const underCollar = new THREE.MeshPhysicalMaterial({
+    color: 0xeae4d6, roughness: 0.88, metalness: 0, normalMap: silkPbr.normal, normalScale: new THREE.Vector2(0.4, 0.4), side: THREE.DoubleSide
+  });
+  const obiMat = new THREE.MeshPhysicalMaterial({
+    color: isNeon ? 0x101522 : new THREE.Color(l.lame).lerp(new THREE.Color(0x16161d), 0.65).getHex(),
+    roughness: 0.90, metalness: 0, normalMap: silkPbr.normal, normalScale: new THREE.Vector2(0.7, 0.7), side: THREE.DoubleSide
+  });
 
-  // Armor replaces the travel outfit at the same attachment points, with a layered 3D sculpted dō cuirass.
+  // ---- dō: historically proportioned multi-plate okegawa-dō showing the crossed kimono collar & nodowa
   if (rigChest) {
-    const g = new THREE.Group();
+    const g = buildRealisticSamuraiCuirass(lam(3.8, 1.1), lacquer, metal, lace, underCollar, a.tier);
     g.name = `cuirass-${a.id}`;
-    const torsoSpec = { chestW: 1.03, waistW: 0.96, depth: 0.98, pecSwell: 0.014, hemDip: 0.018, neckDip: 0.018 };
-    g.add(new THREE.Mesh(buildContouredTorso(torsoSpec), lam(4.6, 1.3)));
-    // Physical 3D articulated abdominal tiers, muna-ita breastplate, sendan/kyūbi chest guards & back agemaki bow
-    addSamuraiTorsoRelief(g, torsoSpec, lam(4.6, 0.45), lacquer, metal, lace, a.tier);
-    // Collar gorget rim, lower gilded rim, and waist cord
-    g.add(ellipseArcTube(0.118 * torsoSpec.chestW, 0.096 * torsoSpec.depth, 0.252, 0, TAU, 0.0068, metal, 36));
-    g.add(ellipseArcTube(0.182 * torsoSpec.waistW, 0.134 * torsoSpec.depth, -0.244, 0, TAU, 0.0085, lace, 36));
-    // embossed clan crest (mon) medallion on the chest
-    const monR = a.tier >= 2.2 ? 0.050 : 0.042;
-    const monMat = new THREE.MeshPhysicalMaterial({
-      map: roninMonTex(l, a.id), roughness: 0.24, metalness: 0.85, clearcoat: 0.65, clearcoatRoughness: 0.14,
-      emissive: l.metal, emissiveIntensity: Math.max(0.10, glow * 0.7)
-    });
-    const mon = new THREE.Group(); mon.position.set(0, 0.068, 0.175 * torsoSpec.depth); mon.rotation.x = -0.07; g.add(mon);
-    const monDisc = new THREE.Mesh(new THREE.CylinderGeometry(monR, monR * 1.04, 0.012, 28), monMat);
-    monDisc.rotation.x = Math.PI / 2; mon.add(monDisc);
-    const monBezel = new THREE.Mesh(new THREE.TorusGeometry(monR, 0.006, 7, 28), metal);
-    monBezel.position.z = 0.005; mon.add(monBezel);
-    // watagami: contoured shoulder straps over the trapezius with gilded studs
-    for (const s of [-1, 1]) {
-      const strapCurve = new THREE.CatmullRomCurve3([
-        new V(0.104 * s, 0.165, 0.138 * torsoSpec.depth),
-        new V(0.116 * s, 0.236, 0.055),
-        new V(0.116 * s, 0.244, -0.045),
-        new V(0.104 * s, 0.172, -0.132 * torsoSpec.depth),
-      ]);
-      g.add(new THREE.Mesh(new THREE.TubeGeometry(strapCurve, 18, 0.014, 6), lacquer));
-      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.0115, 10, 8), metal);
-      stud.position.set(0.104 * s, 0.178, 0.146 * torsoSpec.depth); g.add(stud);
-    }
     if (isNeon) {
-      // TRON glowing front rails & Identity Disc on the Ronin's back
       for (const s of [-1, 1]) {
         const rail = new THREE.CatmullRomCurve3([
-          new V(0.072 * s, 0.228, 0.114 * torsoSpec.depth), new V(0.095 * s, 0.115, 0.168 * torsoSpec.depth),
-          new V(0.076 * s, -0.045, 0.156 * torsoSpec.depth), new V(0.068 * s, -0.245, 0.132 * torsoSpec.depth)
+          new V(0.068 * s, 0.145, 0.138), new V(0.082 * s, 0.04, 0.150), new V(0.064 * s, -0.10, 0.136), new V(0.058 * s, -0.23, 0.124)
         ]);
-        g.add(new THREE.Mesh(new THREE.TubeGeometry(rail, 22, 0.0042, 5), metal));
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(rail, 20, 0.0038, 5), metal));
       }
-      const discGrp = new THREE.Group(); discGrp.position.set(0, 0.092, -0.174 * torsoSpec.depth); discGrp.rotation.x = 0.08;
-      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.078, 0.012, 32), lacquer); core.rotation.x = Math.PI / 2; discGrp.add(core);
-      const outerR = new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.007, 8, 36), metal); outerR.position.z = -0.004; discGrp.add(outerR);
-      const innerR = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.0045, 6, 32), lace); innerR.position.z = -0.006; discGrp.add(innerR);
+      const discGrp = new THREE.Group(); discGrp.position.set(0, 0.055, -0.155); discGrp.rotation.x = 0.06;
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.010, 32), lacquer); core.rotation.x = Math.PI / 2; discGrp.add(core);
+      const outerR = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.006, 8, 36), metal); outerR.position.z = -0.004; discGrp.add(outerR);
+      const innerR = new THREE.Mesh(new THREE.TorusGeometry(0.040, 0.004, 6, 32), lace); innerR.position.z = -0.006; discGrp.add(innerR);
       g.add(discGrp);
     }
-    // Bespoke 3D legendary/relic silhouette ornaments (Tengu feather wings, Raijin drums, frost shards, Oni horns, etc.)
-    attachArmorSignature(g, a, torsoSpec.depth, lacquer, metal, lace);
     overlay(a.id, rigChest, g);
   }
-  // ---- kusazuri: sculpted overlapping tasset panels with gilded hems & woven obi
+  // ---- kusazuri: wrapped fabric obi + 6 separate flat-faced 5-lame rectangular tasset panels hanging straight down
   if (rigWaist) {
-    const g = new THREE.Group(), R = 0.204, hemR = R * 1.18, h = 0.20 + 0.028 * l.sode, n = 7, L = TAU / n * 0.89;
+    const g = buildRealisticKusazuri(lam(1.4, 0.55), lacquer, metal, lace, obiMat, l.sode);
     g.name = `skirt-${a.id}`;
-    const sk = new THREE.Group(); sk.scale.z = 0.80; sk.position.y = 0.028 - h / 2; g.add(sk);
-    const obiBand = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 1.01, 0.062, 36, 1, true), lace);
-    obiBand.scale.z = 0.77; obiBand.position.y = 0.036; g.add(obiBand);
-    for (const dy of [0.064, 0.008]) g.add(ellipseArcTube(R * 1.01, R * 0.77 * 1.01, dy, 0, TAU, 0.0045, metal, 36));
-    for (let i = 0; i < n; i++) {
-      const th = i * TAU / n - L / 2;
-      sk.add(buildTassetPanel(R * 1.02, hemR, h, th, L, 0.014, lam(1.6, 1.05)));
-      sk.add(ellipseArcTube(hemR + 0.002, hemR + 0.002, -h / 2, th, L, 0.0042, metal, 12));
-      sk.add(ellipseArcTube(R * 1.03, R * 1.03, h / 2 - 0.01, th + 0.05, L - 0.1, 0.0055, lace, 10));
-    }
     overlay(a.id, rigWaist, g);
   }
-  // ---- sode: multi-tiered sculpted shoulder guards with kanmuri-ita cap & gilded piping
+  // ---- sode: compact 5-lame flat-curved rectangular shoulder guards hugging the deltoid cleanly
   for (const side of ['Left', 'Right']) {
     const A = P(side + 'Arm'), F = P(side + 'ForeArm'), d = F.clone().sub(A).normalize();
     const out = new V(Math.sign(A.x - hips.x) || 1, 0.25, 0);
     const Z = out.addScaledVector(d, -out.dot(d)).normalize(), Y = d.clone().negate(), X = new V().crossVectors(Y, Z);
-    const g = new THREE.Group(); g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+    const g = buildRealisticSode(l.sode, lam(1.3, 0.45), lacquer, metal, lace);
+    g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
     g.name = `shoulder-${a.id}-${side}`;
-    const Rc = 0.124, w = 0.150 + 0.028 * l.sode, th = w / Rc, totalH = 0.135 + 0.046 * l.sode, off = 0.065;
-    const tiers = a.tier >= 2.0 ? 3 : 2;
-    const capH = totalH * 0.34;
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(Rc * 0.94, Rc * 1.01, capH, 14, 1, true, -th / 2, th), lacquer);
-    cap.position.set(0, 0.050 - capH * 0.5, off - Rc); g.add(cap);
-    const bar = arcTube(Rc * 0.96, 0.050, -th / 2, th, 0.0075, lacquer); bar.position.z = off - Rc; g.add(bar);
-    const bar2 = arcTube(Rc * 0.98, 0.056, -th / 2, th, 0.0045, metal); bar2.position.z = off - Rc; g.add(bar2);
-    if (a.tier >= 1.5) {
-      const boss = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 8), metal);
-      boss.scale.set(1.15, 0.85, 0.52); boss.position.set(0, 0.032, off + 0.002); g.add(boss);
-      const bRing = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0032, 6, 18), lace);
-      bRing.position.set(0, 0.032, off + 0.004); g.add(bRing);
-    }
-    const lameH = (totalH * 0.72) / tiers;
-    for (let t = 0; t < tiers; t++) {
-      const f0 = t / tiers, rTop = Rc * (1.0 + f0 * 0.04), rBot = rTop + 0.007;
-      const tSpan = th * (0.98 - f0 * 0.05);
-      const yC = 0.050 - capH * 0.82 - t * (lameH * 0.82) - lameH * 0.45;
-      const panel = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, lameH, 12, 1, true, -tSpan / 2, tSpan), lam(1.5, 0.52));
-      panel.position.set(0, yC, off - Rc); g.add(panel);
-      const hem = arcTube(rBot + 0.002, yC - lameH * 0.5, -tSpan / 2, tSpan, t === tiers - 1 ? 0.0048 : 0.0032, metal);
-      hem.position.z = off - Rc; g.add(hem);
-    }
     g.position.copy(A);
     hang(a.id, side + 'Arm', g);
   }
@@ -306,20 +247,27 @@ function build(a: Armor) {
         clearcoat: 0.92, clearcoatRoughness: 0.12, roughness: 0.28, metalness: 0.48, side: THREE.DoubleSide
       }));
       g.add(bowl);
-      // Sculpted Menpō armored lower-face mask on high-tier samurai helmets
-      if (a.tier >= 2.0) g.add(buildMenpoMask(lacquer, metal, lace, r));
+      // Kabuto-no-o: braided silk chin cords framing the scanned face cleanly (like Images 3 & 4)
+      for (const s of [-1, 1]) {
+        const chinCurve = new THREE.CatmullRomCurve3([
+          new V(s * r * 0.82, -r * 0.08, r * 0.22),
+          new V(s * r * 0.56, -r * 0.72, r * 0.46),
+          new V(0, -r * 0.98, r * 0.52),
+        ]);
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(chinCurve, 12, r * 0.045, 6), lace));
+      }
       const tehen = new THREE.Mesh(new THREE.TorusGeometry(r * 0.11, r * 0.035, 6, 20), metal); tehen.rotation.x = Math.PI / 2; tehen.position.y = r * 0.94; g.add(tehen);
       const band = new THREE.Mesh(new THREE.TorusGeometry(r * 1.0, r * 0.04, 6, 40), metal); band.rotation.x = Math.PI / 2; g.add(band);
-      // mabizashi: the visor over the eyes, only at the front
-      const visor = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.0, r * 1.38, r * 0.2, 20, 1, true, -1.05, 2.1), lacquer); visor.position.y = -r * 0.1; g.add(visor);
-      g.add(arcTube(r * 1.38, -r * 0.2, -1.05, 2.1, r * 0.03, metal));
-      // shikoro: four flaring lames round the back and sides, the face left open
-      const L = TAU * 0.68;
+      // mabizashi: compact visor over the eyes
+      const visor = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.0, r * 1.24, r * 0.18, 20, 1, true, -1.02, 2.04), lacquer); visor.position.y = -r * 0.09; g.add(visor);
+      g.add(arcTube(r * 1.24, -r * 0.18, -1.02, 2.04, r * 0.028, metal));
+      // shikoro: 4 compact stepped neck lames hugging the nape & jaw cleanly (not an oversized bell)
+      const L = TAU * 0.66;
       for (let i = 0; i < 4; i++) {
-        const rt = r * (1.0 + i * 0.13), rb = rt + r * 0.16, lh = r * 0.27, y = -r * 0.02 - i * r * 0.22 - lh / 2;
+        const rt = r * (1.0 + i * 0.08), rb = rt + r * 0.10, lh = r * 0.23, y = -r * 0.02 - i * r * 0.19 - lh / 2;
         const lame = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, lh, 28, 1, true, Math.PI - L / 2, L), lam(7, 0.25));
         lame.position.y = y; g.add(lame);
-        if (i === 3) g.add(arcTube(rb, y - lh / 2, Math.PI - L / 2, L, r * 0.025, metal));
+        if (i === 3) g.add(arcTube(rb, y - lh / 2, Math.PI - L / 2, L, r * 0.024, metal));
       }
       // fukigaeshi: the top lame turned back at both front ends, each with a small crest
       for (const s of [-1, 1]) {
@@ -818,9 +766,9 @@ export function dressUp(cur = armor()) {
   if (dressed) roninRobe.uRoninLinen.value.set(habit ?? cur.robe?.linen ?? cur.look!.lame);
   for (const o of baseLayers) {
     const layer = o.userData.equipmentLayer;
-    // the long cloth robe stays under every set (a long hakama under the armour, the monk's habit);
-    // the hanging kimono sleeves only show without plates on the arms
-    o.visible = layer === 'robe' ? true : layer === 'sleeves' ? !dressed || monk
+    // The long flowing hakama robe shows for kimono & monk habits; plated armors reveal the tailored
+    // dark hakama trousers tucked cleanly into the shin greaves (suneate) with zero cloth clipping.
+    o.visible = layer === 'robe' ? (!dressed || monk) : layer === 'sleeves' ? (!dressed || monk)
       : layer === 'scarf' || layer === 'wrapping' ? !monk && !own : !dressed;
   }
   if (dressed && robeMat) {

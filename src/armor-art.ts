@@ -585,319 +585,342 @@ export function buildThickArcBand(
 }
 
 /**
- * Add physical 3D articulated abdominal armor tiers, raised pectoral breastplate rim,
- * shoulder-chest guard plates (sendan-no-ita & kyūbi-no-ita), and ceremonial back agemaki bow
- * onto a cuirass group so the armor reads as museum-grade layered 3D craftsmanship from both front & back.
+ * Build a historically proportioned Japanese Okegawa-dō / Ni-mai-dō cuirass:
+ * - Slim, athletic fit that hugs the ribcage and stops below the collarbone so the crossed white
+ *   shitagi under-collar and laced nodowa throat guard stay clearly visible (matching real samurai armor).
+ * - 5 crisp horizontal stepped lacquered plates (lames) with beveled gilded edges and vertical braided cords.
+ * - Clean watagami shoulder straps with metal rings & subtle back agemaki silk bow.
  */
-export function addSamuraiTorsoRelief(
-  g: THREE.Group,
-  spec: { chestW: number; waistW: number; depth: number },
+export function buildRealisticSamuraiCuirass(
   armorMat: THREE.Material,
   lacquerMat: THREE.Material,
   metalMat: THREE.Material,
   laceMat: THREE.Material,
+  underCollarMat: THREE.Material,
   tier: number
-) {
-  // 1. Physical 3D stepped abdominal armor bands (tateage / kusazuri upper lames) that catch real rim light
-  const tiers: [number, number, number, number][] = [
-    [-0.075, -0.145, 0.205, 0.212],
-    [-0.140, -0.205, 0.192, 0.200],
-    [-0.200, -0.264, 0.184, 0.194],
+): THREE.Group {
+  const g = new THREE.Group();
+
+  // 1. Crossed white shitagi kimono collar + laced nodowa throat guard peeking neatly above the breastplate
+  const underR = new THREE.CatmullRomCurve3([
+    new V(-0.072, 0.242, 0.015), new V(-0.068, 0.195, 0.095), new V(-0.015, 0.148, 0.128), new V(0.042, 0.118, 0.132)
+  ]);
+  const underL = new THREE.CatmullRomCurve3([
+    new V(0.072, 0.242, 0.015), new V(0.068, 0.195, 0.095), new V(0.012, 0.145, 0.132), new V(-0.042, 0.115, 0.134)
+  ]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(underR, 14, 0.012, 6), underCollarMat));
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(underL, 14, 0.013, 6), underCollarMat));
+
+  // Compact laced nodowa (throat guard) resting cleanly below the chin
+  const nodowa = buildThickArcBand(0.088, 0.082, 0.112, 0.102, 0.228, 0.184, -0.95, 1.9, lacquerMat, 16);
+  g.add(nodowa);
+  const nodowaRim = new THREE.CatmullRomCurve3([
+    new V(-0.092, 0.184, 0.060), new V(0, 0.180, 0.105), new V(0.092, 0.184, 0.060)
+  ]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(nodowaRim, 16, 0.0038, 5), metalMat));
+
+  // 2. Slim tailored inner torso shell (stops at y = 0.155 in front, rises slightly higher at back nape)
+  const rings: [number, number, number][] = [
+    // [y, rx, rz] — tight athletic proportions matching Soldier.glb without bloating
+    [-0.238, 0.156, 0.116],
+    [-0.180, 0.158, 0.118],
+    [-0.115, 0.168, 0.125],
+    [-0.045, 0.180, 0.134],
+    [0.030,  0.192, 0.142],
+    [0.100,  0.196, 0.142],
+    [0.152,  0.186, 0.132],
   ];
-  for (const [yt, yb, r0, r1] of tiers) {
-    const band = buildThickArcBand(
-      r0 * spec.waistW, r0 * 0.75 * spec.depth,
-      r1 * spec.waistW, r1 * 0.75 * spec.depth,
-      yt, yb, -Math.PI, TAU, armorMat, 36
+  const segs = 40, stride = segs + 1;
+  const pos = new Float32Array(rings.length * stride * 3);
+  const uv = new Float32Array(rings.length * stride * 2);
+  for (let i = 0; i < rings.length; i++) {
+    const [baseY, rx, rz] = rings[i];
+    const v = i / (rings.length - 1);
+    for (let j = 0; j <= segs; j++) {
+      const u = j / segs, th = u * TAU;
+      const sx = Math.sin(th), cz = Math.cos(th);
+      // subtle flat-fronted samurai chest boxiness (authentic okegawa-dō)
+      const sq = 1 + 0.055 * (Math.abs(sx) * Math.abs(cz) * 2.0);
+      const x = sx * rx * sq;
+      const z = cz * rz * sq;
+      // higher backplate (oshitsuke-no-ita), slightly lower straight front chest edge (muna-ita)
+      const y = baseY + (i === rings.length - 1 && cz < 0 ? 0.042 * (-cz) : 0);
+      const idx = i * stride + j;
+      pos[idx * 3] = x; pos[idx * 3 + 1] = y; pos[idx * 3 + 2] = z;
+      uv[idx * 2] = u; uv[idx * 2 + 1] = v;
+    }
+  }
+  const indices: number[] = [];
+  for (let i = 0; i < rings.length - 1; i++) {
+    for (let j = 0; j < segs; j++) {
+      const a = i * stride + j, b = a + stride, c = b + 1, d = a + 1;
+      indices.push(a, d, b, b, d, c);
+    }
+  }
+  const coreGeo = new THREE.BufferGeometry();
+  coreGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  coreGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  coreGeo.setIndex(indices);
+  coreGeo.computeVertexNormals();
+  g.add(new THREE.Mesh(coreGeo, armorMat));
+
+  // 3. Five crisp horizontal stepped lacquered plates (okegawa-dō lames) with thin gilded lip & horizontal silk cords
+  const lameBands: [number, number, number, number][] = [
+    [0.154,  0.095, 0.194, 0.199],  // muna-ita (upper chest plate)
+    [0.092,  0.025, 0.197, 0.196],
+    [0.022, -0.045, 0.190, 0.184],
+    [-0.048, -0.115, 0.178, 0.172],
+    [-0.118, -0.185, 0.167, 0.162],
+    [-0.188, -0.242, 0.160, 0.162],
+  ];
+  for (let i = 0; i < lameBands.length; i++) {
+    const [yt, yb, r0, r1] = lameBands[i];
+    const plate = buildThickArcBand(
+      r0 * 1.02, r0 * 0.75,
+      r1 * 1.03, r1 * 0.76,
+      yt, yb, -Math.PI, TAU,
+      i === 0 ? lacquerMat : armorMat, 36
     );
-    g.add(band);
-    // Crisp gilded lower lip on each 3D stepped tier
+    g.add(plate);
+    // Crisp thin metallic rim along each plate lip (like Images 3 & 4)
+    const rimPts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 36; k++) {
+      const th = (k / 36) * TAU;
+      rimPts.push(new V(Math.sin(th) * r1 * 1.034, yb, Math.cos(th) * r1 * 0.764));
+    }
+    g.add(new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rimPts, true), 36, i === 0 || i === lameBands.length - 1 ? 0.0042 : 0.0024, 5, true),
+      i % 2 === 1 && i < 4 ? laceMat : metalMat
+    ));
+  }
+
+  // 4. Vertical front braided lacing columns (odoshi cords) & top muna-ita brass edge trim (Image 4)
+  const topRimPts: THREE.Vector3[] = [];
+  for (let k = 0; k <= 20; k++) {
+    const th = -1.15 + (k / 20) * 2.3;
+    topRimPts.push(new V(Math.sin(th) * 0.196, 0.154, Math.cos(th) * 0.145));
+  }
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(topRimPts), 22, 0.0046, 6), metalMat));
+
+  for (const sx of [-0.078, 0.078]) {
+    const cordCurve = new THREE.CatmullRomCurve3([
+      new V(sx, 0.148, 0.138),
+      new V(sx * 1.04, 0.04, 0.148),
+      new V(sx * 0.96, -0.09, 0.136),
+      new V(sx * 0.90, -0.23, 0.122),
+    ]);
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(cordCurve, 16, 0.0052, 5), laceMat));
+  }
+
+  // 5. Watagami shoulder straps (clean, slim lacquered straps with brass rings — matching Image 4)
+  for (const s of [-1, 1]) {
+    const strapCurve = new THREE.CatmullRomCurve3([
+      new V(0.088 * s, 0.145, 0.128),
+      new V(0.104 * s, 0.228, 0.052),
+      new V(0.104 * s, 0.236, -0.048),
+      new V(0.088 * s, 0.175, -0.128),
+    ]);
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(strapCurve, 18, 0.011, 6), lacquerMat));
+    // Front brass ring clasp (kohaze / kan)
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0032, 6, 16), metalMat);
+    ring.position.set(0.088 * s, 0.138, 0.136);
+    g.add(ring);
+  }
+
+  // 6. Clean ceremonial Agemaki silk bow on the upper backplate (tasteful, historically proportioned)
+  if (tier >= 1.5) {
+    const bow = new THREE.Group();
+    bow.position.set(0, 0.105, -0.146);
+    const kan = new THREE.Mesh(new THREE.TorusGeometry(0.015, 0.0038, 6, 16), metalMat);
+    bow.add(kan);
+    for (const s of [-1, 1]) {
+      const loop = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0065, 6, 16), laceMat);
+      loop.position.set(s * 0.028, 0.004, -0.005);
+      loop.scale.set(1.2, 0.7, 0.6);
+      bow.add(loop);
+      const tail = new THREE.CatmullRomCurve3([
+        new V(s * 0.012, -0.008, -0.006),
+        new V(s * 0.026, -0.085, -0.012),
+        new V(s * 0.032, -0.165, -0.006),
+      ]);
+      bow.add(new THREE.Mesh(new THREE.TubeGeometry(tail, 10, 0.0045, 5), laceMat));
+      const tassel = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.040, 8, 1, true), laceMat);
+      tassel.position.set(s * 0.032, -0.188, -0.006);
+      bow.add(tassel);
+    }
+    g.add(bow);
+  }
+
+  return g;
+}
+
+/**
+ * Historically accurate samurai Kusazuri (6 separate flat-faced articulated rectangular tasset panels
+ * hanging straight down from a wrapped fabric Obi sash with a front knot — matching Images 3 & 4).
+ */
+export function buildRealisticKusazuri(
+  armorMat: THREE.Material,
+  lacquerMat: THREE.Material,
+  metalMat: THREE.Material,
+  laceMat: THREE.Material,
+  obiMat: THREE.Material,
+  sodeScale: number
+): THREE.Group {
+  const g = new THREE.Group();
+  const rx = 0.172, rz = 0.132;
+
+  // 1. Thick wrapped fabric Obi sash around the waist + crisp front knot & hanging ends (Images 3 & 4)
+  for (const [y, rScale, tube] of [[0.048, 1.02, 0.019], [0.024, 1.04, 0.020]] as const) {
     const pts: THREE.Vector3[] = [];
     for (let i = 0; i <= 36; i++) {
       const th = (i / 36) * TAU;
-      pts.push(new V(Math.sin(th) * r1 * spec.waistW * 1.005, yb, Math.cos(th) * r1 * 0.75 * spec.depth * 1.005));
+      pts.push(new V(Math.sin(th) * rx * rScale, y, Math.cos(th) * rz * rScale));
     }
-    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 36, 0.0032, 5, true), metalMat));
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 36, tube, 8, true), obiMat));
+  }
+  // Front obi knot + two neat hanging sash tails
+  const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.022, 0.009, 20, 6), obiMat);
+  knot.position.set(0, 0.032, rz * 1.12);
+  knot.scale.set(1.15, 0.85, 0.7);
+  g.add(knot);
+  for (const s of [-1, 1]) {
+    const endCurve = new THREE.CatmullRomCurve3([
+      new V(s * 0.015, 0.026, rz * 1.12),
+      new V(s * 0.028, -0.045, rz * 1.16),
+      new V(s * 0.032, -0.115, rz * 1.14),
+    ]);
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(endCurve, 10, 0.0085, 6), obiMat));
   }
 
-  // 2. Sculpted upper chest plate (muna-ita) & armored throat guard (nodowa)
-  const muna = buildThickArcBand(
-    0.175 * spec.chestW, 0.132 * spec.depth,
-    0.232 * spec.chestW, 0.168 * spec.depth,
-    0.220, 0.128, -1.05, 2.1, lacquerMat, 22
-  );
-  g.add(muna);
-  // Gilded V-contour chest trim framing the pectoral plate
-  const chestTrim = new THREE.CatmullRomCurve3([
-    new V(-0.185 * spec.chestW, 0.155, 0.092 * spec.depth),
-    new V(-0.110 * spec.chestW, 0.125, 0.158 * spec.depth),
-    new V(0, 0.112, 0.174 * spec.depth),
-    new V(0.110 * spec.chestW, 0.125, 0.158 * spec.depth),
-    new V(0.185 * spec.chestW, 0.155, 0.092 * spec.depth),
-  ]);
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(chestTrim, 24, 0.0048, 6, false), metalMat));
+  // 2. Six separate, flat-faced, multi-lame rectangular tasset panels hanging straight down (NOT a flared cone!)
+  const panelConfigs: { ang: number; width: number; height: number; lames: number }[] = [
+    { ang: 0,                  width: 0.162, height: 0.275, lames: 5 }, // center front
+    { ang: 0.96,               width: 0.152, height: 0.265, lames: 5 }, // front-left
+    { ang: -0.96,              width: 0.152, height: 0.265, lames: 5 }, // front-right
+    { ang: Math.PI,            width: 0.168, height: 0.270, lames: 5 }, // center back
+    { ang: Math.PI - 0.96,     width: 0.150, height: 0.260, lames: 5 }, // back-left
+    { ang: -(Math.PI - 0.96),  width: 0.150, height: 0.260, lames: 5 }, // back-right
+  ];
+  const hScale = 0.94 + Math.min(0.18, sodeScale * 0.08);
 
-  // 3. Sendan-no-ita (right) & Kyūbi-no-ita (left) — iconic chest-shoulder guard plates
-  if (tier >= 1.5) {
-    for (const s of [-1, 1]) {
-      const guard = new THREE.Group();
-      guard.position.set(0.112 * s, 0.142, 0.154 * spec.depth);
-      guard.rotation.set(-0.16, s * 0.34, -s * 0.08);
-      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.095, 0.012), s > 0 ? lacquerMat : armorMat);
-      guard.add(plate);
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.101, 0.007), metalMat);
-      frame.position.z = -0.003;
-      guard.add(frame);
-      const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 8, 6), metalMat);
-      rivet.position.set(0, 0.028, 0.008);
-      guard.add(rivet);
-      g.add(guard);
+  for (const cfg of panelConfigs) {
+    const pGrp = new THREE.Group();
+    const px = Math.sin(cfg.ang) * (rx + 0.018);
+    const pz = Math.cos(cfg.ang) * (rz + 0.018);
+    pGrp.position.set(px, 0.006, pz);
+    pGrp.rotation.y = cfg.ang;
+    // Slight natural outward hang (only ~6 degrees, never a flared tutu!)
+    pGrp.rotation.x = -0.10;
+
+    const totalH = cfg.height * hScale;
+    const lameH = totalH / cfg.lames;
+
+    // Silk suspension straps attaching the tasset to the obi
+    for (const sx of [-cfg.width * 0.30, cfg.width * 0.30]) {
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.036, 0.008), laceMat);
+      strap.position.set(sx, 0.008, 0.002);
+      pGrp.add(strap);
     }
+
+    // 5 physically stepped overlapping rectangular lacquered lames (thick 3D plates!)
+    for (let li = 0; li < cfg.lames; li++) {
+      const wCur = cfg.width * (0.92 + (li / (cfg.lames - 1)) * 0.14);
+      const yCur = -li * (lameH * 0.88) - lameH * 0.5;
+      const zStep = li * 0.0045; // each lower lame steps subtly outward like real overlapping armor
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(wCur, lameH * 0.94, 0.011),
+        li === cfg.lames - 1 ? lacquerMat : armorMat
+      );
+      plate.position.set(0, yCur, zStep);
+      pGrp.add(plate);
+      // Crisp metallic bottom bevel trim on every lame
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(wCur + 0.004, 0.006, 0.013), metalMat);
+      trim.position.set(0, yCur - lameH * 0.46, zStep + 0.001);
+      pGrp.add(trim);
+      // Vertical silk lacing pairs down each plate
+      for (const lx of [-wCur * 0.32, 0, wCur * 0.32]) {
+        const cord = new THREE.Mesh(new THREE.BoxGeometry(0.010, lameH * 0.90, 0.013), laceMat);
+        cord.position.set(lx, yCur, zStep + 0.001);
+        pGrp.add(cord);
+      }
+    }
+    g.add(pGrp);
   }
 
-  // 4. Sculpted backplate spine ridge + ceremonial Agemaki silk bow & hanging tassels (crucial for 3rd-person camera!)
-  const spinePlate = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.30, 0.018), lacquerMat);
-  spinePlate.position.set(0, 0.035, -0.156 * spec.depth);
-  g.add(spinePlate);
-  const spineRim = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.31, 0.010), metalMat);
-  spineRim.position.set(0, 0.035, -0.152 * spec.depth);
-  g.add(spineRim);
-
-  if (tier >= 1.2) {
-    const bowGrp = new THREE.Group();
-    bowGrp.position.set(0, 0.125, -0.172 * spec.depth);
-    // Gilded mounting ring (agemaki-no-kan)
-    const kan = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.005, 7, 18), metalMat);
-    bowGrp.add(kan);
-    // Double ceremonial silk bow loops
-    for (const s of [-1, 1]) {
-      const loop = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.0085, 7, 18), laceMat);
-      loop.position.set(s * 0.036, 0.005, -0.006);
-      loop.scale.set(1.25, 0.72, 0.65);
-      loop.rotation.z = -s * 0.25;
-      bowGrp.add(loop);
-      // Hanging braided silk cord + golden cap + tassel
-      const cordCurve = new THREE.CatmullRomCurve3([
-        new V(s * 0.016, -0.01, -0.008),
-        new V(s * 0.038, -0.095, -0.018),
-        new V(s * 0.048, -0.195, -0.010),
-      ]);
-      bowGrp.add(new THREE.Mesh(new THREE.TubeGeometry(cordCurve, 12, 0.006, 5), laceMat));
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.011, 0.018, 8), metalMat);
-      cap.position.set(s * 0.048, -0.195, -0.010);
-      bowGrp.add(cap);
-      const tassel = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.056, 8, 1, true), laceMat);
-      tassel.position.set(s * 0.048, -0.228, -0.010);
-      bowGrp.add(tassel);
-    }
-    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.015, 10, 8), laceMat);
-    knot.position.z = -0.008;
-    bowGrp.add(knot);
-    g.add(bowGrp);
-  }
+  return g;
 }
 
 /**
- * Sculpted fierce samurai Menpō (armored lower-face mask) hung below the kabuto brow on tier >= 2.0.
+ * Historically proportioned Samurai Sode (shoulder guard):
+ * Compact, flat-curved shield of 5 stepped rectangular lacquered lames that hugs the deltoid cleanly
+ * (matching Images 3 & 4 — never floating off the arm).
  */
-export function buildMenpoMask(lacquerMat: THREE.Material, metalMat: THREE.Material, laceMat: THREE.Material, r: number): THREE.Group {
-  const m = new THREE.Group();
-  // Contoured cheek & jaw armor shell
-  const jaw = new THREE.Mesh(
-    new THREE.CylinderGeometry(r * 0.88, r * 0.72, r * 0.64, 16, 1, true, -1.05, 2.1),
-    lacquerMat
-  );
-  jaw.position.set(0, -r * 0.62, r * 0.14);
-  m.add(jaw);
-  // Gilded nose-bridge & fierce cheekbone ridges
-  const ridge = new THREE.Mesh(new THREE.TorusGeometry(r * 0.85, r * 0.028, 6, 20, 1.9), metalMat);
-  ridge.rotation.x = Math.PI / 2;
-  ridge.rotation.z = -Math.PI / 2 - 0.95;
-  ridge.position.set(0, -r * 0.34, r * 0.16);
-  m.add(ridge);
-  // Fierce upturned gilded grin / fang bar
-  const grin = new THREE.Mesh(new THREE.TorusGeometry(r * 0.30, r * 0.022, 6, 14, Math.PI * 0.85), metalMat);
-  grin.position.set(0, -r * 0.64, r * 0.88);
-  grin.rotation.z = Math.PI + 0.24;
-  m.add(grin);
-  // 2-tier yodare-kake (laced throat bib below the chin)
-  for (let i = 0; i < 2; i++) {
-    const bib = new THREE.Mesh(
-      new THREE.CylinderGeometry(r * (0.76 + i * 0.10), r * (0.86 + i * 0.10), r * 0.22, 14, 1, true, -0.85, 1.7),
-      i === 0 ? lacquerMat : laceMat
-    );
-    bib.position.set(0, -r * (0.98 + i * 0.18), r * (0.16 + i * 0.02));
-    m.add(bib);
-  }
-  return m;
-}
-
-// ------------------------------------------------------------ bespoke legendary armor 3D signatures (back + shoulders)
-
-/**
- * Attach unmistakable bespoke 3D architectural ornaments for boss-drop & legendary armors
- * onto the chest/backplate so every legendary set has an iconic silhouette across ALL 4 classes.
- */
-export function attachArmorSignature(
-  chestGroup: THREE.Group,
-  a: Armor,
-  depthScale: number,
+export function buildRealisticSode(
+  sodeScale: number,
+  armorMat: THREE.Material,
   lacquerMat: THREE.Material,
   metalMat: THREE.Material,
   laceMat: THREE.Material
-) {
-  const id = a.id;
-  const backZ = -0.168 * depthScale;
+): THREE.Group {
+  const g = new THREE.Group();
+  const lames = 5;
+  const w = 0.118 + Math.min(0.036, sodeScale * 0.018);
+  const totalH = 0.155 + Math.min(0.055, sodeScale * 0.028);
+  const lameH = totalH / lames;
+  const Rc = 0.105; // tight curve radius hugging the deltoid
+  const off = 0.054;
 
-  if (id === 'manto-tengu') {
-    // ARMADURA DE LOS CINCO VIENTOS: twin swept aerodynamic Tengu feather-wing mantle fins + luminous jade veins
-    const jadeGlow = new THREE.MeshBasicMaterial({
-      color: 0x7effd4, transparent: true, opacity: 0.78, side: THREE.DoubleSide
-    });
-    const wingBase = new THREE.Group();
-    wingBase.position.set(0, 0.13, backZ);
-    for (const s of [-1, 1]) {
-      const wing = new THREE.Group();
-      wing.position.set(s * 0.08, 0.02, -0.01);
-      wing.rotation.set(0.18, -s * 0.42, s * 0.22);
-      // 4 layered overlapping sculpted Tengu feather-blades per wing
-      for (let f = 0; f < 4; f++) {
-        const len = 0.34 - f * 0.055;
-        const w = 0.052 - f * 0.006;
-        const sh = new THREE.Shape();
-        sh.moveTo(0, 0);
-        sh.quadraticCurveTo(s * len * 0.48, w * 1.1, s * len, w * 0.22);
-        sh.quadraticCurveTo(s * len * 0.55, -w * 0.45, 0, -w * 0.35);
-        sh.closePath();
-        const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.007, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1 });
-        const feather = new THREE.Mesh(geo, f % 2 === 0 ? lacquerMat : metalMat);
-        feather.position.set(0, -f * 0.036, -f * 0.010);
-        feather.rotation.z = -s * (f * 0.16);
-        wing.add(feather);
-        // Luminous wind-jade spine vein along each feather
-        const vein = new THREE.Mesh(new THREE.BoxGeometry(len * 0.78, 0.005, 0.011), jadeGlow);
-        vein.position.set(s * len * 0.42, -f * 0.036 + w * 0.18, -f * 0.010 + 0.003);
-        vein.rotation.z = -s * (f * 0.16 - 0.08);
-        wing.add(vein);
-      }
-      wingBase.add(wing);
-    }
-    // Central Tengu wind-vortex crest boss on the upper back
-    const crest = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.007, 8, 24), metalMat);
-    crest.position.z = -0.015;
-    wingBase.add(crest);
-    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.022, 0), jadeGlow);
-    core.position.z = -0.018;
-    wingBase.add(core);
-    chestGroup.add(wingBase);
+  // Raised kanmuri-ita upper cap curving inward over the shoulder joint
+  const capW = w * 0.92;
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(capW, 0.024, 0.022), lacquerMat);
+  cap.position.set(0, 0.048, off - 0.012);
+  cap.rotation.x = 0.42;
+  g.add(cap);
+  const capRim = new THREE.Mesh(new THREE.BoxGeometry(capW + 0.006, 0.007, 0.024), metalMat);
+  capRim.position.set(0, 0.058, off - 0.016);
+  capRim.rotation.x = 0.42;
+  g.add(capRim);
 
-  } else if (id === 'coraza-tambor') {
-    // CORAZA DEL TAMBOR CARMESÍ: iconic Raijin sacred war-drum halo ring behind the shoulders (5 gilded taiko drums)
-    const halo = new THREE.Group();
-    halo.position.set(0, 0.24, backZ - 0.03);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.0085, 8, 40), metalMat);
-    halo.add(ring);
-    const drumSkin = new THREE.MeshStandardMaterial({ color: 0xf4e8cc, roughness: 0.5, emissive: 0xd9a036, emissiveIntensity: 0.25 });
-    for (let i = 0; i < 5; i++) {
-      const a = -Math.PI * 0.22 + (i / 4) * Math.PI * 1.44;
-      const dGrp = new THREE.Group();
-      dGrp.position.set(Math.cos(a) * 0.24, Math.sin(a) * 0.24, 0);
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.036, 16), lacquerMat);
-      body.rotation.x = Math.PI / 2;
-      dGrp.add(body);
-      const face = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.040, 16), drumSkin);
-      face.rotation.x = Math.PI / 2;
-      dGrp.add(face);
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.041, 0.005, 6, 18), metalMat);
-      rim.position.z = -0.018;
-      dGrp.add(rim);
-      halo.add(dGrp);
+  // 5 physically stepped overlapping curved rectangular lames
+  for (let i = 0; i < lames; i++) {
+    const f = i / (lames - 1);
+    const rCur = Rc + i * 0.0035;
+    const span = (w * (0.94 + f * 0.08)) / rCur;
+    const yC = 0.034 - i * (lameH * 0.84) - lameH * 0.42;
+    const panel = new THREE.Mesh(
+      new THREE.CylinderGeometry(rCur, rCur + 0.004, lameH * 0.94, 10, 1, true, -span / 2, span),
+      i === 0 ? lacquerMat : armorMat
+    );
+    panel.position.set(0, yC, off - Rc);
+    g.add(panel);
+    // Crisp gilded bottom rim on each stepped lame
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 10; k++) {
+      const th = -span / 2 + (k / 10) * span;
+      pts.push(new V(Math.sin(th) * (rCur + 0.005), yC - lameH * 0.46, Math.cos(th) * (rCur + 0.005) + (off - Rc)));
     }
-    chestGroup.add(halo);
-
-  } else if (id === 'coraza-escarcha') {
-    // CORAZA DE ESCARCHA ETERNA: faceted crystalline frost-mantle shards fanning from the upper back
-    const iceMat = new THREE.MeshPhysicalMaterial({
-      color: 0xb8f2ff, emissive: 0x38c8ff, emissiveIntensity: 0.65,
-      roughness: 0.08, metalness: 0.15, clearcoat: 1.0, clearcoatRoughness: 0.05,
-      transparent: true, opacity: 0.86
-    });
-    const frost = new THREE.Group();
-    frost.position.set(0, 0.16, backZ - 0.01);
-    const shards: [number, number, number, number, number][] = [
-      [0, 0.11, 0.22, 0.036, 0],
-      [-0.08, 0.07, 0.20, 0.032, 0.42],
-      [0.08, 0.07, 0.20, 0.032, -0.42],
-      [-0.14, 0.01, 0.16, 0.026, 0.82],
-      [0.14, 0.01, 0.16, 0.026, -0.82],
-    ];
-    for (const [x, y, h, r, rz] of shards) {
-      const c = new THREE.Mesh(new THREE.ConeGeometry(r, h, 5), iceMat);
-      c.position.set(x, y, -0.01);
-      c.rotation.set(-0.28, 0, rz);
-      frost.add(c);
-    }
-    chestGroup.add(frost);
-
-  } else if (id === 'yoroi-shuten' || id === 'coraza-sepulcral') {
-    // O-YOROI DEL REY ONI / CORAZA SEPULCRAL: twin jagged demonic shoulder horns + glowing ember core on the back
-    const emberMat = new THREE.MeshBasicMaterial({ color: id === 'yoroi-shuten' ? 0xff4418 : 0xff9238 });
-    const crest = new THREE.Group();
-    crest.position.set(0, 0.15, backZ - 0.01);
-    for (const s of [-1, 1]) {
-      const hornCurve = new THREE.CatmullRomCurve3([
-        new V(s * 0.06, 0.01, 0),
-        new V(s * 0.16, 0.09, -0.04),
-        new V(s * 0.23, 0.21, -0.02),
-      ]);
-      crest.add(new THREE.Mesh(new THREE.TubeGeometry(hornCurve, 14, 0.014, 6), metalMat));
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.055, 6), metalMat);
-      tip.position.set(s * 0.24, 0.23, -0.015);
-      tip.rotation.z = -s * 0.35;
-      crest.add(tip);
-    }
-    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.026, 0), emberMat);
-    core.position.set(0, 0.02, -0.015);
-    crest.add(core);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.006, 7, 20), metalMat);
-    ring.position.set(0, 0.02, -0.012);
-    crest.add(ring);
-    chestGroup.add(crest);
-
-  } else if (id === 'hachiman') {
-    // ARMADURA DE HACHIMAN: radiant gilded sunburst back-plate emblem
-    const sun = new THREE.Group();
-    sun.position.set(0, 0.12, backZ - 0.016);
-    const star = new THREE.Shape();
-    const k = 24;
-    for (let i = 0; i <= k; i++) {
-      const t = (i / k) * TAU;
-      const rr = i % 2 ? 0.056 : 0.096;
-      const px = Math.sin(t) * rr, py = Math.cos(t) * rr;
-      if (i === 0) star.moveTo(px, py); else star.lineTo(px, py);
-    }
-    const geo = new THREE.ExtrudeGeometry(star, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1 });
-    sun.add(new THREE.Mesh(geo, metalMat));
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.012, 24), laceMat);
-    disc.rotation.x = Math.PI / 2;
-    disc.position.z = -0.002;
-    sun.add(disc);
-    chestGroup.add(sun);
-
-  } else if (id === 'kitsune') {
-    // ARMADURA DEL ZORRO: sacred twisted shimenawa rope across the upper back with twin crimson shrine tassels
-    const ropeCurve = new THREE.CatmullRomCurve3([
-      new V(-0.15, 0.16, backZ + 0.02),
-      new V(-0.07, 0.11, backZ - 0.02),
-      new V(0.07, 0.11, backZ - 0.02),
-      new V(0.15, 0.16, backZ + 0.02),
-    ]);
-    chestGroup.add(new THREE.Mesh(new THREE.TubeGeometry(ropeCurve, 22, 0.016, 8), laceMat));
-    for (const sx of [-0.08, 0, 0.08]) {
-      const shide = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.058, 0.005), metalMat);
-      shide.position.set(sx, 0.075, backZ - 0.025);
-      shide.rotation.z = sx * 1.4;
-      chestGroup.add(shide);
-    }
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, i === lames - 1 ? 0.0038 : 0.0024, 5), metalMat));
   }
+  // Vertical silk lacing cord down the center of the sode
+  const centerCord = new THREE.Mesh(new THREE.BoxGeometry(0.011, totalH * 0.85, 0.008), laceMat);
+  centerCord.position.set(0, 0.034 - totalH * 0.44, off + 0.010);
+  g.add(centerCord);
+
+  return g;
+}
+
+/**
+ * Tasteful, historically grounded subtle crest accents for legendary boss-drop armors
+ * (NO oversized cartoonish wings, drums, or floating cones — dignified samurai craftsmanship).
+ */
+export function attachArmorSignature(
+  _chestGroup: THREE.Group,
+  _a: Armor,
+  _depthScale: number,
+  _lacquerMat: THREE.Material,
+  _metalMat: THREE.Material,
+  _laceMat: THREE.Material
+) {
+  // Intentionally kept clean and proportional so legendary armors shine through their
+  // authentic silhouette, bespoke PBR finishes, selective glowing veins, and auras.
 }

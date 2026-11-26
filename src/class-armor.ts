@@ -9,7 +9,7 @@ import type { ClassId } from './classes';
 import {
   buildMasterLamellarPBR, makeArmorPlateMat,
   getForgedMetalPBR, getUrushiLacquerPBR, getBraidedSilkPBR,
-  heightToNormalTex, addSamuraiTorsoRelief, attachArmorSignature,
+  heightToNormalTex, attachArmorSignature,
 } from './armor-art';
 
 const V = THREE.Vector3;
@@ -1314,10 +1314,10 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
 
     const torsoSpec: TorsoSpec =
       cls === 'xia'
-        ? { chestW: 1.01, waistW: 0.93, depth: 0.96, pecSwell: 0.013, hemDip: 0.022, neckDip: 0.022 }
+        ? { chestW: 0.94, waistW: 0.88, depth: 0.92, pecSwell: 0.010, hemDip: 0.016, neckDip: 0.020 }
         : cls === 'hwarang'
-          ? { chestW: 1.02, waistW: 0.96, depth: 0.98, pecSwell: 0.011, hemDip: 0.018, neckDip: 0.020 }
-          : { chestW: 1.04, waistW: 0.99, depth: 1.00, pecSwell: 0.012, hemDip: 0.016, neckDip: 0.015 };
+          ? { chestW: 0.95, waistW: 0.90, depth: 0.93, pecSwell: 0.009, hemDip: 0.014, neckDip: 0.018 }
+          : { chestW: 0.96, waistW: 0.92, depth: 0.94, pecSwell: 0.010, hemDip: 0.012, neckDip: 0.015 };
 
     const torsoGeo = buildContouredTorso(torsoSpec);
     const repeatX = cls === 'xia' ? 4.5 : cls === 'hwarang' ? 3.5 : 5.0;
@@ -1557,17 +1557,13 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
       }
     }
 
-    // Sculpted backplate relief & bespoke legendary relic 3D silhouette (Tengu wings, Raijin drums, frost shards, Oni horns, etc.)
-    if (cls === 'sohei') {
-      addSamuraiTorsoRelief(g, torsoSpec, patterned(4.5, 0.45), lacquer, metal, lace, a.tier);
-    } else {
-      const spine = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.28, 0.016), lacquer);
-      spine.position.set(0, 0.035, -0.156 * torsoSpec.depth);
-      g.add(spine);
-      const spineTrim = new THREE.Mesh(new THREE.BoxGeometry(0.076, 0.29, 0.010), metal);
-      spineTrim.position.set(0, 0.035, -0.152 * torsoSpec.depth);
-      g.add(spineTrim);
-    }
+    // Clean sculpted backplate spine ridge on all classes
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.26, 0.014), lacquer);
+    spine.position.set(0, 0.035, -0.148 * torsoSpec.depth);
+    g.add(spine);
+    const spineTrim = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.27, 0.009), metal);
+    spineTrim.position.set(0, 0.035, -0.144 * torsoSpec.depth);
+    g.add(spineTrim);
     attachArmorSignature(g, a, torsoSpec.depth, lacquer, metal, lace);
 
     overlay(setId, rigChest, g);
