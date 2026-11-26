@@ -1,5 +1,5 @@
 // The cinematic framing of the special techniques (P / J). Casting one is a little scene:
-//   recogimiento  time slows to a crawl, black bars close in, manga focus lines rush towards the warrior,
+//   recogimiento  time slows to a crawl, manga focus lines rush towards the warrior,
 //                 the camera pushes in with a slight Dutch angle and the technique's kanji is brushed on screen;
 //   liberación    time snaps back, a flash of the technique's colour, and the strike plays out;
 //   impactos      the big hits call impactFlash / slowMo / screenSlash for a flash, a beat of bullet time or a
@@ -9,9 +9,6 @@ import * as THREE from 'three';
 
 const css = `
 #cine{position:fixed;inset:0;pointer-events:none;overflow:hidden;--c:#fff;z-index:12}
-#cine .cb{position:absolute;left:0;right:0;height:10.5vh;background:#000;transform:scaleY(0);transition:transform .28s cubic-bezier(.2,.9,.3,1)}
-#cine .cb.t{top:0;transform-origin:top}#cine .cb.b{bottom:0;transform-origin:bottom}
-#cine.on .cb{transform:scaleY(1)}
 #cine .cv{position:absolute;inset:0;opacity:0;transition:opacity .35s;
   background:radial-gradient(ellipse at 50% 55%,transparent 34%,color-mix(in srgb,var(--c) 26%,#000) 76%,#000 118%);mix-blend-mode:multiply}
 #cine.on .cv{opacity:.88}
@@ -74,7 +71,7 @@ document.head.append(style);
 
 const root = document.createElement('div');
 root.id = 'cine';
-root.innerHTML = '<div class="cv"></div><div class="cl"></div><div class="cb t"></div><div class="cb b"></div>' +
+root.innerHTML = '<div class="cv"></div><div class="cl"></div>' +
   '<div class="ct"><div class="ck"></div><div class="cs"></div><div class="cn"></div></div>' +
   '<div class="cboss"><div class="cb-eye"></div><div class="cb-kanji"></div><div class="cb-rule"></div><div class="cb-title"></div><div class="cb-sub"></div></div>' +
   '<div class="cf"></div>';
