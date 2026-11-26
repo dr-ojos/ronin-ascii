@@ -3,20 +3,38 @@
 // helpers the rest of the game already reads (hurtMult, dashCdMult, runMult).
 import { player, state } from './state';
 import { readVault, saveVault } from './vault';
+import type { ClassId } from './classes';
+
+export type AuraKind = 'foxfire' | 'wind' | 'fire' | 'whitefire' | 'lightning' | 'blackfire' | 'gold' | 'neon' | 'cyberneon';
+export type RobeTheme = 'fire' | 'whitefire' | 'blackfire' | 'neon';
+
+export interface RobeSpec {
+  linen: number;
+  mantle: number;
+  sash: number;
+  theme?: RobeTheme;
+  accent?: number;
+  glowCore?: number;
+  glowHalo?: number;
+  secondaryGlow?: number;
+  aura?: AuraKind;
+}
 
 export interface Armor {
   id: string; name: string; desc: string; price: number; tier: number;
   /** exclusive relic dropped by defeating a major boss (not sold by Masa) */
   bossDrop?: boolean;
+  /** optional class restriction for Masa's shop (e.g. special tunics for Sōhei, Xiákè & Hwarang) */
+  classes?: readonly ClassId[];
   /** extra max life, share of damage it stops (0..1) */
   hp: number; guard: number;
   /** dodge cooldown and running speed multipliers, life regained per second even while fighting */
   dash?: number; run?: number; regen?: number;
-  robe?: { linen: number; mantle: number; sash: number };
+  robe?: RobeSpec;
   /** how it looks on you (outfit.ts): lacquered plates (lame), the silk lacing that binds them (lace), the metal
    *  fittings, size of the shoulder guards, helmet and its crest, shin guards, aura, how much it glows,
    *  and optional glowing neon edge colour (TRON-style dark plates with luminous circuit borders) */
-  look?: { lame: number; lace: number; metal: number; sode: number; helmet?: 'jingasa' | 'crescent' | 'kuwagata' | 'sun'; shins?: boolean; aura?: 'foxfire' | 'wind' | 'fire' | 'lightning' | 'blackfire' | 'gold' | 'neon'; glow?: number; neon?: number };
+  look?: { lame: number; lace: number; metal: number; sode: number; helmet?: 'jingasa' | 'crescent' | 'kuwagata' | 'sun'; shins?: boolean; aura?: AuraKind; elemFx?: 'fire' | 'lightning' | 'blackfire'; glow?: number; neon?: number };
 }
 export const ARMORS: Armor[] = [
   { id: 'kimono',   name: 'Kimono de viaje',        desc: 'tela y polvo del camino',                     price: 0, tier: 0,    hp: 0,   guard: 0 },
@@ -41,15 +59,28 @@ export const ARMORS: Armor[] = [
   { id: 'neon', name: 'Coraza de Neón Blanco', desc: 'obsidiana oscura surcada por circuitos de luz blanca: veloz y precisa', price: 12400, tier: 2.9, hp: 90, guard: 0.3, dash: 0.72, run: 1.12, regen: 0.6,
     look: { lame: 0x07080d, lace: 0xeef6ff, metal: 0xffffff, sode: 1.45, helmet: 'crescent', shins: true, aura: 'neon', glow: 0.04, neon: 0xffffff } },
   { id: 'kagutsuchi', name: 'Armadura de Kagutsuchi', desc: 'coraza de fuego forjada en magma sagrado: arde en combate y regenera tu vitalidad', price: 13200, tier: 2.92, hp: 95, guard: 0.34, run: 1.06, regen: 1.1,
-    look: { lame: 0x280907, lace: 0xff5a18, metal: 0xffc842, sode: 1.65, helmet: 'sun', shins: true, aura: 'fire', glow: 0.24 } },
+    look: { lame: 0x280907, lace: 0xff5a18, metal: 0xffc842, sode: 1.65, helmet: 'sun', shins: true, elemFx: 'fire', glow: 0.22 } },
   { id: 'raijin', name: 'Armadura de Raijin', desc: 'coraza eléctrica de acero tormentoso surcada por relámpagos: veloz como el rayo', price: 13600, tier: 2.95, hp: 88, guard: 0.31, dash: 0.66, run: 1.16,
-    look: { lame: 0x0d1633, lace: 0x48c0ff, metal: 0xdcf6ff, sode: 1.5, helmet: 'kuwagata', shins: true, aura: 'lightning', glow: 0.22 } },
+    look: { lame: 0x0d1633, lace: 0x48c0ff, metal: 0xdcf6ff, sode: 1.5, helmet: 'kuwagata', shins: true, elemFx: 'lightning', glow: 0.20 } },
   { id: 'fuego-negro', name: 'Armadura del Fuego Negro', desc: 'llamas abisales perfiladas con finos contornos de neón blanco: letal, ágil y voraz', price: 15200, tier: 3, hp: 105, guard: 0.36, dash: 0.72, run: 1.1, regen: 1.0,
-    look: { lame: 0x040407, lace: 0xf4f8ff, metal: 0xffffff, sode: 1.65, helmet: 'crescent', shins: true, aura: 'blackfire', glow: 0.04, neon: 0xffffff } },
+    look: { lame: 0x040407, lace: 0xf4f8ff, metal: 0xffffff, sode: 1.65, helmet: 'crescent', shins: true, elemFx: 'blackfire', glow: 0.04, neon: 0xffffff } },
   { id: 'hachiman', name: 'Armadura de Hachiman',   desc: 'bendecida: cierra tus heridas incluso en combate', price: 14000, tier: 3, hp: 100, guard: 0.35, regen: 1.5,
     look: { lame: 0xd8a21e, lace: 0xd81a22, metal: 0xffe08a, sode: 1.8, helmet: 'sun', shins: true, aura: 'gold', glow: 0.3 } },
   { id: 'kurogane', name: 'Gran coraza Kurogane', desc: 'hierro oscuro: la mayor protección, a cambio de movilidad', price: 16800, tier: 3, hp: 120, guard: 0.42, dash: 1.18, run: 0.88,
     look: { lame: 0x22273b, lace: 0xc23d3a, metal: 0xc8af83, sode: 2, helmet: 'kuwagata', shins: true, glow: 0.09 } },
+  // ---- special elemental & neon tunics for Sōhei, Xiákè and Hwarang (each class wears its own silhouette)
+  { id: 'tunica-fuego', name: 'Túnica de Fuego', desc: 'seda carmesí tejida con brasas vivas: arde en combate, ágil y regenera tu vitalidad', price: 11800, tier: 2.88,
+    classes: ['sohei', 'xia', 'hwarang'], hp: 82, guard: 0.28, dash: 0.72, run: 1.10, regen: 1.1,
+    robe: { linen: 0x3b0b06, mantle: 0xb8220c, sash: 0x240705, theme: 'fire', accent: 0xff7a1c, glowCore: 0xfff0b8, glowHalo: 0xff5210, aura: 'fire' } },
+  { id: 'tunica-neon', name: 'Túnica de Neón', desc: 'seda de obsidiana surcada por circuitos de neón cian y magenta: velocidad fulgurante', price: 12600, tier: 2.9,
+    classes: ['sohei', 'xia', 'hwarang'], hp: 86, guard: 0.29, dash: 0.64, run: 1.16, regen: 0.75,
+    robe: { linen: 0x080c18, mantle: 0x101830, sash: 0x050812, theme: 'neon', accent: 0x38f2ff, glowCore: 0xe8ffff, glowHalo: 0x00e5ff, secondaryGlow: 0xff38c8, aura: 'cyberneon' } },
+  { id: 'tunica-fuego-blanco', name: 'Túnica de Fuego Blanco', desc: 'telas celestiales envueltas en llamas blancas incandescentes: pureza radiante y sanación continua', price: 13400, tier: 2.94,
+    classes: ['sohei', 'xia', 'hwarang'], hp: 92, guard: 0.31, dash: 0.68, run: 1.12, regen: 1.35,
+    robe: { linen: 0xeaf2fa, mantle: 0xffffff, sash: 0xc2d6ec, theme: 'whitefire', accent: 0xffffff, glowCore: 0xffffff, glowHalo: 0x9edbff, aura: 'whitefire' } },
+  { id: 'tunica-fuego-negro', name: 'Túnica de Fuego Negro', desc: 'seda de llama abisal perfilada con finos contornos de neón blanco: sigilosa, veloz e implacable', price: 14600, tier: 3,
+    classes: ['sohei', 'xia', 'hwarang'], hp: 98, guard: 0.33, dash: 0.66, run: 1.14, regen: 1.05,
+    robe: { linen: 0x050509, mantle: 0x090a12, sash: 0x030306, theme: 'blackfire', accent: 0xffffff, glowCore: 0xffffff, glowHalo: 0xcce8ff, aura: 'blackfire' } },
   // ---- boss-exclusive relics (dropped by major bosses in loot.ts, not sold by Masa)
   { id: 'coraza-sepulcral', name: 'Coraza del Oni Sepulcral', desc: 'reliquia del oni sepulcral: placas forjadas en ceniza que cierran heridas en combate', bossDrop: true, price: 0, tier: 2.4, hp: 70, guard: 0.28, regen: 0.6,
     look: { lame: 0x3b1a14, lace: 0xd96a38, metal: 0xffb353, sode: 1.65, helmet: 'kuwagata', shins: true, glow: 0.16 } },
@@ -64,7 +95,7 @@ export const ARMORS: Armor[] = [
 ];
 const byId = new Map(ARMORS.map(a => [a.id, a]));
 export const armorById = (id: string) => byId.get(id);
-export const armorsForSale = () => ARMORS.filter(a => !a.bossDrop);
+export const armorsForSale = () => ARMORS.filter(a => !a.bossDrop && (!a.classes || a.classes.includes(state.cls)));
 export const armor = () => byId.get(state.armor) || ARMORS[0];
 export const ownsArmor = (id: string) => state.ownedArmor.includes(id);
 

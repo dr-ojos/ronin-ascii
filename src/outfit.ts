@@ -12,12 +12,12 @@ import { sam } from './avatar';
 import { ACTOR_LAYER } from './ascii';
 import { CLS, tagMat, tagTree } from './materials';
 import { applyLook, opt } from './look';
-import { ARMORS, armor, type Armor } from './armor';
+import { ARMORS, armor, type Armor, type AuraKind, type RobeSpec } from './armor';
 import { state } from './state';
 import type { ClassId } from './classes';
-import { mangaFinish, roninRobe } from './manga-art';
+import { armorElemFX, mangaFinish, roninRobe } from './manga-art';
 import {
-  buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps, blackFirePlateMaps,
+  buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps, blackFirePlateMaps, specialRobeMaps,
   roninLamellarPBR, roninHachiPBR, roninMonTex,
   forgedMetalPBR, urushiLacquerPBR, braidedSilkPBR,
   buildContouredTorso, ellipseArcTube, buildForearmVambrace, buildContouredGreave, buildTassetPanel,
@@ -63,6 +63,7 @@ const robeMesh = root.getObjectByName('robe') as THREE.Mesh<THREE.BufferGeometry
 const robeMat = robeMesh?.material, robeMap = robeMat?.map ?? null;
 // avatar.ts makes the waves glow faintly too (emissiveMap): plain robes drop both
 const robeGlowMap = robeMat?.emissiveMap ?? null;
+const robeBaseEmissiveIntensity = robeMat?.emissiveIntensity ?? 0.12;
 /** put `obj` beside `twin` (same bone, same place, turn and size), so it follows it exactly */
 function overlay(id: string, twin: THREE.Object3D, obj: THREE.Object3D) {
   finish(obj);
@@ -80,8 +81,15 @@ function hang(id: string, boneName: string, obj: THREE.Object3D) {
   sets.get(id)!.push(obj);
 }
 function finish(o: THREE.Object3D) {
-  o.traverse(m => { if ((m as THREE.Mesh).isMesh) { m.castShadow = true; m.layers.enable(ACTOR_LAYER); } });
-  mangaFinish(o);   // the same finish as the body: rim and form light, and the letters on the surface
+  o.traverse(m => {
+    const mesh = m as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.castShadow = true;
+    mesh.layers.enable(ACTOR_LAYER);
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mm of mats) if ((mm as THREE.MeshStandardMaterial).isMeshStandardMaterial) mm.userData.playerElemFx = true;
+  });
+  mangaFinish(o);   // the same finish as the body: rim and form light, elemental cloth/armor FX, and surface letters
   return tagTree(o, CLS.actor);
 }
 
@@ -409,19 +417,77 @@ function build(a: Armor) {
 // collar, a broad sash with a cord belt and a band of warm neon, a long rosary of big wooden beads whose
 // master bead glows, and a kanji in neon on the back. The sōhei's hood is rig.ts's.
 const SOHEI = 'sohei-garb';
-interface HabitColours { habit: number; kesa: number; belt: number; cord: number; mark: string; roles?: boolean }
+interface HabitColours { habit: number; kesa: number; belt: number; cord: number; mark: string; roles?: boolean; robeSpec?: RobeSpec }
 const NEON_CORE = 0xfff1d6;
 const neonHalo = (o: THREE.MeshBasicMaterialParameters) => tagMat(new THREE.MeshBasicMaterial({
   color: 0xffb54a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, ...o }), CLS.fx);
+
+function makeThemedSilkMat(spec: RobeSpec, rx: number, ry: number) {
+  const pbr = specialRobeMaps(spec.theme!);
+  const map = pbr.map.clone(); map.repeat.set(rx, ry); map.needsUpdate = true;
+  const em = pbr.emissive!.clone(); em.repeat.set(rx, ry); em.needsUpdate = true;
+  const bump = pbr.bump.clone(); bump.repeat.set(rx, ry); bump.needsUpdate = true;
+  const rough = pbr.rough.clone(); rough.repeat.set(rx, ry); rough.needsUpdate = true;
+  const theme = spec.theme!;
+  const isNeonLike = theme === 'blackfire' || theme === 'neon';
+  return new THREE.MeshPhysicalMaterial({
+    map, bumpMap: bump, bumpScale: 0.012, roughnessMap: rough,
+    emissiveMap: em, emissive: 0xffffff,
+    emissiveIntensity: theme === 'blackfire' ? 2.15 : theme === 'neon' ? 2.05 : theme === 'whitefire' ? 1.45 : 1.55,
+    roughness: isNeonLike ? 0.34 : 0.72,
+    metalness: isNeonLike ? 0.35 : 0.08,
+    sheen: isNeonLike ? 0.2 : 0.55,
+    sheenRoughness: 0.4,
+    side: THREE.DoubleSide
+  });
+}
+
 function buildHabit(id: string, c: HabitColours) {
   if (!rigChest || !rigWaist) return;
   const glows: THREE.Mesh[] = [];
   sets.set(id, []);
+  const rs = c.robeSpec;
+  const themed = !!rs?.theme;
+  const isNeonLike = rs?.theme === 'blackfire' || rs?.theme === 'neon';
+  const glowCoreCol = rs?.glowCore ?? NEON_CORE;
+  const glowHaloCol = rs?.glowHalo ?? 0xffb54a;
+  const accentCol = rs?.accent ?? 0xe0b450;
   const cloth = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
     new THREE.MeshStandardMaterial({ color, roughness: 0.94, emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide, ...o });
-  const habit = cloth(c.habit), kesa = cloth(c.kesa, { map: brocadeKesaTex }), collar = cloth(0xe6e0d0), cord = cloth(c.cord), sash = cloth(c.belt);
-  const wood = new THREE.MeshStandardMaterial({ color: 0x3b2316, roughness: 0.45, metalness: 0.05 }), tassel = cloth(0xb3241c);
-  const gilt = new THREE.MeshStandardMaterial({ color: 0xe0b450, metalness: 0.85, roughness: 0.3 });
+  const habit = themed ? makeThemedSilkMat(rs!, 2.4, 1.8) : cloth(c.habit);
+  const kesa = themed && isNeonLike
+    ? makeThemedSilkMat(rs!, 1.2, 2.4)
+    : cloth(c.kesa, {
+        map: brocadeKesaTex,
+        emissive: themed ? glowHaloCol : c.kesa,
+        emissiveIntensity: themed ? (rs!.theme === 'whitefire' ? 0.55 : 0.42) : 0.12
+      });
+  const collar = themed
+    ? cloth(rs!.theme === 'blackfire' ? 0x0b0d14 : rs!.theme === 'neon' ? 0x10182b : rs!.theme === 'fire' ? 0xffe4b8 : 0xffffff, {
+        emissive: glowCoreCol, emissiveIntensity: rs!.theme === 'whitefire' ? 0.65 : 0.35
+      })
+    : cloth(0xe6e0d0);
+  const cord = themed
+    ? cloth(rs!.secondaryGlow ?? accentCol, { emissive: rs!.secondaryGlow ?? glowHaloCol, emissiveIntensity: isNeonLike ? 1.5 : 0.65 })
+    : cloth(c.cord);
+  const sash = cloth(c.belt, themed ? { emissive: glowHaloCol, emissiveIntensity: rs!.theme === 'whitefire' ? 0.4 : 0.22 } : {});
+  const wood = themed
+    ? new THREE.MeshStandardMaterial({
+        color: rs!.theme === 'whitefire' ? 0xe8f4ff : rs!.theme === 'blackfire' ? 0x0a0b10 : rs!.theme === 'neon' ? 0x0e1628 : 0x3b1208,
+        roughness: 0.32, metalness: 0.25, emissive: glowHaloCol, emissiveIntensity: 0.38
+      })
+    : new THREE.MeshStandardMaterial({ color: 0x3b2316, roughness: 0.45, metalness: 0.05 });
+  const tassel = themed
+    ? cloth(rs!.secondaryGlow ?? accentCol, { emissive: rs!.secondaryGlow ?? glowHaloCol, emissiveIntensity: isNeonLike ? 1.4 : 0.7 })
+    : cloth(0xb3241c);
+  const gilt = new THREE.MeshStandardMaterial({
+    color: accentCol,
+    metalness: isNeonLike ? 0.2 : 0.85,
+    roughness: isNeonLike ? 0.14 : 0.28,
+    emissive: accentCol,
+    emissiveIntensity: themed ? (isNeonLike ? 2.1 : 1.05) : 0
+  });
+  if (themed && isNeonLike) gilt.userData.noGlyphs = true;
   // the sōhei's colours come from his look (look.ts): habit = "cloth", kesa = "lacquer"
   if (c.roles) { habit.userData.role = 'cloth'; kesa.userData.role = 'lacquer'; }
   const body = new THREE.Group(); body.name = `${id}-habit`;
@@ -473,8 +539,8 @@ function buildHabit(id: string, c: HabitColours) {
   ], true);
   const bead = new THREE.SphereGeometry(0.0145, 10, 8);
   for (let i = 0; i < 30; i++) { const b = new THREE.Mesh(bead, wood); b.position.copy(beads.getPointAt(i / 30)); body.add(b); }
-  const big = new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 10), new THREE.MeshBasicMaterial({ color: NEON_CORE })); big.position.set(0, -0.015, 0.216); body.add(big);
-  const bigGlow = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), neonHalo({ opacity: 0.4 })); bigGlow.position.copy(big.position); body.add(bigGlow); glows.push(bigGlow);
+  const big = new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 10), new THREE.MeshBasicMaterial({ color: glowCoreCol })); big.position.set(0, -0.015, 0.216); body.add(big);
+  const bigGlow = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), neonHalo({ color: glowHaloCol, opacity: 0.45 })); bigGlow.position.copy(big.position); body.add(bigGlow); glows.push(bigGlow);
   const fringe = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.07, 8, 1, true), tassel); fringe.position.set(0, -0.07, 0.214); body.add(fringe);
   // the habit's mark on the back, in warm neon like the sōhei's brow ring (rig.ts), as the ronin wears 浪
   {
@@ -484,8 +550,8 @@ function buildHabit(id: string, c: HabitColours) {
       x.font = 'bold 92px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif';
       x.fillText(c.mark, 64, 68);
     });
-    const core = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.13), new THREE.MeshBasicMaterial({ map: draw(0), color: NEON_CORE, alphaTest: 0.45, side: THREE.DoubleSide }));
-    const soft = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.18), neonHalo({ map: draw(7), opacity: 0.85, side: THREE.DoubleSide }));
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.13), new THREE.MeshBasicMaterial({ map: draw(0), color: glowCoreCol, alphaTest: 0.45, side: THREE.DoubleSide }));
+    const soft = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.18), neonHalo({ map: draw(7), color: glowHaloCol, opacity: 0.85, side: THREE.DoubleSide }));
     core.position.set(0.035, -0.1, -0.2); soft.position.set(0.035, -0.1, -0.204);   // low on the back, worn over the kesa like an emblem
     core.rotation.y = soft.rotation.y = Math.PI;
     body.add(core, soft); glows.push(soft);
@@ -503,8 +569,8 @@ function buildHabit(id: string, c: HabitColours) {
     const end = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.16, 6), cord);
     end.position.set(0.1 + s * 0.015, -0.06, 0.15); end.rotation.z = s * 0.12; waist.add(end);
   }
-  // a band of warm neon along the lower edge of the belt
-  for (const [r, mat, tube] of [[0.2, new THREE.MeshBasicMaterial({ color: NEON_CORE }), 0.0055], [0.2, neonHalo({ opacity: 0.45 }), 0.022]] as const) {
+  // a band of neon along the lower edge of the belt
+  for (const [r, mat, tube] of [[0.2, new THREE.MeshBasicMaterial({ color: glowCoreCol }), 0.0055], [0.2, neonHalo({ color: glowHaloCol, opacity: 0.45 }), 0.022]] as const) {
     const band = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 6, 64), mat);
     band.rotation.x = Math.PI / 2; band.scale.y = 0.78; band.position.y = -0.024; waist.add(band);
     if (mat.blending === THREE.AdditiveBlending) glows.push(band);
@@ -569,101 +635,23 @@ function makeWindBladeMesh(mat: THREE.Material) {
   return new THREE.Mesh(new THREE.ShapeGeometry(s, 10), mat);
 }
 
-function buildAura(kind: 'foxfire' | 'wind' | 'fire' | 'lightning' | 'blackfire' | 'gold' | 'neon') {
+function buildAura(kind: AuraKind) {
   const g = new THREE.Group(); g.name = kind;
-  if (kind === 'blackfire') {
-    // Armadura del Fuego Negro: pitch-black abyssal flame orbs & tongues outlined by razor-thin white neon rims
-    const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
-    const voidMat = tagMat(new THREE.MeshBasicMaterial({ color: 0x020205, side: THREE.DoubleSide }), CLS.actor);
-    const rimMat = makeFresnelShellMat(0xffffff, 0xd8ecff, 0.96, 3.6);
-    const wakeGeo = makeOrbitWakeGeo(0.56, 0.011, 0.22);
-    for (let i = 0; i < 3; i++) {
-      const w = new THREE.Group();
-      // Jet-black abyssal flame core + rising black flame tongue
-      const core = new THREE.Mesh(new THREE.SphereGeometry(0.088, 16, 12), voidMat);
-      core.scale.y = 1.28; w.add(core);
-      const tongue = new THREE.Mesh(new THREE.ConeGeometry(0.064, 0.26, 12, 1, false), voidMat);
-      tongue.position.y = 0.16; tongue.name = 'tongue'; w.add(tongue);
-      // Razor-thin white neon Fresnel contour hugging the black flame
-      const rim = new THREE.Mesh(new THREE.SphereGeometry(0.104, 20, 14), rimMat);
-      rim.scale.y = 1.28; w.add(rim);
-      const tongueRim = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.28, 12, 1, true), rimMat);
-      tongueRim.position.y = 0.16; tongueRim.name = 'tongueRim'; w.add(tongueRim);
-      // Crisp thin white neon filament ring & fine orbital wake
-      const haloRing = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.0032, 5, 36), fxMat(0xffffff, 0.85));
-      haloRing.name = 'ringA'; w.add(haloRing);
-      const flare = fxSprite(anamorphicFlareTex, 0xffffff, 0.36, 0.36); flare.name = 'flare'; w.add(flare);
-      w.add(new THREE.Mesh(wakeGeo, fxMat(0xffffff, 0.72)));
-      orbGroup.add(w);
-    }
-    // Rising black-flame wisps with crisp white neon outlines
-    const embers = new THREE.Group(); embers.name = 'embers'; g.add(embers);
-    for (let i = 0; i < 6; i++) {
-      const e = new THREE.Group();
-      e.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.036, 0), voidMat));
-      e.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.044, 0), rimMat));
-      embers.add(e);
-    }
-    // Ultra-fine twin white neon contour rings at the feet
-    const ring1 = new THREE.Mesh(new THREE.RingGeometry(0.73, 0.748, 64), fxMat(0xffffff, 0.88));
-    ring1.rotation.x = -Math.PI / 2; ring1.position.y = 0.045; ring1.name = 'bfRing1'; g.add(ring1);
-    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.86, 0.872, 64), fxMat(0xdceeff, 0.55));
-    ring2.rotation.x = -Math.PI / 2; ring2.position.y = 0.042; ring2.name = 'bfRing2'; g.add(ring2);
-  } else if (kind === 'fire') {
-    // Armadura de Kagutsuchi: 3 blazing solar-magma flame orbs + rising ember sparks + molten ground ring
-    const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
-    const fresnelMat = makeFresnelShellMat(0xfff4b8, 0xff4208, 0.90, 1.85);
-    const wakeGeo = makeOrbitWakeGeo(0.52, 0.028, 0.22);
-    for (let i = 0; i < 3; i++) {
-      const w = new THREE.Group();
-      w.add(new THREE.Mesh(new THREE.SphereGeometry(0.060, 14, 10), fxMat(0xfff6cc, 0.95)));
-      const shell = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 14), fresnelMat);
-      shell.scale.y = 1.25; w.add(shell);
-      const tongue = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.26, 10, 1, true), fxMat(0xff6a18, 0.52));
-      tongue.position.y = 0.16; tongue.name = 'tongue'; w.add(tongue);
-      w.add(fxSprite(softGlowTex, 0xff6a1a, 0.66, 0.64));
-      const flare = fxSprite(anamorphicFlareTex, 0xffe49e, 0.42, 0.44); flare.name = 'flare'; w.add(flare);
-      w.add(new THREE.Mesh(wakeGeo, fxMat(0xff5210, 0.46)));
-      orbGroup.add(w);
-    }
-    const embers = new THREE.Group(); embers.name = 'embers'; g.add(embers);
-    for (let i = 0; i < 6; i++) {
-      embers.add(fxSprite(softGlowTex, i % 2 ? 0xffb838 : 0xff5a14, 0.82, 0.14));
-    }
-    const fireRing = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.84, 56), fxMat(0xff5a14, 0.42));
-    fireRing.rotation.x = -Math.PI / 2; fireRing.position.y = 0.045; fireRing.name = 'fireRing'; g.add(fireRing);
-    const fireOuter = new THREE.Mesh(new THREE.RingGeometry(0.84, 1.02, 56), fxMat(0xffa428, 0.20));
-    fireOuter.rotation.x = -Math.PI / 2; fireOuter.position.y = 0.042; fireOuter.name = 'fireOuter'; g.add(fireOuter);
-  } else if (kind === 'lightning') {
-    // Armadura de Raijin: 3 crackling storm-charge plasma nodes + snapping 3D lightning arcs + voltage ring
-    const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
-    const fresnelMat = makeFresnelShellMat(0xffffff, 0x38bcff, 0.92, 2.0);
-    for (let i = 0; i < 3; i++) {
-      const w = new THREE.Group();
-      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.052, 0), fxMat(0xffffff, 0.98));
-      core.name = 'core'; w.add(core);
-      w.add(new THREE.Mesh(new THREE.SphereGeometry(0.105, 18, 14), fresnelMat));
-      w.add(fxSprite(softGlowTex, 0x48c4ff, 0.64, 0.56));
-      const flare = fxSprite(anamorphicFlareTex, 0xe8faff, 0.62, 0.58); flare.name = 'flare'; w.add(flare);
-      const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.142, 0.005, 5, 28), fxMat(0xb8eeff, 0.85));
-      ringA.name = 'ringA'; w.add(ringA);
-      const ringB = new THREE.Mesh(new THREE.TorusGeometry(0.172, 0.0038, 5, 28), fxMat(0x38b6ff, 0.65));
-      ringB.name = 'ringB'; w.add(ringB);
-      orbGroup.add(w);
-    }
-    // 3 snapping jagged electric arc lines jumping between the 3 orbiting storm nodes
-    const arcs = new THREE.Group(); arcs.name = 'arcs'; g.add(arcs);
-    const arcMat = tagMat(new THREE.LineBasicMaterial({ color: 0xb8f0ff, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending }), CLS.light);
-    for (let i = 0; i < 3; i++) {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9 * 3), 3));
-      arcs.add(new THREE.Line(geo, arcMat));
-    }
-    const boltRing = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.79, 48), fxMat(0x68d4ff, 0.50));
-    boltRing.rotation.x = -Math.PI / 2; boltRing.position.y = 0.045; boltRing.name = 'boltRing'; g.add(boltRing);
-    const boltOuter = new THREE.Mesh(new THREE.RingGeometry(0.80, 0.94, 48), fxMat(0xd4f6ff, 0.24));
-    boltOuter.rotation.x = -Math.PI / 2; boltOuter.position.y = 0.042; boltOuter.name = 'boltOuter'; g.add(boltOuter);
-  } else if (kind === 'wind') {
+  if (kind === 'fire' || kind === 'whitefire' || kind === 'lightning' || kind === 'blackfire') {
+    // Elemental fire / electricity / blackfire run directly on the cloth & armor shaders (no floating orbs!)
+    g.visible = false; root.add(g);
+    return g;
+  }
+  if (kind === 'cyberneon') {
+    // Túnica de Neón: sleek twin electric cyan & magenta ground circuit rings (no floating orbs)
+    const rCyan = new THREE.Mesh(new THREE.RingGeometry(0.69, 0.74, 64), fxMat(0x38f2ff, 0.75));
+    rCyan.rotation.x = -Math.PI / 2; rCyan.position.y = 0.042; rCyan.name = 'cnRing1'; g.add(rCyan);
+    const rMag = new THREE.Mesh(new THREE.RingGeometry(0.80, 0.845, 64), fxMat(0xff38c8, 0.62));
+    rMag.rotation.x = -Math.PI / 2; rMag.position.y = 0.039; rMag.name = 'cnRing2'; g.add(rMag);
+    g.visible = false; root.add(g);
+    return g;
+  }
+  if (kind === 'wind') {
     // Armadura de los Cinco Vientos: 3 luminous jade-emerald wind-spirit orbs with faceted crystal cores,
     // volumetric Fresnel plasma shells, counter-rotating cyclone rings, crescent wind-blades, glow halos & wakes
     const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
@@ -730,7 +718,8 @@ function buildAura(kind: 'foxfire' | 'wind' | 'fire' | 'lightning' | 'blackfire'
 
 for (const a of ARMORS) {
   // the wandering monk's robe: ochre linen, a darker mantle for the kesa, 禅 (zen) on the back
-  if (a.robe) buildHabit(a.id, { habit: a.robe.linen, kesa: a.robe.mantle, belt: a.robe.sash, cord: 0xdcc79a, mark: '禅' });
+  // themed class tunics (fire, whitefire, blackfire, neon) are built lazily per class in ensureClassRobe
+  if (a.robe && !a.robe.theme) buildHabit(a.id, { habit: a.robe.linen, kesa: a.robe.mantle, belt: a.robe.sash, cord: 0xdcc79a, mark: '禅' });
   else if (a.look) build(a);
 }
 // the sōhei's own habit, coloured by his look, 僧 (monk) on the back
@@ -757,18 +746,43 @@ function neonMark(parent: THREE.Object3D, ch: string, [core, halo]: readonly [TH
   c.rotation.y = h.rotation.y = Math.PI;
   parent.add(c, h); glows.push(h);
 }
-function buildSwordsman(id: string, kind: 'xia' | 'hwarang') {
+function buildSwordsman(id: string, kind: 'xia' | 'hwarang', robeSpec?: RobeSpec) {
   if (!rigChest || !rigWaist) return;
   const glows: THREE.Mesh[] = [];
   sets.set(id, []);
+  const themed = !!robeSpec?.theme;
+  const isNeonLike = robeSpec?.theme === 'blackfire' || robeSpec?.theme === 'neon';
   const cloth = (color: number, o: THREE.MeshStandardMaterialParameters = {}) =>
     new THREE.MeshStandardMaterial({ color, roughness: 0.88, emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide, ...o });
   const silkTex = (kind === 'xia' ? cloudSilkTex : plumSilkTex).clone();
   silkTex.repeat.set(2.5, 2.5); silkTex.needsUpdate = true;
-  const robe = cloth(0x4a5e2a, { map: silkTex }), trim = cloth(kind === 'xia' ? 0xd8a630 : 0xe4573d, { roughness: 0.6 }), white = cloth(0xeeeae0);
-  robe.userData.role = 'cloth'; trim.userData.role = 'lacquer';
-  const gilt = new THREE.MeshStandardMaterial({ color: 0xe0b450, metalness: 0.85, roughness: 0.3 });
-  const neon = kind === 'xia' ? neonPair(0xe6fff2, 0x4dffa6) : neonPair(0xffeef5, 0xff6aa8);
+  const robe = themed ? makeThemedSilkMat(robeSpec!, 2.6, 1.9) : cloth(0x4a5e2a, { map: silkTex });
+  const trimCol = themed ? (robeSpec!.secondaryGlow ?? robeSpec!.accent ?? robeSpec!.mantle) : (kind === 'xia' ? 0xd8a630 : 0xe4573d);
+  const trim = cloth(trimCol, {
+    roughness: themed && isNeonLike ? 0.22 : 0.6,
+    emissive: themed ? (robeSpec!.secondaryGlow ?? robeSpec!.glowHalo ?? trimCol) : trimCol,
+    emissiveIntensity: themed ? (isNeonLike ? 1.55 : robeSpec!.theme === 'whitefire' ? 0.65 : 0.8) : 0.12
+  });
+  if (themed && isNeonLike) trim.userData.noGlyphs = true;
+  const white = themed
+    ? cloth(robeSpec!.theme === 'blackfire' ? 0x0c0e16 : robeSpec!.theme === 'neon' ? 0x10182b : robeSpec!.theme === 'fire' ? 0xffe4b8 : 0xffffff, {
+        emissive: robeSpec!.glowCore ?? 0xffffff,
+        emissiveIntensity: robeSpec!.theme === 'whitefire' ? 0.75 : isNeonLike ? 0.55 : 0.4
+      })
+    : cloth(0xeeeae0);
+  if (!themed) { robe.userData.role = 'cloth'; trim.userData.role = 'lacquer'; }
+  const accentCol = robeSpec?.accent ?? 0xe0b450;
+  const gilt = new THREE.MeshStandardMaterial({
+    color: accentCol,
+    metalness: themed && isNeonLike ? 0.2 : 0.85,
+    roughness: themed && isNeonLike ? 0.14 : 0.3,
+    emissive: accentCol,
+    emissiveIntensity: themed ? (isNeonLike ? 2.15 : 1.05) : 0
+  });
+  if (themed && isNeonLike) gilt.userData.noGlyphs = true;
+  const neon = themed
+    ? neonPair(robeSpec!.glowCore!, robeSpec!.glowHalo!)
+    : kind === 'xia' ? neonPair(0xe6fff2, 0x4dffa6) : neonPair(0xffeef5, 0xff6aa8);
   const body = new THREE.Group(); body.name = `${id}-robe`;
   const torso = new THREE.Mesh(new THREE.LatheGeometry([
     [0.176, -0.268], [0.182, -0.16], [0.21, -0.03], [0.218, 0.09], [0.203, 0.168], [0.146, 0.234], [0.092, 0.262]
@@ -791,9 +805,9 @@ function buildSwordsman(id: string, kind: 'xia' | 'hwarang') {
     tube(over.map(v => v.clone().add(new V(0.012, -0.006, 0.012))), 0.004, gilt);
   } else {
     // the dopo's dark collar band (git) with its white strip (dongjeong)
-    const band = cloth(0x23222a);
+    const band = cloth(themed ? robeSpec!.sash : 0x23222a, themed ? { emissive: robeSpec!.glowHalo ?? robeSpec!.sash, emissiveIntensity: 0.28 } : {});
     tube(under, 0.019, band); tube(over, 0.02, band);
-    tube(over.slice(0, 3).map(v => v.clone().add(new V(-0.004, 0.012, 0.006))), 0.008, white);
+    tube(over.slice(0, 3).map(v => v.clone().add(new V(-0.004, 0.012, 0.006))), 0.008, themed ? gilt : white);
     // the sejodae: a cord round the chest, knotted on the right, its two ends hanging down with tassels
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.008, 6, 48), trim);
     ring.rotation.x = Math.PI / 2; ring.scale.y = 0.76; ring.position.y = -0.02; body.add(ring);
@@ -825,8 +839,17 @@ function buildSwordsman(id: string, kind: 'xia' | 'hwarang') {
       b.rotation.x = Math.PI / 2; b.scale.y = 0.78; waist.add(b);
       if (mat === neon[1]) glows.push(b);
     }
-    const jade = new THREE.MeshStandardMaterial({ color: 0x3fbf86, roughness: 0.2, metalness: 0.1, emissive: 0x1a6a46, emissiveIntensity: 0.4 });
-    const cord = new THREE.MeshStandardMaterial({ color: 0xb3241c, roughness: 0.7, side: THREE.DoubleSide });
+    const jade = themed
+      ? new THREE.MeshStandardMaterial({
+          color: robeSpec!.accent ?? 0xffffff,
+          roughness: 0.16, metalness: 0.25,
+          emissive: robeSpec!.glowHalo ?? robeSpec!.accent ?? 0xffffff,
+          emissiveIntensity: isNeonLike ? 1.8 : 1.0
+        })
+      : new THREE.MeshStandardMaterial({ color: 0x3fbf86, roughness: 0.2, metalness: 0.1, emissive: 0x1a6a46, emissiveIntensity: 0.4 });
+    const cord = themed
+      ? cloth(robeSpec!.secondaryGlow ?? robeSpec!.accent ?? 0xb3241c, { emissive: robeSpec!.secondaryGlow ?? robeSpec!.glowHalo ?? 0xb3241c, emissiveIntensity: isNeonLike ? 1.4 : 0.65 })
+      : new THREE.MeshStandardMaterial({ color: 0xb3241c, roughness: 0.7, side: THREE.DoubleSide });
     const hang = new THREE.Group(); hang.position.set(0.11, -0.05, 0.15); waist.add(hang);
     const string = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.07, 5), cord); string.position.y = -0.02; hang.add(string);
     const bi = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.012, 8, 24), jade); bi.position.y = -0.07; hang.add(bi);
@@ -842,7 +865,7 @@ function buildSwordsman(id: string, kind: 'xia' | 'hwarang') {
     const sleeve = new THREE.Group(); sleeve.name = `${id}-sleeve-${side}`;
     const h = shoulder.distanceTo(elbow) * 0.94;
     sleeve.add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, h, 18, 1, true), robe));
-    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.108, kind === 'xia' ? 0.012 : 0.007, 6, 22), kind === 'xia' ? trim : white);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.108, kind === 'xia' ? 0.012 : 0.007, 6, 22), themed ? gilt : kind === 'xia' ? trim : white);
     cuff.rotation.x = Math.PI / 2; cuff.position.y = -h / 2; sleeve.add(cuff);
     sleeve.position.copy(shoulder).lerp(elbow, 0.40);
     sleeve.quaternion.setFromUnitVectors(new V(0, 1, 0), shoulder.clone().sub(elbow).normalize());
@@ -856,7 +879,10 @@ buildSwordsman(HWARANG, 'hwarang');
 const GARB: Partial<Record<ClassId, string>> = { sohei: SOHEI, xia: XIA, hwarang: HWARANG };
 /** each class's own headwear (rig.ts), worn whatever the armour */
 const HEADWEAR: Partial<Record<ClassId, string>> = { sohei: 'hood', xia: 'douli', hwarang: 'gat' };
-for (const a of ARMORS) if (a.look?.aura) auras.set(a.id, buildAura(a.look.aura));
+for (const a of ARMORS) {
+  const auraKind = a.look?.aura ?? a.robe?.aura;
+  if (auraKind) auras.set(a.id, buildAura(auraKind));
+}
 
 
 
@@ -870,6 +896,36 @@ function ensureClassArmor(clsId: NewClassId, cur: Armor): string {
   return setId;
 }
 
+/** lazily build a class-specific elemental/neon tunic for Sōhei, Xiákè or Hwarang */
+function ensureClassRobe(clsId: NewClassId, cur: Armor): string {
+  const setId = `${clsId}:${cur.id}`;
+  if (!sets.has(setId)) {
+    const r = cur.robe!;
+    if (clsId === 'sohei') {
+      buildHabit(setId, {
+        habit: r.linen, kesa: r.mantle, belt: r.sash,
+        cord: r.secondaryGlow ?? r.accent ?? 0xdcc79a, mark: '僧', robeSpec: r
+      });
+    } else {
+      buildSwordsman(setId, clsId, r);
+    }
+  }
+  return setId;
+}
+
+const cachedLowerRobeMaps = new Map<string, { map: THREE.CanvasTexture; em: THREE.CanvasTexture }>();
+function getLowerRobeMaps(theme: NonNullable<RobeSpec['theme']>) {
+  let hit = cachedLowerRobeMaps.get(theme);
+  if (!hit) {
+    const pbr = specialRobeMaps(theme);
+    const map = pbr.map.clone(); map.repeat.set(3.2, 1.35); map.needsUpdate = true;
+    const em = pbr.emissive!.clone(); em.repeat.set(3.2, 1.35); em.needsUpdate = true;
+    hit = { map, em };
+    cachedLowerRobeMaps.set(theme, hit);
+  }
+  return hit;
+}
+
 /** show the armour you wear (and its helmet instead of the kasa), with your chosen colours */
 let activeAura: THREE.Group | undefined;
 let activeSkirt: HingedPanel[] | undefined;
@@ -880,13 +936,18 @@ export function dressUp(cur = armor()) {
   const own = GARB[state.cls], headwear = HEADWEAR[state.cls];
   const sohei = state.cls === 'sohei';
   let worn: string;
-  if (own && cur.look) worn = ensureClassArmor(state.cls as NewClassId, cur);
+  if (own && cur.robe?.theme) worn = ensureClassRobe(state.cls as NewClassId, cur);
+  else if (own && cur.look) worn = ensureClassArmor(state.cls as NewClassId, cur);
   else if (own && !sets.has(cur.id)) worn = own;
   else worn = cur.id;
   for (const [id, list] of sets) for (const o of list) o.visible = id === worn;
   for (const [id, g] of auras) g.visible = id === cur.id;
   activeAura = auras.get(cur.id);
   activeSkirt = skirtPanels.get(worn);
+  // Drive live animated elemental surface shaders directly on the cloth & armor plates (no floating orbs!)
+  const ef = cur.look?.elemFx ?? cur.robe?.theme;
+  armorElemFX.uArmorElem.value =
+    ef === 'fire' ? 1 : ef === 'lightning' ? 2 : ef === 'blackfire' ? 3 : ef === 'whitefire' ? 4 : ef === 'neon' ? 5 : 0;
   const helmet = !!cur.look?.helmet && !own;
   const garbed = worn === own, dressed = sets.has(worn), monk = dressed && (!!cur.robe || garbed);
   sam.fitOutfit?.(dressed);
@@ -901,14 +962,28 @@ export function dressUp(cur = armor()) {
       : layer === 'scarf' || layer === 'wrapping' ? !monk && !own : !dressed;
   }
   if (dressed && robeMat) {
-    if (habit !== undefined) robeMat.color.set(habit);
-    else if (monk) robeMat.color.set(cur.robe!.linen);
-    else if (cur.look!.neon !== undefined) robeMat.color.set(0x06070b);
-    else robeMat.color.set(cur.look!.lame).multiplyScalar(0.42).lerp(new THREE.Color(cur.look!.lace), 0.22);
-    robeMat.map = robeMat.emissiveMap = null; robeMat.emissive.copy(robeMat.color); robeMat.needsUpdate = true;
+    if (monk && cur.robe?.theme) {
+      const { map, em } = getLowerRobeMaps(cur.robe.theme);
+      robeMat.color.set(0xffffff);
+      robeMat.map = map;
+      robeMat.emissiveMap = em;
+      robeMat.emissive.set(0xffffff);
+      robeMat.emissiveIntensity = cur.robe.theme === 'blackfire' ? 1.95 : cur.robe.theme === 'neon' ? 1.85 : 1.35;
+      robeMat.needsUpdate = true;
+    } else {
+      if (habit !== undefined) robeMat.color.set(habit);
+      else if (monk) robeMat.color.set(cur.robe!.linen);
+      else if (cur.look!.neon !== undefined) robeMat.color.set(0x06070b);
+      else robeMat.color.set(cur.look!.lame).multiplyScalar(0.42).lerp(new THREE.Color(cur.look!.lace), 0.22);
+      robeMat.map = robeMat.emissiveMap = null;
+      robeMat.emissive.copy(robeMat.color);
+      robeMat.emissiveIntensity = robeBaseEmissiveIntensity;
+      robeMat.needsUpdate = true;
+    }
   } else if (robeMat && robeMap) {
     robeMat.map = robeMap; robeMat.emissiveMap = robeGlowMap;
     if (robeGlowMap) robeMat.emissive.set(0xffffff);
+    robeMat.emissiveIntensity = robeBaseEmissiveIntensity;
     robeMat.needsUpdate = true;
   }
   root.traverse(o => {
@@ -925,6 +1000,7 @@ dressUp();
 const tmpHip = new V(), tmpKneeL = new V(), tmpKneeR = new V();
 /** every frame: swing hinged kusazuri skirt panels ahead of striding legs and animate the auras */
 export function updateOutfit() {
+  armorElemFX.uElemTime.value = state.time;
   // Dynamically hinge each kusazuri tasset outward when either leg swings toward it so legs never clip the skirt
   if (activeSkirt && bones.Hips && bones.LeftLeg && bones.RightLeg) {
     root.worldToLocal(bones.Hips.getWorldPosition(tmpHip));
@@ -941,105 +1017,7 @@ export function updateOutfit() {
   const g = activeAura;
   if (!g) return;
   const t = state.time;
-  if (g.name === 'blackfire') {
-    const orbs = g.getObjectByName('orbs');
-    orbs?.children.forEach((w, i) => {
-      const a = t * 1.95 + i * (TAU / 3);
-      const rad = 0.88 + Math.sin(t * 2.5 + i * 2.1) * 0.07;
-      const y = 1.08 + Math.sin(t * 2.9 + i * 2.09) * 0.24;
-      w.position.set(Math.sin(a) * rad, y, Math.cos(a) * rad);
-      w.rotation.set(0, a + Math.PI / 2, 0);
-      const sy = 0.88 + Math.sin(t * 13 + i * 2.7) * 0.24;
-      const tongue = w.getObjectByName('tongue');
-      const tongueRim = w.getObjectByName('tongueRim');
-      if (tongue) { tongue.scale.set(1, sy, 1); tongue.rotation.y = t * 4 + i; }
-      if (tongueRim) { tongueRim.scale.set(1, sy, 1); tongueRim.rotation.y = t * 4 + i; }
-      const ringA = w.getObjectByName('ringA');
-      if (ringA) ringA.rotation.set(0.85 + Math.sin(t * 2.2 + i) * 0.4, t * 3.8 + i, t * 2.5);
-      const flare = w.getObjectByName('flare') as THREE.Sprite | undefined;
-      if (flare) flare.scale.setScalar(0.32 + Math.sin(t * 8 + i * 2) * 0.08);
-    });
-    const embers = g.getObjectByName('embers');
-    embers?.children.forEach((e, i) => {
-      const p = (t * 0.62 + i / 6) % 1;
-      const a = t * 1.5 + i * (TAU / 6) + p * 1.8;
-      const r = 0.74 * (1 - p * 0.3);
-      e.position.set(Math.sin(a) * r, 0.14 + p * 1.72, Math.cos(a) * r);
-      e.rotation.set(t * 3 + i, t * 4, 0);
-      e.scale.setScalar(Math.sin(p * Math.PI) * 1.1);
-    });
-    const r1 = g.getObjectByName('bfRing1') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
-    const r2 = g.getObjectByName('bfRing2') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
-    if (r1) { r1.scale.setScalar(1 + Math.sin(t * 3.2) * 0.035); r1.material.opacity = 0.72 + Math.sin(t * 4.5) * 0.2; }
-    if (r2) { r2.scale.setScalar(1 + Math.sin(t * 3.2 - 0.7) * 0.05); r2.material.opacity = 0.42 + Math.sin(t * 4.5) * 0.15; }
-  } else if (g.name === 'fire') {
-    const orbs = g.getObjectByName('orbs');
-    orbs?.children.forEach((w, i) => {
-      const a = t * 1.9 + i * (TAU / 3);
-      const rad = 0.86 + Math.sin(t * 2.8 + i * 2.1) * 0.07;
-      const y = 1.06 + Math.sin(t * 3.1 + i * 2.09) * 0.22;
-      w.position.set(Math.sin(a) * rad, y, Math.cos(a) * rad);
-      w.rotation.set(0, a + Math.PI / 2, 0);
-      w.scale.setScalar(0.92 + Math.sin(t * 8.5 + i * 2.3) * 0.11);
-      const tongue = w.getObjectByName('tongue');
-      if (tongue) { tongue.scale.set(1, 0.85 + Math.sin(t * 14 + i * 3) * 0.28, 1); tongue.rotation.y = t * 5 + i; }
-      const flare = w.getObjectByName('flare') as THREE.Sprite | undefined;
-      if (flare) flare.scale.setScalar(0.40 + Math.sin(t * 9.5 + i * 2) * 0.10);
-    });
-    const embers = g.getObjectByName('embers');
-    embers?.children.forEach((sp, i) => {
-      const p = (t * 0.65 + i / 6) % 1;
-      const a = t * 1.4 + i * (TAU / 6) + p * 1.5;
-      const r = 0.72 * (1 - p * 0.35);
-      sp.position.set(Math.sin(a) * r, 0.15 + p * 1.65, Math.cos(a) * r);
-      sp.scale.setScalar(0.15 * Math.sin(p * Math.PI));
-    });
-    const fr = g.getObjectByName('fireRing') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
-    const fo = g.getObjectByName('fireOuter') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
-    if (fr) { fr.rotation.z = t * 1.2; fr.scale.setScalar(1 + Math.sin(t * 4.2) * 0.05); fr.material.opacity = 0.34 + Math.sin(t * 6.5) * 0.12; }
-    if (fo) { fo.rotation.z = -t * 0.8; fo.scale.setScalar(1 + Math.sin(t * 4.2 - 0.8) * 0.08); }
-  } else if (g.name === 'lightning') {
-    const orbs = g.getObjectByName('orbs');
-    const pts: THREE.Vector3[] = [];
-    orbs?.children.forEach((w, i) => {
-      const a = t * 2.55 + i * (TAU / 3);
-      const rad = 0.84 + Math.sin(t * 6.5 + i * 2.4) * 0.06;
-      const y = 1.08 + Math.sin(t * 3.8 + i * 2.09) * 0.26;
-      w.position.set(Math.sin(a) * rad, y, Math.cos(a) * rad);
-      pts.push(w.position);
-      const snap = Math.floor(t * 18 + i * 3);
-      const core = w.getObjectByName('core');
-      if (core) core.rotation.set(t * 6 + i, t * 8, 0);
-      const ringA = w.getObjectByName('ringA');
-      if (ringA) ringA.rotation.set(snap * 1.1 + i, t * 7, snap * 0.7);
-      const ringB = w.getObjectByName('ringB');
-      if (ringB) ringB.rotation.set(-snap * 0.9, -t * 6 + i, snap * 1.3);
-      const flare = w.getObjectByName('flare') as THREE.Sprite | undefined;
-      if (flare) flare.scale.setScalar(0.46 + (Math.sin(t * 28 + i * 4.1) > 0.2 ? 0.22 : 0));
-    });
-    const arcs = g.getObjectByName('arcs');
-    if (arcs && pts.length === 3) {
-      const tick = Math.floor(t * 22);
-      arcs.children.forEach((obj, i) => {
-        const line = obj as THREE.Line;
-        const pos = line.geometry.attributes.position as THREE.BufferAttribute;
-        const p0 = pts[i], p1 = pts[(i + 1) % 3];
-        for (let s = 0; s < 9; s++) {
-          const u = s / 8;
-          const env = Math.sin(u * Math.PI);
-          const jx = env * Math.sin(tick * 13.7 + i * 5.3 + s * 4.1) * 0.16;
-          const jy = env * Math.cos(tick * 17.3 + i * 3.7 + s * 5.9) * 0.16;
-          const jz = env * Math.sin(tick * 11.1 + i * 7.1 + s * 3.3) * 0.16;
-          pos.setXYZ(s, p0.x + (p1.x - p0.x) * u + jx, p0.y + (p1.y - p0.y) * u + jy, p0.z + (p1.z - p0.z) * u + jz);
-        }
-        pos.needsUpdate = true;
-      });
-    }
-    const br = g.getObjectByName('boltRing') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
-    const bo = g.getObjectByName('boltOuter') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
-    if (br) { br.rotation.z = t * 2.8; br.material.opacity = 0.35 + (Math.sin(t * 24) > 0 ? 0.28 : 0.05); }
-    if (bo) { bo.rotation.z = -t * 1.9; bo.scale.setScalar(1 + Math.sin(t * 12) * 0.05); }
-  } else if (g.name === 'wind') {
+  if (g.name === 'wind') {
     const orbs = g.getObjectByName('orbs');
     orbs?.children.forEach((w, i) => {
       const a = t * 1.85 + i * (TAU / 3);
@@ -1069,7 +1047,12 @@ export function updateOutfit() {
     w.rotation.set(0, a + Math.PI / 2, 0);
     w.scale.setScalar(0.9 + Math.sin(t * 7.5 + i * 2) * 0.1);
   });
-  else if (g.name === 'neon') {
+  else if (g.name === 'cyberneon') {
+    const r1 = g.getObjectByName('cnRing1') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    const r2 = g.getObjectByName('cnRing2') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    if (r1) { r1.scale.setScalar(1 + Math.sin(t * 3.0) * 0.04); r1.material.opacity = 0.60 + Math.sin(t * 4.8) * 0.2; }
+    if (r2) { r2.scale.setScalar(1 + Math.sin(t * 3.0 - 0.7) * 0.06); r2.material.opacity = 0.48 + Math.sin(t * 4.8 + 1.2) * 0.18; }
+  } else if (g.name === 'neon') {
     const ring = g.getObjectByName('ring')! as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
     const outer = g.getObjectByName('outer')! as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
     const pulse = 1 + Math.sin(t * 2.6) * 0.04;

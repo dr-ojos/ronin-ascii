@@ -26,6 +26,12 @@ export const roninRobe = {
   uRoninLinen: { value: new THREE.Color() }
 };
 
+/** Live animated elemental surface shader uniforms for Fire (1), Electricity (2), Black Fire (3), White Fire (4), and Neon (5) */
+export const armorElemFX = {
+  uArmorElem: { value: 0 },
+  uElemTime: { value: 0 },
+};
+
 /** mark a skinned body material for repainting (the paint is installed by mangaFinish) */
 export function paintBody(mat: THREE.MeshStandardMaterial, paint: BodyPaint) {
   mat.map = null; mat.normalMap = null; mat.emissiveMap = null;
@@ -148,6 +154,92 @@ const ONI_PAINT = /* glsl */`
 }
 `;
 
+// Animated elemental cloth & armor surface FX (runs directly on the fabric & armor plates — no floating orbs!)
+const ELEM_HELPERS = /* glsl */`
+varying vec3 vElemPos;
+uniform float uArmorElem;
+uniform float uElemTime;
+float ehash(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float enoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(ehash(i), ehash(i + vec2(1.0, 0.0)), f.x),
+             mix(ehash(i + vec2(0.0, 1.0)), ehash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+`;
+
+const ELEM_SURFACE = /* glsl */`
+if (uArmorElem > 0.5) {
+  vec3 vdE = normalize(vViewPosition);
+  float rimE = 1.0 - clamp(dot(normal, vdE), 0.0, 1.0);
+  // Cylindrical surface coordinates around the character for seamless rising flames & crackling arcs
+  float angE = atan(vElemPos.x, vElemPos.z);
+  vec2 spE = vec2(angE * 1.4, vElemPos.y * 3.6);
+
+  if (uArmorElem < 1.5) {
+    // 1: FIRE (Armadura de Kagutsuchi) — turbulent rising flames licking across the cloth & armor plates
+    float n1 = enoise(spE * vec2(1.5, 1.4) - vec2(0.0, uElemTime * 4.8));
+    float n2 = enoise(spE * vec2(3.4, 3.2) + vec2(uElemTime * 1.2, -uElemTime * 8.4));
+    float n3 = enoise(spE * vec2(6.5, 5.5) - vec2(uElemTime * 0.9, uElemTime * 11.5));
+    float f = n1 * 0.55 + n2 * 0.30 + n3 * 0.15;
+    float flame = smoothstep(0.36, 0.78, f + rimE * 0.28);
+    float core = smoothstep(0.64, 0.90, f + rimE * 0.20);
+    vec3 fCol = mix(vec3(0.95, 0.18, 0.02), vec3(1.0, 0.55, 0.08), flame);
+    fCol = mix(fCol, vec3(1.0, 0.94, 0.62), core);
+    totalEmissiveRadiance += fCol * (flame * 1.35 + pow(rimE, 2.2) * 0.95);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.18, 0.03, 0.01), flame * 0.45);
+  } else if (uArmorElem < 2.5) {
+    // 2: ELECTRICITY (Armadura de Raijin) — snapping plasma lightning veins coursing over the cloth & steel
+    float snap = floor(uElemTime * 15.0) * 1.37;
+    float b1 = 1.0 - abs(enoise(spE * vec2(2.6, 2.2) + vec2(snap, -uElemTime * 3.2)) * 2.0 - 1.0);
+    float b2 = 1.0 - abs(enoise(spE * vec2(5.4, 4.8) - vec2(snap * 0.73, uElemTime * 6.5)) * 2.0 - 1.0);
+    float bolt = pow(b1, 7.5) * 1.4 + pow(b2, 8.5) * 1.2;
+    float arcHalo = pow(b1, 2.6) * 0.45 + pow(b2, 3.0) * 0.35;
+    float pulse = 0.75 + 0.25 * sin(uElemTime * 22.0 + vElemPos.y * 8.0);
+    vec3 eCol = vec3(0.22, 0.75, 1.0) * arcHalo + vec3(0.88, 0.98, 1.0) * bolt * 1.85;
+    totalEmissiveRadiance += (eCol + vec3(0.35, 0.82, 1.0) * pow(rimE, 2.6) * 0.85) * pulse;
+  } else if (uArmorElem < 3.5) {
+    // 3: BLACK FIRE WITH FINE WHITE NEON CONTOURS (Armadura / Túnica del Fuego Negro)
+    // Pitch-black rising abyssal flames across the cloth & plates, traced by razor-thin white neon edges
+    float n1 = enoise(spE * vec2(1.6, 1.5) - vec2(0.0, uElemTime * 4.4));
+    float n2 = enoise(spE * vec2(3.8, 3.5) + vec2(uElemTime * 1.0, -uElemTime * 7.8));
+    float f = n1 * 0.62 + n2 * 0.38;
+    float blackMask = smoothstep(0.42, 0.56, f);
+    // Razor-thin glowing white neon contour strictly along the edge of each black flame tongue
+    float flameEdge = smoothstep(0.42, 0.48, f) * (1.0 - smoothstep(0.48, 0.55, f));
+    // Crisp fine white neon silhouette outline hugging the folds of the cloth & armor plates
+    float fineRim = smoothstep(0.66, 0.84, rimE);
+    diffuseColor.rgb = mix(diffuseColor.rgb * 0.25, vec3(0.008, 0.008, 0.014), blackMask);
+    totalEmissiveRadiance *= (1.0 - blackMask * 0.75);
+    totalEmissiveRadiance += vec3(0.95, 0.98, 1.0) * (flameEdge * 2.2 + fineRim * 1.75);
+  } else if (uArmorElem < 4.5) {
+    // 4: WHITE FIRE (Túnica de Fuego Blanco) — incandescent pure-white & ice-cyan celestial flames
+    float n1 = enoise(spE * vec2(1.5, 1.4) - vec2(0.0, uElemTime * 4.6));
+    float n2 = enoise(spE * vec2(3.4, 3.2) + vec2(uElemTime * 1.1, -uElemTime * 8.2));
+    float n3 = enoise(spE * vec2(6.5, 5.5) - vec2(uElemTime * 0.8, uElemTime * 11.0));
+    float f = n1 * 0.55 + n2 * 0.30 + n3 * 0.15;
+    float flame = smoothstep(0.36, 0.76, f + rimE * 0.28);
+    float core = smoothstep(0.60, 0.88, f + rimE * 0.22);
+    vec3 fCol = mix(vec3(0.55, 0.84, 1.0), vec3(0.92, 0.97, 1.0), flame);
+    fCol = mix(fCol, vec3(1.0, 1.0, 1.0), core);
+    totalEmissiveRadiance += fCol * (flame * 1.35 + pow(rimE, 2.0) * 1.10);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.96, 1.0), flame * 0.45);
+  } else {
+    // 5: NEON (Túnica de Neón) — pulsing electric cyan & magenta energy waves and luminous silhouette rim
+    float scan = 0.5 + 0.5 * sin(vElemPos.y * 18.0 - uElemTime * 6.0 + angE * 2.0);
+    float pulse = pow(scan, 4.0);
+    float dual = 0.5 + 0.5 * sin(vElemPos.y * 5.0 - uElemTime * 2.4 + angE);
+    vec3 neonCol = mix(vec3(0.18, 0.94, 1.0), vec3(1.0, 0.22, 0.80), dual);
+    float fineRim = smoothstep(0.58, 0.86, rimE);
+    totalEmissiveRadiance += neonCol * (pulse * 0.75 + fineRim * 1.45);
+  }
+}
+`;
+
 // rim light: the edge turned away from the camera catches a painted light on its contour.
 // In Mode T (sunset), characters get a stronger golden-hour hero rim and subtle shadow lift so
 // they never disappear into dark foliage or cast shadows while keeping ground shadows crisp.
@@ -211,6 +303,7 @@ function install(mat: THREE.MeshStandardMaterial) {
   // glowing pieces (the blade, auras) stay solid light; everything else wears letters on its surface
   const e = mat.emissive, glow = Math.max(e.r, e.g, e.b) * mat.emissiveIntensity;
   const glyphs = !mat.transparent && glow < 0.8 && !mat.userData.noGlyphs;
+  const hasElemFx = !!mat.userData.playerElemFx;
   const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey.bind(mat);
   mat.onBeforeCompile = (sh, r) => {
     prev.call(mat, sh, r);
@@ -225,15 +318,21 @@ function install(mat: THREE.MeshStandardMaterial) {
       sh.fragmentShader = BODY_COMMON + (isRonin ? RONIN_UNIFORMS : '') + sh.fragmentShader.replace('#include <color_fragment>',
         '#include <color_fragment>\n' + (isRonin ? RONIN_CLOTH : ONI_PAINT));
     }
+    if (hasElemFx) {
+      Object.assign(sh.uniforms, armorElemFX);
+      sh.vertexShader = 'varying vec3 vElemPos;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvElemPos = position;');
+    }
     sh.uniforms.uFormKey = formKey;
     sh.uniforms.uHeroSunset = detailedSurfaces;
     sh.uniforms.uHeroSunDir = sunsetSunDir;
-    sh.fragmentShader = 'uniform vec3 uFormKey;\nuniform float uHeroSunset;\nuniform vec3 uHeroSunDir;\n' + sh.fragmentShader
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + RIM)
-      .replace('#include <opaque_fragment>', FORM + '#include <opaque_fragment>');
+    sh.fragmentShader = 'uniform vec3 uFormKey;\nuniform float uHeroSunset;\nuniform vec3 uHeroSunDir;\n'
+      + (hasElemFx ? ELEM_HELPERS : '')
+      + sh.fragmentShader
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + RIM + (hasElemFx ? ELEM_SURFACE : ''))
+        .replace('#include <opaque_fragment>', FORM + '#include <opaque_fragment>');
     if (glyphs) glyphShader(sh, sub, !!mat.userData.glyphRest);
   };
-  mat.customProgramCacheKey = () => prevKey() + '|manga2' + (paint ? '-' + paint.kind : '') + (glyphs ? '|glyph' + sub + (mat.userData.glyphRest ? 'r' : '') : '');
+  mat.customProgramCacheKey = () => prevKey() + '|manga2' + (paint ? '-' + paint.kind : '') + (hasElemFx ? '|elemfx' : '') + (glyphs ? '|glyph' + sub + (mat.userData.glyphRest ? 'r' : '') : '');
   mat.needsUpdate = true;
 }
 

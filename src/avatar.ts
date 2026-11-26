@@ -29,6 +29,8 @@ export const sam = rigGltf ? createRealSamurai(rigGltf) : createSamurai();
       // only a whisper of self-light so the blacks keep their colour; the scene lights do the rest
       if (m.map) { m.emissive.set(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.04; }
       else { m.emissive.copy(m.color); m.emissiveIntensity = 0.05; }
+      // Enable live elemental cloth/surface shader on the player's robe, sleeves, hood, and body
+      if (!m.userData.asciiSkin && m.userData.role !== 'hat') m.userData.playerElemFx = true;
       done.set(o.material, m);
     }
     o.material = m;
