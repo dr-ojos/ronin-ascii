@@ -59,6 +59,7 @@ export function updateCamera(dt: number) {
     camera.position.x += rnd(-1, 1) * state.shake * 0.25; camera.position.y += rnd(-1, 1) * state.shake * 0.25;
     state.shake = Math.max(0, state.shake - dt * 2.5);
   }
+  camRay.camera = camera;
   camRay.set(camTarget, tmp.subVectors(camera.position, camTarget).normalize());
   camRay.far = camDist;
   const hit = camRay.intersectObjects(nearBlockers(player.pos.x, player.pos.z), true)[0];

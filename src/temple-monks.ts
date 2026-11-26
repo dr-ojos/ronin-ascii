@@ -1226,7 +1226,10 @@ export function createTempleMonk(temple: TemplePlace): TempleMonkRig {
     const m = (o as THREE.Mesh).material as THREE.Material | undefined;
     if (m && m.transparent) { o.castShadow = false; o.receiveShadow = false; }
   });
-  root.traverse(o => o.layers.enable(ACTOR_LAYER));
+  root.traverse(o => {
+    o.layers.enable(ACTOR_LAYER);
+    o.raycast = () => {};   // NPC meshes and FX sprites must not block or crash the camera raycaster
+  });
 
   const phase = (temple.x * 0.13 + temple.z * 0.07) % TAU;
   return { root, body, head, staff, halo, mandala, motes, swayParts, glowMats, phase };
