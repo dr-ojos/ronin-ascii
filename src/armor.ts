@@ -16,7 +16,7 @@ export interface Armor {
   /** how it looks on you (outfit.ts): lacquered plates (lame), the silk lacing that binds them (lace), the metal
    *  fittings, size of the shoulder guards, helmet and its crest, shin guards, aura, how much it glows,
    *  and optional glowing neon edge colour (TRON-style dark plates with luminous circuit borders) */
-  look?: { lame: number; lace: number; metal: number; sode: number; helmet?: 'jingasa' | 'crescent' | 'kuwagata' | 'sun'; shins?: boolean; aura?: 'foxfire' | 'gold' | 'neon'; glow?: number; neon?: number };
+  look?: { lame: number; lace: number; metal: number; sode: number; helmet?: 'jingasa' | 'crescent' | 'kuwagata' | 'sun'; shins?: boolean; aura?: 'foxfire' | 'wind' | 'gold' | 'neon'; glow?: number; neon?: number };
 }
 export const ARMORS: Armor[] = [
   { id: 'kimono',   name: 'Kimono de viaje',        desc: 'tela y polvo del camino',                     price: 0, tier: 0,    hp: 0,   guard: 0 },
@@ -48,7 +48,7 @@ export const ARMORS: Armor[] = [
   { id: 'coraza-sepulcral', name: 'Coraza del Oni Sepulcral', desc: 'reliquia del oni sepulcral: placas forjadas en ceniza que cierran heridas en combate', bossDrop: true, price: 0, tier: 2.4, hp: 70, guard: 0.28, regen: 0.6,
     look: { lame: 0x3b1a14, lace: 0xd96a38, metal: 0xffb353, sode: 1.65, helmet: 'kuwagata', shins: true, glow: 0.16 } },
   { id: 'manto-tengu', name: 'Armadura de los Cinco Vientos', desc: 'reliquia del gran tengu: ligera como el vendaval, corres y esquivas como el viento', bossDrop: true, price: 0, tier: 2.65, hp: 65, guard: 0.24, dash: 0.64, run: 1.18,
-    look: { lame: 0x163c35, lace: 0x62d4b4, metal: 0xc8ffde, sode: 1.15, helmet: 'crescent', shins: true, aura: 'foxfire', glow: 0.18 } },
+    look: { lame: 0x163c35, lace: 0x62d4b4, metal: 0xc8ffde, sode: 1.15, helmet: 'crescent', shins: true, aura: 'wind', glow: 0.18 } },
   { id: 'yoroi-shuten', name: 'O-yoroi del Rey Oni', desc: 'reliquia de Shuten: coraza infernal de gran resistencia que regenera vida sin cesar', bossDrop: true, price: 0, tier: 3, hp: 135, guard: 0.44, regen: 1.2, run: 0.96,
     look: { lame: 0x4c0c0e, lace: 0xff3b24, metal: 0xffe066, sode: 2, helmet: 'sun', shins: true, aura: 'gold', glow: 0.28 } },
   { id: 'coraza-escarcha', name: 'Coraza de Escarcha Eterna', desc: 'reliquia de Yuki: placas de hielo luminoso, ágil y fría como la ventisca', bossDrop: true, price: 0, tier: 2.85, hp: 85, guard: 0.32, dash: 0.7, run: 1.1, regen: 0.9,

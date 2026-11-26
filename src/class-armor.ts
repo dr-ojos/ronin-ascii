@@ -47,6 +47,396 @@ function makeTex(
 
 interface PBRMaps { map: THREE.CanvasTexture; bump: THREE.CanvasTexture; rough: THREE.CanvasTexture; emissive?: THREE.CanvasTexture }
 
+export interface FullPBRMaps {
+  map: THREE.CanvasTexture;
+  normal: THREE.CanvasTexture;
+  rough: THREE.CanvasTexture;
+  metal: THREE.CanvasTexture;
+  emissive?: THREE.CanvasTexture;
+}
+
+function hash2(x: number, y: number) {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
+function addForgedGrain(x: CanvasRenderingContext2D, w: number, h: number, intensity = 1) {
+  for (let i = 0; i < 180; i++) {
+    const xx = hash2(i, 1.7) * w, yy = hash2(i, 3.1) * h, len = 14 + hash2(i, 5.3) * 64;
+    x.fillStyle = hash2(i, 7.9) > 0.48
+      ? `rgba(255,255,255,${(0.036 * intensity).toFixed(3)})`
+      : `rgba(0,0,0,${(0.044 * intensity).toFixed(3)})`;
+    x.fillRect(xx, yy, len, 1);
+  }
+  for (let i = 0; i < 110; i++) {
+    const cx = hash2(i, 11.2) * w, cy = hash2(i, 13.8) * h, r = 2 + hash2(i, 17.5) * 6.5;
+    const g = x.createRadialGradient(cx - r * 0.25, cy - r * 0.25, 0.3, cx, cy, r);
+    g.addColorStop(0, `rgba(255,255,255,${(0.048 * intensity).toFixed(3)})`);
+    g.addColorStop(0.6, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(0,0,0,${(0.056 * intensity).toFixed(3)})`);
+    x.fillStyle = g;
+    x.beginPath(); x.arc(cx, cy, r, 0, TAU); x.fill();
+  }
+}
+
+/** Convert a heightfield canvas into a crisp tangent-space normal map via 3x3 Sobel filter */
+export function heightToNormalTex(heightCanvas: HTMLCanvasElement, strength = 2.4, repeat = true): THREE.CanvasTexture {
+  const w = heightCanvas.width, h = heightCanvas.height;
+  const src = heightCanvas.getContext('2d')!.getImageData(0, 0, w, h).data;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d')!;
+  const img = ctx.createImageData(w, h);
+  const dst = img.data;
+  const sample = (x: number, y: number) => {
+    const xx = repeat ? ((x % w) + w) % w : Math.max(0, Math.min(w - 1, x));
+    const yy = repeat ? ((y % h) + h) % h : Math.max(0, Math.min(h - 1, y));
+    return src[(yy * w + xx) * 4] / 255;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const tl = sample(x - 1, y - 1), tc = sample(x, y - 1), tr = sample(x + 1, y - 1);
+      const ml = sample(x - 1, y),                           mr = sample(x + 1, y);
+      const bl = sample(x - 1, y + 1), bc = sample(x, y + 1), br = sample(x + 1, y + 1);
+      const dx = (tr + 2 * mr + br - (tl + 2 * ml + bl)) * strength;
+      const dy = (bl + 2 * bc + br - (tl + 2 * tc + tr)) * strength;
+      const inv = 1 / Math.hypot(dx, dy, 1.0);
+      const idx = (y * w + x) * 4;
+      dst[idx]     = ((-dx * inv) * 0.5 + 0.5) * 255;
+      dst[idx + 1] = ((dy * inv) * 0.5 + 0.5) * 255;
+      dst[idx + 2] = (inv * 0.5 + 0.5) * 255;
+      dst[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(out);
+  t.colorSpace = THREE.NoColorSpace;
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+let cachedMetalPBR: { normal: THREE.CanvasTexture; rough: THREE.CanvasTexture } | null = null;
+export function forgedMetalPBR() {
+  if (cachedMetalPBR) return cachedMetalPBR;
+  const S = 256;
+  const hc = document.createElement('canvas'); hc.width = hc.height = S;
+  const hx = hc.getContext('2d')!;
+  hx.fillStyle = '#808080'; hx.fillRect(0, 0, S, S);
+  for (let y = 0; y < S; y += 2) {
+    const v = 114 + Math.floor(hash2(y, 19.1) * 28);
+    hx.fillStyle = `rgb(${v},${v},${v})`; hx.fillRect(0, y, S, 1);
+  }
+  addForgedGrain(hx, S, S, 1.7);
+  const rough = makeTex(S, S, x => {
+    x.fillStyle = '#3c3c3c'; x.fillRect(0, 0, S, S);
+    addForgedGrain(x, S, S, 1.4);
+  }, false);
+  cachedMetalPBR = { normal: heightToNormalTex(hc, 1.7), rough };
+  return cachedMetalPBR;
+}
+
+let cachedLacquerPBR: { normal: THREE.CanvasTexture; rough: THREE.CanvasTexture } | null = null;
+export function urushiLacquerPBR() {
+  if (cachedLacquerPBR) return cachedLacquerPBR;
+  const S = 256;
+  const hc = document.createElement('canvas'); hc.width = hc.height = S;
+  const hx = hc.getContext('2d')!;
+  hx.fillStyle = '#808080'; hx.fillRect(0, 0, S, S);
+  addForgedGrain(hx, S, S, 1.1);
+  const rough = makeTex(S, S, x => {
+    x.fillStyle = '#343434'; x.fillRect(0, 0, S, S);
+    addForgedGrain(x, S, S, 0.85);
+  }, false);
+  cachedLacquerPBR = { normal: heightToNormalTex(hc, 1.1), rough };
+  return cachedLacquerPBR;
+}
+
+let cachedSilkPBR: { normal: THREE.CanvasTexture; rough: THREE.CanvasTexture } | null = null;
+export function braidedSilkPBR() {
+  if (cachedSilkPBR) return cachedSilkPBR;
+  const S = 128;
+  const hc = document.createElement('canvas'); hc.width = hc.height = S;
+  const hx = hc.getContext('2d')!;
+  hx.fillStyle = '#686868'; hx.fillRect(0, 0, S, S);
+  for (let y = 0; y < S; y += 8) for (let xx = 0; xx < S; xx += 8) {
+    hx.fillStyle = ((y / 8 + xx / 8) & 1) === 0 ? '#d8d8d8' : '#3a3a3a';
+    hx.fillRect(xx + 1, y + 1, 6, 6);
+  }
+  const rough = makeTex(S, S, x => { x.fillStyle = '#dcdcdc'; x.fillRect(0, 0, S, S); }, false);
+  cachedSilkPBR = { normal: heightToNormalTex(hc, 2.1), rough };
+  return cachedSilkPBR;
+}
+
+/** High-detail 512x512 full PBR kozane lamellar plates with Sobel normal map, metalness map & maki-e inlay */
+export function roninLamellarPBR(l: NonNullable<Armor['look']>, armorId: string): FullPBRMaps {
+  const S = 512, rows = 5, rh = S / rows, scales = 20, sw = S / scales;
+  const isWind = armorId === 'manto-tengu';
+  const isEmber = armorId === 'yoroi-shuten' || armorId === 'coraza-sepulcral';
+  const isFrost = armorId === 'coraza-escarcha';
+  const isImperial = armorId === 'hachiman' || armorId === 'oyoroi' || armorId === 'coraza-tambor';
+
+  const map = makeTex(S, S, x => {
+    for (let r = 0; r < rows; r++) {
+      const y0 = r * rh;
+      const g = x.createLinearGradient(0, y0, 0, y0 + rh);
+      g.addColorStop(0.0, css(l.lame, 1.72));
+      g.addColorStop(0.10, css(l.lame, 1.24));
+      g.addColorStop(0.50, css(l.lame, 0.94));
+      g.addColorStop(0.84, css(l.lame, 0.56));
+      g.addColorStop(1.0, css(l.lame, 0.24));
+      x.fillStyle = g; x.fillRect(0, y0, S, rh);
+
+      for (let s = 0; s < scales; s++) {
+        const sx = s * sw;
+        const sg = x.createLinearGradient(sx, y0, sx + sw, y0);
+        sg.addColorStop(0, 'rgba(0,0,0,0.48)');
+        sg.addColorStop(0.16, 'rgba(255,255,255,0.20)');
+        sg.addColorStop(0.55, 'rgba(255,255,255,0.04)');
+        sg.addColorStop(1, 'rgba(0,0,0,0.54)');
+        x.fillStyle = sg; x.fillRect(sx, y0 + 7, sw, rh - 14);
+        x.fillStyle = css(l.metal, 1.35, 0.25);
+        x.fillRect(sx + 2, y0 + 8, sw - 4, 2.2);
+      }
+
+      // Subtle maki-e gold/silver lacquer motifs on alternating rows
+      if (r === 1 || r === 3) {
+        x.save();
+        x.strokeStyle = css(l.metal, 1.35, isImperial ? 0.58 : 0.30);
+        x.lineWidth = isImperial ? 2.0 : 1.4;
+        if (isWind) {
+          for (let wx = 16; wx < S; wx += 64) {
+            x.beginPath();
+            x.moveTo(wx - 14, y0 + rh * 0.54);
+            x.bezierCurveTo(wx, y0 + rh * 0.22, wx + 22, y0 + rh * 0.24, wx + 30, y0 + rh * 0.48);
+            x.stroke();
+          }
+        } else {
+          for (let wx = 0; wx < S + 32; wx += 32) {
+            for (const rr of [12, 7.5]) { x.beginPath(); x.arc(wx, y0 + rh * 0.64, rr, Math.PI, 0); x.stroke(); }
+          }
+        }
+        x.restore();
+      }
+
+      // Deep ambient occlusion under overlapping lame
+      const sh = x.createLinearGradient(0, y0 + rh - 14, 0, y0 + rh);
+      sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(0.5, 'rgba(0,0,0,0.40)'); sh.addColorStop(1, 'rgba(0,0,0,0.86)');
+      x.fillStyle = sh; x.fillRect(0, y0 + rh - 14, S, 14);
+
+      // Top silk braid + metallic fukurin trim
+      x.fillStyle = css(l.lace, 0.85); x.fillRect(0, y0, S, 5);
+      x.fillStyle = css(l.metal, 1.35); x.fillRect(0, y0 + 5, S, 3.2);
+
+      // Braided sugake odoshi paired silk cords
+      for (let cx = 32; cx < S; cx += 64) {
+        for (const dx of [-11, 4]) {
+          const bx = cx + dx;
+          x.fillStyle = 'rgba(0,0,0,0.55)'; x.fillRect(bx - 1.5, y0 + 1, 12, rh - 4);
+          const cg = x.createLinearGradient(bx, 0, bx + 9, 0);
+          cg.addColorStop(0, css(l.lace, 0.55)); cg.addColorStop(0.32, css(l.lace, 1.28)); cg.addColorStop(1, css(l.lace, 0.48));
+          x.fillStyle = cg; x.fillRect(bx, y0 + 1, 9, rh - 5);
+          x.fillStyle = css(l.lace, 0.38);
+          for (let yy = y0 + 4; yy < y0 + rh - 6; yy += 6) {
+            x.fillRect(bx, yy, 4.5, 2.2); x.fillRect(bx + 4.5, yy + 3, 4.5, 2.2);
+          }
+        }
+      }
+
+      // Domed gilded rivets (byō) with floral rosette washers
+      if (r === 0 || r === 2 || r === 4) {
+        for (let cx = 0; cx < S; cx += 64) {
+          const cy = y0 + rh * 0.46;
+          x.fillStyle = 'rgba(0,0,0,0.58)'; x.beginPath(); x.arc(cx, cy + 1.5, 7, 0, TAU); x.fill();
+          const rg = x.createRadialGradient(cx - 1.6, cy - 1.6, 0.6, cx, cy, 5.2);
+          rg.addColorStop(0, css(l.metal, 1.9)); rg.addColorStop(0.6, css(l.metal, 1.1)); rg.addColorStop(1, css(l.metal, 0.35));
+          x.fillStyle = rg; x.beginPath(); x.arc(cx, cy, 5.2, 0, TAU); x.fill();
+        }
+      }
+
+      // Hishinui cross-knots along bottom lame
+      if (r === rows - 1) {
+        x.lineCap = 'round';
+        for (let cx = 16; cx < S; cx += 32) {
+          const cy = y0 + rh * 0.68;
+          x.strokeStyle = 'rgba(0,0,0,0.6)'; x.lineWidth = 5.5;
+          x.beginPath(); x.moveTo(cx - 7, cy - 5); x.lineTo(cx + 7, cy + 7); x.moveTo(cx + 7, cy - 5); x.lineTo(cx - 7, cy + 7); x.stroke();
+          x.strokeStyle = css(l.lace, 1.3); x.lineWidth = 3.2;
+          x.beginPath(); x.moveTo(cx - 7, cy - 6); x.lineTo(cx + 7, cy + 6); x.moveTo(cx + 7, cy - 6); x.lineTo(cx - 7, cy + 6); x.stroke();
+        }
+      }
+    }
+    addForgedGrain(x, S, S, 0.65);
+  });
+
+  const heightC = document.createElement('canvas'); heightC.width = heightC.height = S;
+  const hx = heightC.getContext('2d')!;
+  hx.fillStyle = '#707070'; hx.fillRect(0, 0, S, S);
+  for (let r = 0; r < rows; r++) {
+    const y0 = r * rh;
+    const g = hx.createLinearGradient(0, y0, 0, y0 + rh);
+    g.addColorStop(0, '#e0e0e0'); g.addColorStop(0.10, '#c0c0c0'); g.addColorStop(0.82, '#888888'); g.addColorStop(1, '#121212');
+    hx.fillStyle = g; hx.fillRect(0, y0, S, rh);
+    for (let s = 0; s < scales; s++) {
+      hx.fillStyle = '#242424'; hx.fillRect(s * sw, y0 + 6, 2.4, rh - 10);
+      hx.fillStyle = '#e6e6e6'; hx.fillRect(s * sw + 3, y0 + 7, sw - 6, 3.5);
+    }
+    hx.fillStyle = '#ececec'; hx.fillRect(0, y0 + 5, S, 3.5);
+    for (let cx = 32; cx < S; cx += 64) {
+      for (const dx of [-11, 4]) {
+        const bx = cx + dx;
+        hx.fillStyle = '#f2f2f2'; hx.fillRect(bx, y0 + 1, 9, rh - 5);
+        hx.fillStyle = '#7e7e7e';
+        for (let yy = y0 + 4; yy < y0 + rh - 6; yy += 6) {
+          hx.fillRect(bx, yy, 4.5, 2.2); hx.fillRect(bx + 4.5, yy + 3, 4.5, 2.2);
+        }
+      }
+    }
+    if (r === 0 || r === 2 || r === 4) {
+      for (let cx = 0; cx < S; cx += 64) {
+        const cy = y0 + rh * 0.46;
+        const rg = hx.createRadialGradient(cx, cy, 0.5, cx, cy, 6.5);
+        rg.addColorStop(0, '#ffffff'); rg.addColorStop(0.6, '#d8d8d8'); rg.addColorStop(1, '#363636');
+        hx.fillStyle = rg; hx.beginPath(); hx.arc(cx, cy, 6.5, 0, TAU); hx.fill();
+      }
+    }
+  }
+  addForgedGrain(hx, S, S, 0.7);
+
+  const rough = makeTex(S, S, x => {
+    x.fillStyle = '#323232'; x.fillRect(0, 0, S, S);
+    for (let r = 0; r < rows; r++) {
+      const y0 = r * rh;
+      x.fillStyle = '#dcdcdc'; x.fillRect(0, y0, S, 5);
+      for (let cx = 32; cx < S; cx += 64) { x.fillRect(cx - 11, y0, 9, rh); x.fillRect(cx + 4, y0, 9, rh); }
+      x.fillStyle = '#1e1e1e'; x.fillRect(0, y0 + 5, S, 3.2);
+      if (r === 0 || r === 2 || r === 4) for (let cx = 0; cx < S; cx += 64) { x.beginPath(); x.arc(cx, y0 + rh * 0.46, 5.5, 0, TAU); x.fill(); }
+    }
+  }, false);
+
+  const metal = makeTex(S, S, x => {
+    x.fillStyle = '#444444'; x.fillRect(0, 0, S, S);
+    for (let r = 0; r < rows; r++) {
+      const y0 = r * rh;
+      x.fillStyle = '#000000'; x.fillRect(0, y0, S, 5);
+      for (let cx = 32; cx < S; cx += 64) { x.fillRect(cx - 11, y0, 9, rh); x.fillRect(cx + 4, y0, 9, rh); }
+      x.fillStyle = '#ffffff'; x.fillRect(0, y0 + 5, S, 3.2);
+      if (r === 0 || r === 2 || r === 4) for (let cx = 0; cx < S; cx += 64) { x.beginPath(); x.arc(cx, y0 + rh * 0.46, 5.5, 0, TAU); x.fill(); }
+    }
+  }, false);
+
+  let emissive: THREE.CanvasTexture | undefined;
+  if (isWind || isEmber || isFrost) {
+    const glowCol = isWind ? '#5ef5c8' : isEmber ? '#ff5418' : '#7ae8ff';
+    emissive = makeTex(S, S, x => {
+      x.fillStyle = '#000000'; x.fillRect(0, 0, S, S);
+      x.strokeStyle = glowCol; x.shadowColor = glowCol; x.shadowBlur = 7;
+      for (let r = 0; r < rows; r++) {
+        const y0 = r * rh;
+        x.lineWidth = 1.8;
+        x.beginPath(); x.moveTo(0, y0 + 7); x.lineTo(S, y0 + 7); x.stroke();
+        if (r === 1 || r === 3) {
+          x.lineWidth = 2.0;
+          for (let wx = 16; wx < S; wx += 64) {
+            x.beginPath();
+            if (isWind) {
+              x.moveTo(wx - 14, y0 + rh * 0.54);
+              x.bezierCurveTo(wx, y0 + rh * 0.24, wx + 22, y0 + rh * 0.26, wx + 30, y0 + rh * 0.48);
+            } else if (isEmber) {
+              x.moveTo(wx - 12, y0 + rh * 0.35); x.lineTo(wx + 4, y0 + rh * 0.58); x.lineTo(wx + 20, y0 + rh * 0.42);
+            } else {
+              x.moveTo(wx, y0 + rh * 0.26); x.lineTo(wx + 12, y0 + rh * 0.5); x.lineTo(wx, y0 + rh * 0.74); x.lineTo(wx - 12, y0 + rh * 0.5); x.closePath();
+            }
+            x.stroke();
+          }
+        }
+      }
+    });
+  }
+
+  return { map, normal: heightToNormalTex(heightC, 2.6), rough, metal, emissive };
+}
+
+/** Kabuto bowl 24-gore suji-bachi PBR maps (map + Sobel normal + rough) */
+export function roninHachiPBR(l: NonNullable<Armor['look']>) {
+  const W = 512, H = 256, n = 24, gw = W / n;
+  const map = makeTex(W, H, x => {
+    for (let i = 0; i < n; i++) {
+      const x0 = i * gw;
+      const g = x.createLinearGradient(x0, 0, x0 + gw, 0);
+      g.addColorStop(0, css(l.lame, 0.48)); g.addColorStop(0.5, css(l.lame, 1.48)); g.addColorStop(1, css(l.lame, 0.45));
+      x.fillStyle = g; x.fillRect(x0, 0, gw, H);
+      x.fillStyle = css(l.metal, 1.15); x.fillRect(x0 - 1.2, 0, 2.4, H);
+      for (let y = 18; y < H - 16; y += 22) {
+        const cx = x0 + gw * 0.5;
+        const rg = x.createRadialGradient(cx - 1, y - 1, 0.4, cx, y, 2.8);
+        rg.addColorStop(0, css(l.metal, 1.85)); rg.addColorStop(0.65, css(l.metal, 1.1)); rg.addColorStop(1, css(l.metal, 0.4));
+        x.fillStyle = rg; x.beginPath(); x.arc(cx, y, 2.8, 0, TAU); x.fill();
+      }
+    }
+    const rim = x.createLinearGradient(0, 0, 0, 26);
+    rim.addColorStop(0, 'rgba(0,0,0,0.58)'); rim.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = rim; x.fillRect(0, 0, W, 26);
+    addForgedGrain(x, W, H, 0.6);
+  });
+  const hc = document.createElement('canvas'); hc.width = W; hc.height = H;
+  const hx = hc.getContext('2d')!;
+  hx.fillStyle = '#707070'; hx.fillRect(0, 0, W, H);
+  for (let i = 0; i < n; i++) {
+    const x0 = i * gw;
+    const g = hx.createLinearGradient(x0, 0, x0 + gw, 0);
+    g.addColorStop(0, '#303030'); g.addColorStop(0.5, '#c6c6c6'); g.addColorStop(1, '#303030');
+    hx.fillStyle = g; hx.fillRect(x0, 0, gw, H);
+    hx.fillStyle = '#f2f2f2'; hx.fillRect(x0 - 1.2, 0, 2.4, H);
+    for (let y = 18; y < H - 16; y += 22) {
+      const cx = x0 + gw * 0.5;
+      const rg = hx.createRadialGradient(cx, y, 0.4, cx, y, 3.4);
+      rg.addColorStop(0, '#ffffff'); rg.addColorStop(0.7, '#d8d8d8'); rg.addColorStop(1, '#404040');
+      hx.fillStyle = rg; hx.beginPath(); hx.arc(cx, y, 3.4, 0, TAU); hx.fill();
+    }
+  }
+  const rough = makeTex(W, H, x => {
+    x.fillStyle = '#404040'; x.fillRect(0, 0, W, H);
+    x.fillStyle = '#202020';
+    for (let i = 0; i < n; i++) {
+      x.fillRect(i * gw - 1.2, 0, 2.4, H);
+      for (let y = 18; y < H - 16; y += 22) { x.beginPath(); x.arc(i * gw + gw * 0.5, y, 3, 0, TAU); x.fill(); }
+    }
+  }, false);
+  return { map, normal: heightToNormalTex(hc, 2.4), rough };
+}
+
+/** Embossed Ronin chest medallion (5-wind swirling crest for Cinco Vientos, mitsudomoe for all other Ronin sets) */
+export function roninMonTex(l: NonNullable<Armor['look']>, armorId?: string) {
+  return makeTex(256, 256, (x, w, h) => {
+    const cx = w / 2, cy = h / 2;
+    const bg = x.createRadialGradient(cx - 24, cy - 24, 10, cx, cy, 124);
+    bg.addColorStop(0, css(l.lame, 1.35)); bg.addColorStop(0.7, css(l.lame, 0.72)); bg.addColorStop(1, css(l.lame, 0.32));
+    x.fillStyle = bg; x.beginPath(); x.arc(cx, cy, 124, 0, TAU); x.fill();
+    x.strokeStyle = css(l.metal, 1.35); x.lineWidth = 10; x.beginPath(); x.arc(cx, cy, 114, 0, TAU); x.stroke();
+    x.strokeStyle = css(l.lace, 0.95); x.lineWidth = 4; x.beginPath(); x.arc(cx, cy, 98, 0, TAU); x.stroke();
+    x.fillStyle = css(l.metal, 1.75);
+    for (let i = 0; i < 16; i++) {
+      const a = i * TAU / 16;
+      x.beginPath(); x.arc(cx + Math.cos(a) * 106, cy + Math.sin(a) * 106, 3.8, 0, TAU); x.fill();
+    }
+    const blades = armorId === 'manto-tengu' ? 5 : 3;
+    const r = 74;
+    x.save(); x.translate(cx, cy);
+    for (let i = 0; i < blades; i++) {
+      x.save(); x.rotate(i * TAU / blades);
+      const tg = x.createRadialGradient(0, -r * 0.36, 3, 0, -r * 0.36, r * 0.34);
+      tg.addColorStop(0, css(l.metal, 1.85)); tg.addColorStop(0.65, css(l.metal, 1.12)); tg.addColorStop(1, css(l.metal, 0.58));
+      x.fillStyle = tg;
+      const bw = r * (blades === 5 ? 0.19 : 0.25);
+      x.beginPath(); x.arc(0, -r * 0.38, bw, 0, TAU); x.fill();
+      x.beginPath(); x.moveTo(bw, -r * 0.38); x.quadraticCurveTo(r * 0.38, r * 0.18, -r * 0.12, r * 0.58); x.quadraticCurveTo(r * 0.12, r * 0.12, -bw, -r * 0.38); x.fill();
+      x.restore();
+    }
+    x.restore();
+  }, true, false);
+}
+
 /** TRON-style dark obsidian carbon armor plates bordered by razor-sharp glowing white neon circuits */
 export function tronPlateMaps(neonColor = 0xffffff): PBRMaps {
   const S = 512;
@@ -640,7 +1030,7 @@ interface TorsoSpec {
  * Replaces a plain squashed cylinder with sculpted pectorals, waist taper, lumbar back hollow,
  * collarbone slope, and overlapping front hem so armor fits the figure cleanly with zero gaps.
  */
-function buildContouredTorso(spec: TorsoSpec, radialSegs = 48): THREE.BufferGeometry {
+export function buildContouredTorso(spec: TorsoSpec, radialSegs = 48): THREE.BufferGeometry {
   // 13 vertical rings from waist overlap (-0.268) to neck/collar (+0.256)
   const rings: [number, number, number, number][] = [
     // [y, rx, rz, pecWeight]
@@ -718,7 +1108,7 @@ function buildContouredTorso(spec: TorsoSpec, radialSegs = 48): THREE.BufferGeom
 }
 
 /** Curved tube along an elliptical arc in the xz plane */
-function ellipseArcTube(
+export function ellipseArcTube(
   rx: number, rz: number, y: number, th0: number, len: number, tube: number, mat: THREE.Material, segs = 28
 ) {
   const pts: THREE.Vector3[] = [];
@@ -824,7 +1214,7 @@ function buildSculptedPauldron(
 /**
  * Fitted forearm vambrace (kote / hubi / tohsu) oriented along the forearm bone from elbow to wrist.
  */
-function buildForearmVambrace(
+export function buildForearmVambrace(
   len: number,
   armorMat: THREE.Material,
   lacquerMat: THREE.Material,
@@ -860,7 +1250,7 @@ function buildForearmVambrace(
 /**
  * Contoured shin greave with sculpted domed kneecap (tateage / knee-cop) and ankle guard.
  */
-function buildContouredGreave(
+export function buildContouredGreave(
   len: number,
   armorMat: THREE.Material,
   lacquerMat: THREE.Material,
@@ -897,7 +1287,7 @@ function buildContouredGreave(
 /**
  * Custom sculpted curved tasset panel (waist armor skirt piece) with optional pointed/scalloped hem.
  */
-function buildTassetPanel(
+export function buildTassetPanel(
   rTop: number, rBot: number, h: number, th0: number, span: number,
   pointDrop: number, mat: THREE.Material
 ): THREE.Mesh {
@@ -937,60 +1327,85 @@ function makeClassMaterials(cls: NewClassId, a: Armor) {
   const pbr = isNeon
     ? tronPlateMaps(l.neon)
     : cls === 'sohei' ? soheiLamellarMaps(l) : cls === 'xia' ? xiaShanwenMaps(l) : hwarangBrigandineMaps(l);
+  const normalTex = heightToNormalTex(pbr.bump.image as HTMLCanvasElement, cls === 'xia' ? 2.6 : 2.3);
   const isClothFaced = !isNeon && cls === 'hwarang';
+  const lacPbr = urushiLacquerPBR();
+  const metPbr = forgedMetalPBR();
+  const silkPbr = braidedSilkPBR();
 
   const patterned = (rx: number, ry: number) => {
     const map = pbr.map.clone(); map.repeat.set(rx, ry); map.needsUpdate = true;
-    const bump = pbr.bump.clone(); bump.repeat.set(rx, ry); bump.needsUpdate = true;
+    const norm = normalTex.clone(); norm.repeat.set(rx, ry); norm.needsUpdate = true;
     const rough = pbr.rough.clone(); rough.repeat.set(rx, ry); rough.needsUpdate = true;
-    const em = pbr.emissive ? pbr.emissive.clone() : map;
-    if (pbr.emissive) { em.repeat.set(rx, ry); em.needsUpdate = true; }
-    return new THREE.MeshStandardMaterial({
+    const em = pbr.emissive ? pbr.emissive.clone() : null;
+    if (em) { em.repeat.set(rx, ry); em.needsUpdate = true; }
+    return new THREE.MeshPhysicalMaterial({
       map,
-      bumpMap: bump,
-      bumpScale: isNeon ? 0.016 : cls === 'xia' ? 0.018 : 0.015,
+      normalMap: norm,
+      normalScale: new THREE.Vector2(1.15, 1.15),
       roughnessMap: rough,
-      roughness: isNeon ? 0.28 : isClothFaced ? 0.62 : 0.42,
-      metalness: isNeon ? 0.56 : cls === 'xia' ? 0.46 : isClothFaced ? 0.22 : 0.28,
+      roughness: isNeon ? 0.24 : isClothFaced ? 0.66 : 0.36,
+      metalness: isNeon ? 0.62 : cls === 'xia' ? 0.62 : isClothFaced ? 0.24 : 0.34,
+      clearcoat: isNeon ? 0.72 : isClothFaced ? 0.14 : 0.84,
+      clearcoatRoughness: 0.15,
       emissiveMap: em,
-      emissive: isNeon ? l.neon! : 0xffffff,
-      emissiveIntensity: isNeon ? 2.3 : glow,
+      emissive: em ? l.neon! : 0x000000,
+      emissiveIntensity: em ? 2.3 : 0,
       side: THREE.DoubleSide
     });
   };
-  const lacquer = new THREE.MeshStandardMaterial({
+  const lacquer = new THREE.MeshPhysicalMaterial({
     color: l.lame,
-    roughness: isNeon ? 0.22 : 0.24,
-    metalness: isNeon ? 0.55 : cls === 'xia' ? 0.42 : 0.28,
+    normalMap: lacPbr.normal,
+    normalScale: new THREE.Vector2(0.75, 0.75),
+    roughnessMap: lacPbr.rough,
+    roughness: isNeon ? 0.22 : 0.30,
+    metalness: isNeon ? 0.56 : cls === 'xia' ? 0.44 : 0.28,
+    clearcoat: isNeon ? 0.75 : 0.90,
+    clearcoatRoughness: 0.13,
     emissive: l.lame,
-    emissiveIntensity: isNeon ? 0.04 : glow,
+    emissiveIntensity: isNeon ? 0.04 : Math.min(0.08, glow * 0.35),
     side: THREE.DoubleSide
   });
-  const metal = new THREE.MeshStandardMaterial({
+  const metal = new THREE.MeshPhysicalMaterial({
     color: isNeon ? l.neon! : l.metal,
-    roughness: isNeon ? 0.12 : 0.24,
-    metalness: isNeon ? 0.18 : 0.88,
+    normalMap: isNeon ? null : metPbr.normal,
+    normalScale: new THREE.Vector2(0.85, 0.85),
+    roughnessMap: isNeon ? null : metPbr.rough,
+    roughness: isNeon ? 0.12 : 0.26,
+    metalness: isNeon ? 0.18 : 0.94,
+    clearcoat: isNeon ? 0.2 : 0.38,
+    clearcoatRoughness: 0.18,
     emissive: isNeon ? l.neon! : l.metal,
-    emissiveIntensity: isNeon ? 2.4 : Math.max(0.18, glow * 1.45),
+    emissiveIntensity: isNeon ? 2.4 : Math.max(0.14, glow * 0.9),
     side: THREE.DoubleSide
   });
   if (isNeon) metal.userData.noGlyphs = true;
-  const lace = new THREE.MeshStandardMaterial({
+  const lace = new THREE.MeshPhysicalMaterial({
     color: isNeon ? 0xdceeff : l.lace,
-    roughness: isNeon ? 0.2 : 0.78,
+    normalMap: isNeon ? null : silkPbr.normal,
+    normalScale: new THREE.Vector2(0.95, 0.95),
+    roughness: isNeon ? 0.2 : 0.86,
+    metalness: 0.0,
+    clearcoat: 0.0,
     emissive: isNeon ? l.neon! : l.lace,
-    emissiveIntensity: isNeon ? 1.55 : 0.14,
+    emissiveIntensity: isNeon ? 1.55 : 0.09,
     side: THREE.DoubleSide
   });
   if (isNeon) lace.userData.noGlyphs = true;
   const silk = (color: number, tex: THREE.Texture, rx = 2, ry = 2) => {
     const t = tex.clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
-    return new THREE.MeshStandardMaterial({
+    return new THREE.MeshPhysicalMaterial({
       color,
       map: t,
+      normalMap: silkPbr.normal,
+      normalScale: new THREE.Vector2(0.45, 0.45),
       roughness: 0.82,
+      metalness: 0.0,
+      sheen: 0.5,
+      sheenRoughness: 0.45,
       emissive: color,
-      emissiveIntensity: 0.12,
+      emissiveIntensity: 0.08,
       side: THREE.DoubleSide
     });
   };
@@ -1275,8 +1690,9 @@ export function buildClassArmor(cls: NewClassId, setId: string, a: Armor, ctx: A
     }
 
     const sk = new THREE.Group();
-    sk.scale.z = 0.86;
-    sk.position.y = 0.008 - h * 0.5;
+    // Generous Z clearance so thighs never clip through the waist tassets when sprinting
+    sk.scale.z = 0.94;
+    sk.position.y = 0.012 - h * 0.5;
     g.add(sk);
 
     if (cls === 'sohei') {

@@ -16,7 +16,14 @@ import { ARMORS, armor, type Armor } from './armor';
 import { state } from './state';
 import type { ClassId } from './classes';
 import { mangaFinish, roninRobe } from './manga-art';
-import { buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps, type NewClassId } from './class-armor';
+import {
+  buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps,
+  roninLamellarPBR, roninHachiPBR, roninMonTex,
+  forgedMetalPBR, urushiLacquerPBR, braidedSilkPBR,
+  buildContouredTorso, ellipseArcTube, buildForearmVambrace, buildContouredGreave, buildTassetPanel,
+  type NewClassId
+} from './class-armor';
+import { makeFresnelShellMat, softGlowTex, anamorphicFlareTex } from './vfx-art';
 
 const V = THREE.Vector3;
 const TAU = Math.PI * 2;
@@ -41,6 +48,8 @@ const P = (n: string) => restPos[n].clone();
 
 const sets = new Map<string, THREE.Object3D[]>();
 const auras = new Map<string, THREE.Group>();
+interface HingedPanel { pivot: THREE.Group; dirX: number; dirZ: number; restPitch: number }
+const skirtPanels = new Map<string, HingedPanel[]>();
 
 const baseLayers: THREE.Object3D[] = [];
 root.traverse(o => { if (o.userData.equipmentLayer) baseLayers.push(o); });
@@ -77,51 +86,11 @@ function finish(o: THREE.Object3D) {
 }
 
 // ------------------------------------------------------------ textures
-const css = (c: number, k = 1) => { const x = new THREE.Color(c).multiplyScalar(k); return `rgb(${Math.min(255, x.r * 255) | 0},${Math.min(255, x.g * 255) | 0},${Math.min(255, x.b * 255) | 0})`; };
 function canvasTex(w: number, h: number, draw: (x: CanvasRenderingContext2D) => void) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d')!);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
   return t;
-}
-/** four rows of lacquered lames: light on the upper edge, a dark overlap below, the little ridges of the scales,
- *  paired silk cords running down through them and, on the last row, red cross-knots (hishinui) */
-function lamellar(l: NonNullable<Armor['look']>) {
-  return canvasTex(256, 256, x => {
-    const rh = 64;
-    for (let r = 0; r < 4; r++) {
-      const y0 = r * rh, g = x.createLinearGradient(0, y0, 0, y0 + rh);
-      g.addColorStop(0, css(l.lame, 1.6)); g.addColorStop(0.12, css(l.lame, 1.15)); g.addColorStop(0.7, css(l.lame, 0.85)); g.addColorStop(1, css(l.lame, 0.5));
-      x.fillStyle = g; x.fillRect(0, y0, 256, rh);
-      x.fillStyle = 'rgba(0,0,0,0.55)'; x.fillRect(0, y0 + rh - 4, 256, 4);                       // the next lame overlaps
-      x.fillStyle = 'rgba(255,255,255,0.10)'; for (let k = 0; k < 256; k += 8) x.fillRect(k, y0 + 3, 1, rh * 0.3);   // scale ridges
-      x.fillStyle = css(l.lace, 0.8); x.fillRect(0, y0, 256, 3);                                   // edge braid
-      // sugake odoshi: pairs of cords, braided
-      for (let cx = 16; cx < 256; cx += 32) for (const dx of [-6, 2]) {
-        x.fillStyle = css(l.lace); x.fillRect(cx + dx, y0, 5, rh - 2);
-        x.fillStyle = css(l.lace, 0.55); for (let yy = y0 + 2; yy < y0 + rh - 2; yy += 5) x.fillRect(cx + dx, yy, 5, 1.5);
-        x.fillStyle = css(l.lace, 1.4); x.fillRect(cx + dx + 1, y0, 1, rh - 2);
-      }
-      if (r === 3) {   // hishinui: red cross-knots along the bottom lame
-        x.strokeStyle = '#d42a20'; x.lineWidth = 2.5;
-        for (let cx = 8; cx < 256; cx += 16) { const cy = y0 + 46; x.beginPath(); x.moveTo(cx - 4, cy - 4); x.lineTo(cx + 4, cy + 4); x.moveTo(cx + 4, cy - 4); x.lineTo(cx - 4, cy + 4); x.stroke(); }
-      }
-    }
-  });
-}
-/** the riveted bowl of a kabuto: 24 gores, each shaded like a curved plate, a raised seam and rivets */
-function hachiTex(l: NonNullable<Armor['look']>) {
-  return canvasTex(512, 128, x => {
-    const n = 24, gw = 512 / n;
-    for (let i = 0; i < n; i++) {
-      const g = x.createLinearGradient(i * gw, 0, (i + 1) * gw, 0);
-      g.addColorStop(0, css(l.lame, 0.6)); g.addColorStop(0.45, css(l.lame, 1.35)); g.addColorStop(1, css(l.lame, 0.7));
-      x.fillStyle = g; x.fillRect(i * gw, 0, gw, 128);
-      x.fillStyle = css(l.metal, 0.9); x.fillRect(i * gw - 1, 0, 2, 128);
-      x.fillStyle = css(l.metal, 1.3); for (let y = 10; y < 118; y += 12) { x.beginPath(); x.arc(i * gw + gw / 2, y, 1.8, 0, TAU); x.fill(); }
-    }
-    x.fillStyle = 'rgba(0,0,0,0.35)'; x.fillRect(0, 0, 512, 10);          // the rim sits in shadow
-  });
 }
 
 // ------------------------------------------------------------ geometry helpers
@@ -138,114 +107,209 @@ function build(a: Armor) {
   const l = a.look!, glow = l.glow ?? 0.06, isNeon = l.neon !== undefined;
   sets.set(a.id, []);
   const tronPbr = isNeon ? tronPlateMaps(l.neon) : null;
-  const lamTex = tronPbr ? tronPbr.map : lamellar(l);
+  const fullPbr = isNeon ? null : roninLamellarPBR(l, a.id);
+  const lacPbr = urushiLacquerPBR();
+  const metPbr = forgedMetalPBR();
+  const silkPbr = braidedSilkPBR();
+
   const lam = (rx: number, ry: number) => {
-    const t = lamTex.clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
-    if (tronPbr) {
+    if (isNeon && tronPbr) {
+      const t = tronPbr.map.clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
       const em = tronPbr.emissive!.clone(); em.repeat.set(rx, ry); em.needsUpdate = true;
       const bump = tronPbr.bump.clone(); bump.repeat.set(rx, ry); bump.needsUpdate = true;
       const rough = tronPbr.rough.clone(); rough.repeat.set(rx, ry); rough.needsUpdate = true;
-      return new THREE.MeshStandardMaterial({
+      return new THREE.MeshPhysicalMaterial({
         map: t, bumpMap: bump, bumpScale: 0.016, roughnessMap: rough,
         emissiveMap: em, emissive: l.neon!, emissiveIntensity: 2.3,
-        roughness: 0.28, metalness: 0.56, side: THREE.DoubleSide
+        roughness: 0.24, metalness: 0.62, clearcoat: 0.72, clearcoatRoughness: 0.14, side: THREE.DoubleSide
       });
     }
-    return new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.38, metalness: 0.2, side: THREE.DoubleSide });
+    const p = fullPbr!;
+    const t = p.map.clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
+    const norm = p.normal.clone(); norm.repeat.set(rx, ry); norm.needsUpdate = true;
+    const rough = p.rough.clone(); rough.repeat.set(rx, ry); rough.needsUpdate = true;
+    const met = p.metal.clone(); met.repeat.set(rx, ry); met.needsUpdate = true;
+    const em = p.emissive ? p.emissive.clone() : null;
+    if (em) { em.repeat.set(rx, ry); em.needsUpdate = true; }
+    return new THREE.MeshPhysicalMaterial({
+      map: t, normalMap: norm, normalScale: new THREE.Vector2(1.15, 1.15),
+      roughnessMap: rough, metalnessMap: met,
+      roughness: 0.86, metalness: 0.90, clearcoat: 0.88, clearcoatRoughness: 0.14,
+      emissiveMap: em, emissive: em ? 0xffffff : 0x000000, emissiveIntensity: em ? 0.85 : 0,
+      side: THREE.DoubleSide
+    });
   };
-  const lacquer = new THREE.MeshStandardMaterial({
-    color: l.lame, roughness: isNeon ? 0.22 : 0.25, metalness: isNeon ? 0.55 : 0.25,
-    emissive: l.lame, emissiveIntensity: isNeon ? 0.04 : glow, side: THREE.DoubleSide
+  const lacquer = new THREE.MeshPhysicalMaterial({
+    color: l.lame, normalMap: lacPbr.normal, normalScale: new THREE.Vector2(0.75, 0.75),
+    roughnessMap: lacPbr.rough, roughness: isNeon ? 0.22 : 0.30, metalness: isNeon ? 0.56 : 0.28,
+    clearcoat: isNeon ? 0.75 : 0.90, clearcoatRoughness: 0.12,
+    emissive: l.lame, emissiveIntensity: isNeon ? 0.04 : Math.min(0.08, glow * 0.35), side: THREE.DoubleSide
   });
-  const metal = new THREE.MeshStandardMaterial({
-    color: isNeon ? l.neon! : l.metal, roughness: isNeon ? 0.12 : 0.3, metalness: isNeon ? 0.18 : 0.85,
-    emissive: isNeon ? l.neon! : l.metal, emissiveIntensity: isNeon ? 2.4 : Math.max(0.18, glow * 1.4), side: THREE.DoubleSide
+  const metal = new THREE.MeshPhysicalMaterial({
+    color: isNeon ? l.neon! : l.metal,
+    normalMap: isNeon ? null : metPbr.normal, normalScale: new THREE.Vector2(0.85, 0.85),
+    roughnessMap: isNeon ? null : metPbr.rough,
+    roughness: isNeon ? 0.12 : 0.26, metalness: isNeon ? 0.18 : 0.94,
+    clearcoat: isNeon ? 0.2 : 0.38, clearcoatRoughness: 0.18,
+    emissive: isNeon ? l.neon! : l.metal, emissiveIntensity: isNeon ? 2.4 : Math.max(0.14, glow * 0.9), side: THREE.DoubleSide
   });
   if (isNeon) metal.userData.noGlyphs = true;
-  const lace = new THREE.MeshStandardMaterial({
-    color: isNeon ? 0xdceeff : l.lace, roughness: isNeon ? 0.2 : 0.8,
-    emissive: isNeon ? l.neon! : l.lace, emissiveIntensity: isNeon ? 1.55 : 0.15
+  const lace = new THREE.MeshPhysicalMaterial({
+    color: isNeon ? 0xdceeff : l.lace,
+    normalMap: isNeon ? null : silkPbr.normal, normalScale: new THREE.Vector2(0.95, 0.95),
+    roughness: isNeon ? 0.2 : 0.86, metalness: 0.0, clearcoat: 0.0,
+    emissive: isNeon ? l.neon! : l.lace, emissiveIntensity: isNeon ? 1.55 : 0.09, side: THREE.DoubleSide
   });
   if (isNeon) lace.userData.noGlyphs = true;
 
   const hips = P('Hips');
 
-  // Armor replaces the travel outfit at the same attachment points, with a fitted waist and chest.
+  // Armor replaces the travel outfit at the same attachment points, with an anatomically sculpted dō cuirass.
   if (rigChest) {
-    const g = new THREE.Group(), shell = new THREE.Group(); g.add(shell);
+    const g = new THREE.Group();
     g.name = `cuirass-${a.id}`;
-    const prof = [[0.176, -0.25], [0.181, -0.17], [0.208, -0.055], [0.229, 0.065], [0.218, 0.147], [0.172, 0.222], [0.128, 0.251]].map(([r, y]) => new THREE.Vector2(r, y));
-    shell.add(new THREE.Mesh(new THREE.LatheGeometry(prof, 40), lam(6, 1.25)));
-    // muna-ita (the top plate, with a metal rim) and the waist cord
-    shell.add(new THREE.Mesh(new THREE.LatheGeometry([new THREE.Vector2(0.219, 0.147), new THREE.Vector2(0.174, 0.222)], 40), lacquer));
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.174, 0.005, 5, 40), metal); rim.rotation.x = Math.PI / 2; rim.position.y = 0.222; shell.add(rim);
-    const cord = new THREE.Mesh(new THREE.TorusGeometry(0.178, 0.008, 6, 40), lace); cord.rotation.x = Math.PI / 2; cord.position.y = -0.246; shell.add(cord);
-    shell.scale.z = 0.71;
-    // a crest on the chest
-    const mon = new THREE.Group(); mon.position.set(0, 0.048, 0.169); g.add(mon);
-    mon.add(new THREE.Mesh(new THREE.CircleGeometry(0.036, 24), metal));
-    const inner = new THREE.Mesh(new THREE.RingGeometry(0.015, 0.025, 24), lacquer); inner.position.z = 0.002; mon.add(inner);
-    // watagami: the shoulder straps, with their metal studs
+    const torsoSpec = { chestW: 1.02, waistW: 0.96, depth: 0.97, pecSwell: 0.013, hemDip: 0.018, neckDip: 0.018 };
+    g.add(new THREE.Mesh(buildContouredTorso(torsoSpec), lam(5.0, 1.3)));
+    // muna-ita upper collar rim, pectoral accent, lower gilded rim, and waist cord
+    g.add(ellipseArcTube(0.118 * torsoSpec.chestW, 0.096 * torsoSpec.depth, 0.252, 0, TAU, 0.0065, metal, 36));
+    g.add(ellipseArcTube(0.220 * torsoSpec.chestW, 0.158 * torsoSpec.depth, 0.145, -1.05, 2.1, 0.0045, metal, 28));
+    g.add(ellipseArcTube(0.181 * torsoSpec.waistW, 0.132 * torsoSpec.depth, -0.262, 0, TAU, 0.0055, metal, 36));
+    g.add(ellipseArcTube(0.182 * torsoSpec.waistW, 0.134 * torsoSpec.depth, -0.244, 0, TAU, 0.0085, lace, 36));
+    // embossed clan crest (mon) medallion on the chest
+    const monR = a.tier >= 2.2 ? 0.048 : 0.040;
+    const monMat = new THREE.MeshPhysicalMaterial({
+      map: roninMonTex(l, a.id), roughness: 0.24, metalness: 0.84, clearcoat: 0.65, clearcoatRoughness: 0.14,
+      emissive: l.metal, emissiveIntensity: Math.max(0.10, glow * 0.7)
+    });
+    const mon = new THREE.Group(); mon.position.set(0, 0.068, 0.172 * torsoSpec.depth); mon.rotation.x = -0.07; g.add(mon);
+    const monDisc = new THREE.Mesh(new THREE.CylinderGeometry(monR, monR * 1.04, 0.010, 28), monMat);
+    monDisc.rotation.x = Math.PI / 2; mon.add(monDisc);
+    const monBezel = new THREE.Mesh(new THREE.TorusGeometry(monR, 0.0055, 7, 28), metal);
+    monBezel.position.z = 0.004; mon.add(monBezel);
+    // watagami: contoured shoulder straps over the trapezius with gilded studs
     for (const s of [-1, 1]) {
-      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.043, 0.012, 0.243), lacquer); strap.position.set(0.104 * s, 0.243, -0.008); strap.rotation.z = -s * 0.12; g.add(strap);
-      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), metal); stud.position.set(0.104 * s, 0.25, 0.111); g.add(stud);
+      const strapCurve = new THREE.CatmullRomCurve3([
+        new V(0.104 * s, 0.165, 0.138 * torsoSpec.depth),
+        new V(0.116 * s, 0.236, 0.055),
+        new V(0.116 * s, 0.244, -0.045),
+        new V(0.104 * s, 0.172, -0.132 * torsoSpec.depth),
+      ]);
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(strapCurve, 18, 0.013, 6), lacquer));
+      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.011, 10, 8), metal);
+      stud.position.set(0.104 * s, 0.178, 0.144 * torsoSpec.depth); g.add(stud);
+    }
+    // Tasteful ceremonial Agemaki silk bow on the backplate (tier >= 1.5)
+    if (a.tier >= 1.5 && !isNeon) {
+      const bow = new THREE.Group(); bow.position.set(0, 0.115, -0.158 * torsoSpec.depth);
+      bow.add(new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.004, 6, 16), metal));
+      for (const s of [-1, 1]) {
+        const loop = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.007, 6, 16), lace);
+        loop.position.set(s * 0.030, 0.004, -0.005); loop.scale.set(1.2, 0.7, 0.6); bow.add(loop);
+        const tail = new THREE.CatmullRomCurve3([
+          new V(s * 0.013, -0.008, -0.006), new V(s * 0.028, -0.085, -0.012), new V(s * 0.034, -0.168, -0.006)
+        ]);
+        bow.add(new THREE.Mesh(new THREE.TubeGeometry(tail, 10, 0.0048, 5), lace));
+        const tassel = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.042, 8, 1, true), lace);
+        tassel.position.set(s * 0.034, -0.192, -0.006); bow.add(tassel);
+      }
+      g.add(bow);
     }
     if (isNeon) {
       // TRON glowing front rails & Identity Disc on the Ronin's back
       for (const s of [-1, 1]) {
         const rail = new THREE.CatmullRomCurve3([
-          new V(0.072 * s, 0.222, 0.115), new V(0.095 * s, 0.08, 0.165), new V(0.072 * s, -0.08, 0.15), new V(0.066 * s, -0.24, 0.13)
+          new V(0.072 * s, 0.228, 0.114 * torsoSpec.depth), new V(0.095 * s, 0.115, 0.168 * torsoSpec.depth),
+          new V(0.076 * s, -0.045, 0.156 * torsoSpec.depth), new V(0.068 * s, -0.245, 0.132 * torsoSpec.depth)
         ]);
-        g.add(new THREE.Mesh(new THREE.TubeGeometry(rail, 20, 0.0042, 5), metal));
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(rail, 22, 0.0042, 5), metal));
       }
-      const discGrp = new THREE.Group(); discGrp.position.set(0, 0.085, -0.165); discGrp.rotation.x = 0.08;
-      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.076, 0.076, 0.012, 32), lacquer); core.rotation.x = Math.PI / 2; discGrp.add(core);
-      const outerR = new THREE.Mesh(new THREE.TorusGeometry(0.076, 0.007, 8, 36), metal); outerR.position.z = -0.004; discGrp.add(outerR);
-      const innerR = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.0045, 6, 32), lace); innerR.position.z = -0.006; discGrp.add(innerR);
+      const discGrp = new THREE.Group(); discGrp.position.set(0, 0.092, -0.168 * torsoSpec.depth); discGrp.rotation.x = 0.08;
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.078, 0.012, 32), lacquer); core.rotation.x = Math.PI / 2; discGrp.add(core);
+      const outerR = new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.007, 8, 36), metal); outerR.position.z = -0.004; discGrp.add(outerR);
+      const innerR = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.0045, 6, 32), lace); innerR.position.z = -0.006; discGrp.add(innerR);
       g.add(discGrp);
     }
     overlay(a.id, rigChest, g);
   }
-  // ---- kusazuri: curved panels, with room for the stride beneath the hem
+  // ---- kusazuri: hinged leg-aware overlapping tasset panels with generous Z clearance so legs NEVER poke through!
   if (rigWaist) {
-    const g = new THREE.Group(), R = 0.205, hemR = R * 1.13, h = 0.19 + 0.026 * l.sode, n = 7, L = TAU / n * 0.89;
+    const g = new THREE.Group(), R = 0.208, hemR = R * 1.24, h = 0.20 + 0.026 * l.sode, n = 7, L = TAU / n * 0.89;
     g.name = `skirt-${a.id}`;
-    const sk = new THREE.Group(); sk.scale.z = 0.76; sk.position.y = 0.034 - h / 2; g.add(sk);
-    const obi = new THREE.Mesh(new THREE.TorusGeometry(R, 0.018, 8, 40), lace);
-    obi.rotation.x = Math.PI / 2; obi.scale.y = 0.77; obi.position.y = 0.037; g.add(obi);
+    const obiBand = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 1.01, 0.062, 36, 1, true), lace);
+    obiBand.scale.z = 0.84; obiBand.position.y = 0.036; g.add(obiBand);
+    for (const dy of [0.064, 0.008]) g.add(ellipseArcTube(R * 1.01, R * 0.84 * 1.01, dy, 0, TAU, 0.0045, metal, 36));
+    const panels: HingedPanel[] = [];
     for (let i = 0; i < n; i++) {
-      const th = i * TAU / n - L / 2;
-      sk.add(new THREE.Mesh(new THREE.CylinderGeometry(R, hemR, h, 8, 1, true, th, L), lam(1.6, 1)));
-      sk.add(arcTube(hemR, -h / 2, th, L, 0.004, metal));
-      sk.add(arcTube(R * 1.01, h / 2 - 0.01, th + 0.05, L - 0.1, 0.006, lace));
+      const midTh = i * TAU / n;
+      const dirX = Math.sin(midTh), dirZ = Math.cos(midTh);
+      // Mount each tasset on a waist hinge pivot oriented outward along midTh so it swings cleanly ahead of the legs
+      const pivot = new THREE.Group();
+      pivot.position.set(dirX * (R * 1.01), 0.030, dirZ * (R * 0.88));
+      pivot.rotation.y = midTh;
+      const restPitch = -0.14;
+      pivot.rotation.x = restPitch;
+      const panelHolder = new THREE.Group();
+      panelHolder.position.set(0, -h * 0.5, -R * 1.01);
+      panelHolder.add(buildTassetPanel(R * 1.01, hemR, h, -L / 2, L, 0.014, lam(1.6, 1.05)));
+      panelHolder.add(ellipseArcTube(hemR + 0.002, hemR + 0.002, -h * 0.5, -L / 2, L, 0.0042, metal, 12));
+      panelHolder.add(ellipseArcTube(R * 1.02, R * 1.02, h * 0.5 - 0.01, -L / 2 + 0.05, L - 0.1, 0.0055, lace, 10));
+      pivot.add(panelHolder);
+      g.add(pivot);
+      panels.push({ pivot, dirX, dirZ, restPitch });
     }
+    skirtPanels.set(a.id, panels);
     overlay(a.id, rigWaist, g);
   }
-  // ---- sode: a curved wall of lames hanging from each shoulder, on the outside of the upper arm
+  // ---- sode: multi-tiered sculpted shoulder guards with kanmuri-ita cap & gilded piping
   for (const side of ['Left', 'Right']) {
     const A = P(side + 'Arm'), F = P(side + 'ForeArm'), d = F.clone().sub(A).normalize();
     const out = new V(Math.sign(A.x - hips.x) || 1, 0.25, 0);
     const Z = out.addScaledVector(d, -out.dot(d)).normalize(), Y = d.clone().negate(), X = new V().crossVectors(Y, Z);
     const g = new THREE.Group(); g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
     g.name = `shoulder-${a.id}-${side}`;
-    const Rc = 0.127, w = 0.149 + 0.029 * l.sode, th = w / Rc, h = 0.131 + 0.046 * l.sode, off = 0.063;
-    const panel = new THREE.Mesh(new THREE.CylinderGeometry(Rc, Rc * 1.04, h, 10, 1, true, -th / 2, th), lam(1.5, 1.4));
-    panel.position.set(0, 0.048 - h / 2, off - Rc); g.add(panel);
-    // kanmuri-ita: the lacquered top bar with its metal rim, and the bottom edge
-    const bar = arcTube(Rc + 0.003, 0.048, -th / 2, th, 0.008, lacquer); bar.position.z = off - Rc; g.add(bar);
-    const bar2 = arcTube(Rc + 0.006, 0.054, -th / 2, th, 0.004, metal); bar2.position.z = off - Rc; g.add(bar2);
-    const hem = arcTube(Rc * 1.04, 0.048 - h, -th / 2, th, 0.004, metal); hem.position.z = off - Rc; g.add(hem);
+    const Rc = 0.124, w = 0.148 + 0.028 * l.sode, th = w / Rc, totalH = 0.135 + 0.044 * l.sode, off = 0.064;
+    const tiers = a.tier >= 2.0 ? 3 : 2;
+    const capH = totalH * 0.34;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(Rc * 0.94, Rc * 1.01, capH, 14, 1, true, -th / 2, th), lacquer);
+    cap.position.set(0, 0.050 - capH * 0.5, off - Rc); g.add(cap);
+    const bar = arcTube(Rc * 0.96, 0.050, -th / 2, th, 0.0075, lacquer); bar.position.z = off - Rc; g.add(bar);
+    const bar2 = arcTube(Rc * 0.98, 0.056, -th / 2, th, 0.0045, metal); bar2.position.z = off - Rc; g.add(bar2);
+    if (a.tier >= 1.5) {
+      const boss = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 8), metal);
+      boss.scale.set(1.15, 0.85, 0.52); boss.position.set(0, 0.032, off + 0.002); g.add(boss);
+      const bRing = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0032, 6, 18), lace);
+      bRing.position.set(0, 0.032, off + 0.004); g.add(bRing);
+    }
+    const lameH = (totalH * 0.72) / tiers;
+    for (let t = 0; t < tiers; t++) {
+      const f0 = t / tiers, rTop = Rc * (1.0 + f0 * 0.04), rBot = rTop + 0.007;
+      const tSpan = th * (0.98 - f0 * 0.05);
+      const yC = 0.050 - capH * 0.82 - t * (lameH * 0.82) - lameH * 0.45;
+      const panel = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, lameH, 12, 1, true, -tSpan / 2, tSpan), lam(1.5, 0.52));
+      panel.position.set(0, yC, off - Rc); g.add(panel);
+      const hem = arcTube(rBot + 0.002, yC - lameH * 0.5, -tSpan / 2, tSpan, t === tiers - 1 ? 0.0048 : 0.0032, metal);
+      hem.position.z = off - Rc; g.add(hem);
+    }
     g.position.copy(A);
     hang(a.id, side + 'Arm', g);
   }
-  // ---- suneate: splinted shin guards
+  // ---- kote: fitted forearm vambraces on higher-tier armors (tier >= 1.5)
+  if (a.tier >= 1.5) for (const side of ['Left', 'Right']) {
+    if (!bones[side + 'Hand']) continue;
+    const F = P(side + 'ForeArm'), H = P(side + 'Hand'), len = F.distanceTo(H);
+    if (len < 0.08) continue;
+    const g = buildForearmVambrace(len, lam(1.4, 1.1), lacquer, metal, lace, a.tier);
+    g.name = `kote-${a.id}-${side}`;
+    g.position.copy(F).lerp(H, 0.52);
+    g.quaternion.setFromUnitVectors(new V(0, 1, 0), F.clone().sub(H).normalize());
+    hang(a.id, side + 'ForeArm', g);
+  }
+  // ---- suneate: contoured shin greaves with domed kneecaps
   if (l.shins) for (const side of ['Left', 'Right']) {
     const K = P(side + 'Leg'), Fo = P(side + 'Foot'), len = K.distanceTo(Fo);
-    const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.06, len * 0.62, 12, 1, true, -1.3, 2.6), lacquer));
-    for (const t of [-0.75, 0, 0.75]) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.014, len * 0.6, 0.01), metal); s.position.set(Math.sin(t) * 0.074, 0, Math.cos(t) * 0.074); s.rotation.y = t; g.add(s); }
-    for (const y of [len * 0.29, -len * 0.29]) { const b = arcTube(0.074, y, -1.3, 2.6, 0.006, lace); g.add(b); }
+    const g = buildContouredGreave(len, lam(1.3, 1.2), lacquer, metal, lace);
     g.position.copy(K).lerp(Fo, 0.52);
+    g.quaternion.setFromUnitVectors(new V(0, 1, 0), K.clone().sub(Fo).normalize());
     hang(a.id, side + 'Leg', g);
   }
   // ---- the helmet
@@ -270,12 +334,15 @@ function build(a: Armor) {
       overlay(a.id, kasaMesh, g);
       return;
     } else {
-      // hachi: a riveted dome of 24 gores, with the ring on top and the metal band round its base
-      const ht = hachiTex(l);
+      // hachi: riveted 24-gore dome with PBR Sobel normal map & urushi clearcoat
+      const ht = roninHachiPBR(l);
       const dome: THREE.Vector2[] = [];
       for (let i = 0; i <= 12; i++) { const t = i / 12 * Math.PI / 2; dome.push(new THREE.Vector2(Math.cos(t) * r * (1 + 0.04 * Math.sin(t * 2)), Math.sin(t) * r * 0.95)); }
       dome[12].x = r * 0.1;
-      const bowl = new THREE.Mesh(new THREE.LatheGeometry(dome, 48), new THREE.MeshStandardMaterial({ map: ht, emissiveMap: ht, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.3, metalness: 0.35, side: THREE.DoubleSide }));
+      const bowl = new THREE.Mesh(new THREE.LatheGeometry(dome, 48), new THREE.MeshPhysicalMaterial({
+        map: ht.map, normalMap: ht.normal, normalScale: new THREE.Vector2(1.1, 1.1), roughnessMap: ht.rough,
+        clearcoat: 0.90, clearcoatRoughness: 0.12, roughness: 0.28, metalness: 0.48, side: THREE.DoubleSide
+      }));
       g.add(bowl);
       const tehen = new THREE.Mesh(new THREE.TorusGeometry(r * 0.11, r * 0.035, 6, 20), metal); tehen.rotation.x = Math.PI / 2; tehen.position.y = r * 0.94; g.add(tehen);
       const band = new THREE.Mesh(new THREE.TorusGeometry(r * 1.0, r * 0.04, 6, 40), metal); band.rotation.x = Math.PI / 2; g.add(band);
@@ -461,15 +528,96 @@ function buildHabit(id: string, c: HabitColours) {
 }
 
 // ---- auras: they ride with the samurai, not with a bone
-const fxMat = (c: number, o: number) => tagMat(new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.light);
-function buildAura(kind: 'foxfire' | 'gold' | 'neon') {
+const fxMat = (c: number, o: number) => tagMat(new THREE.MeshBasicMaterial({
+  color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+}), CLS.light);
+const fxSprite = (tex: THREE.Texture, c: number, o: number, scale: number) => {
+  const mat = tagMat(new THREE.SpriteMaterial({
+    map: tex, color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending
+  }), CLS.light);
+  const sp = new THREE.Sprite(mat);
+  sp.scale.setScalar(scale);
+  return sp;
+};
+function makeOrbitWakeGeo(length: number, maxR: number, curveOffset: number) {
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 16; i++) {
+    const u = i / 16, ang = u * 0.72;
+    pts.push(new V(-Math.sin(ang) * curveOffset * u, Math.sin(u * Math.PI * 1.4) * 0.035 * u, -u * length));
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const geo = new THREE.TubeGeometry(curve, 18, maxR, 6, false);
+  const pos = geo.attributes.position, center = new V(), p = new V(), stride = 7;
+  for (let i = 0; i <= 18; i++) {
+    const u = i / 18;
+    curve.getPointAt(u, center);
+    const taper = Math.pow(1 - u, 1.35) * (0.25 + 0.75 * Math.sin(Math.min(1, u * 4.5) * Math.PI * 0.5));
+    for (let j = 0; j < stride; j++) {
+      const idx = i * stride + j;
+      p.fromBufferAttribute(pos, idx).sub(center).multiplyScalar(taper).add(center);
+      pos.setXYZ(idx, p.x, p.y, p.z);
+    }
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+function makeWindBladeMesh(mat: THREE.Material) {
+  const s = new THREE.Shape();
+  s.moveTo(-0.048, 0);
+  s.quadraticCurveTo(0, 0.030, 0.056, 0.004);
+  s.quadraticCurveTo(0.004, 0.011, -0.048, 0);
+  return new THREE.Mesh(new THREE.ShapeGeometry(s, 10), mat);
+}
+
+function buildAura(kind: 'foxfire' | 'wind' | 'gold' | 'neon') {
   const g = new THREE.Group(); g.name = kind;
-  if (kind === 'foxfire') {
-    // three wisps of blue fox-fire circling you
+  if (kind === 'wind') {
+    // Armadura de los Cinco Vientos: 3 luminous jade-emerald wind-spirit orbs with faceted crystal cores,
+    // volumetric Fresnel plasma shells, counter-rotating cyclone rings, crescent wind-blades, glow halos & wakes
+    const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
+    const fresnelMat = makeFresnelShellMat(0xeafff6, 0x28e5a8, 0.88, 1.95);
+    const wakeGeoMain = makeOrbitWakeGeo(0.58, 0.030, 0.24);
+    const wakeGeoSub = makeOrbitWakeGeo(0.44, 0.015, 0.16);
     for (let i = 0; i < 3; i++) {
       const w = new THREE.Group();
-      w.add(new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), fxMat(0xd0f4ff, 0.9)));
-      const outer = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), fxMat(0x30a8ff, 0.35)); outer.scale.y = 1.5; w.add(outer);
+      const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.050, 0), fxMat(0xf4fff9, 0.95));
+      crystal.name = 'crystal'; w.add(crystal);
+      w.add(new THREE.Mesh(new THREE.SphereGeometry(0.064, 16, 12), fxMat(0xafffe2, 0.78)));
+      w.add(new THREE.Mesh(new THREE.SphereGeometry(0.118, 22, 16), fresnelMat));
+      w.add(fxSprite(softGlowTex, 0x48f2bc, 0.62, 0.62));
+      const flare = fxSprite(anamorphicFlareTex, 0xd8fff0, 0.44, 0.46); flare.name = 'flare'; w.add(flare);
+      const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.152, 0.0055, 6, 36), fxMat(0x98ffe0, 0.72));
+      ringA.rotation.set(0.75 + i * 0.4, 0.3, 0.4); ringA.name = 'ringA'; w.add(ringA);
+      const ringB = new THREE.Mesh(new THREE.TorusGeometry(0.186, 0.0038, 6, 36), fxMat(0x30d4a0, 0.52));
+      ringB.rotation.set(-0.65, 0.8 + i * 0.5, -0.5); ringB.name = 'ringB'; w.add(ringB);
+      const blades = new THREE.Group(); blades.name = 'blades';
+      const bladeMat = fxMat(0xb8ffe8, 0.72);
+      for (let b = 0; b < 3; b++) {
+        const ba = (b / 3) * TAU;
+        const bm = makeWindBladeMesh(bladeMat);
+        bm.position.set(Math.cos(ba) * 0.145, (b - 1) * 0.028, Math.sin(ba) * 0.145);
+        bm.rotation.set(0.35, -ba, 0.25);
+        blades.add(bm);
+      }
+      w.add(blades);
+      w.add(new THREE.Mesh(wakeGeoMain, fxMat(0x52ebb8, 0.44)));
+      const wakeSub = new THREE.Mesh(wakeGeoSub, fxMat(0xd0fff0, 0.62)); wakeSub.position.set(0.018, 0.018, 0); w.add(wakeSub);
+      orbGroup.add(w);
+    }
+    const groundRing = new THREE.Mesh(new THREE.RingGeometry(0.76, 0.84, 56), fxMat(0x56f0be, 0.34));
+    groundRing.rotation.x = -Math.PI / 2; groundRing.position.y = 0.045; groundRing.name = 'windRing'; g.add(groundRing);
+    const groundOuter = new THREE.Mesh(new THREE.RingGeometry(0.84, 0.98, 56), fxMat(0x28b88c, 0.16));
+    groundOuter.rotation.x = -Math.PI / 2; groundOuter.position.y = 0.042; groundOuter.name = 'windOuter'; g.add(groundOuter);
+  } else if (kind === 'foxfire') {
+    const fresnelMat = makeFresnelShellMat(0xe8faff, 0x2c9cff, 0.84, 1.9);
+    const wakeGeo = makeOrbitWakeGeo(0.42, 0.024, 0.18);
+    for (let i = 0; i < 3; i++) {
+      const w = new THREE.Group();
+      w.add(new THREE.Mesh(new THREE.SphereGeometry(0.062, 14, 10), fxMat(0xe0f8ff, 0.92)));
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(0.115, 18, 14), fresnelMat); shell.scale.y = 1.32; w.add(shell);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.068, 0.22, 12, 1, true), fxMat(0x4eb8ff, 0.45)); tip.position.y = 0.14; w.add(tip);
+      w.add(fxSprite(softGlowTex, 0x38aeff, 0.56, 0.56));
+      w.add(new THREE.Mesh(wakeGeo, fxMat(0x40b2ff, 0.38)));
       g.add(w);
     }
   } else if (kind === 'neon') {
@@ -632,6 +780,7 @@ function ensureClassArmor(clsId: NewClassId, cur: Armor): string {
 
 /** show the armour you wear (and its helmet instead of the kasa), with your chosen colours */
 let activeAura: THREE.Group | undefined;
+let activeSkirt: HingedPanel[] | undefined;
 export function dressUp(cur = armor()) {
   applyLook(root);
   // every class but the ronin wears its own garb when it has no armour of its own on, its own culturally
@@ -645,6 +794,7 @@ export function dressUp(cur = armor()) {
   for (const [id, list] of sets) for (const o of list) o.visible = id === worn;
   for (const [id, g] of auras) g.visible = id === cur.id;
   activeAura = auras.get(cur.id);
+  activeSkirt = skirtPanels.get(worn);
   const helmet = !!cur.look?.helmet && !own;
   const garbed = worn === own, dressed = sets.has(worn), monk = dressed && (!!cur.robe || garbed);
   sam.fitOutfit?.(dressed);
@@ -680,15 +830,54 @@ export function dressUp(cur = armor()) {
 }
 dressUp();
 
-/** every frame: the auras move */
+const tmpHip = new V(), tmpKneeL = new V(), tmpKneeR = new V();
+/** every frame: swing hinged kusazuri skirt panels ahead of striding legs and animate the auras */
 export function updateOutfit() {
+  // Dynamically hinge each kusazuri tasset outward when either leg swings toward it so legs never clip the skirt
+  if (activeSkirt && bones.Hips && bones.LeftLeg && bones.RightLeg) {
+    root.worldToLocal(bones.Hips.getWorldPosition(tmpHip));
+    root.worldToLocal(bones.LeftLeg.getWorldPosition(tmpKneeL)).sub(tmpHip);
+    root.worldToLocal(bones.RightLeg.getWorldPosition(tmpKneeR)).sub(tmpHip);
+    for (const p of activeSkirt) {
+      const pushL = Math.max(0, tmpKneeL.x * p.dirX + tmpKneeL.z * p.dirZ - 0.04);
+      const pushR = Math.max(0, tmpKneeR.x * p.dirX + tmpKneeR.z * p.dirZ - 0.04);
+      const push = Math.max(pushL, pushR);
+      const target = p.restPitch - Math.min(0.68, push * 2.1);
+      p.pivot.rotation.x += (target - p.pivot.rotation.x) * 0.35;
+    }
+  }
   const g = activeAura;
   if (!g) return;
   const t = state.time;
-  if (g.name === 'foxfire') g.children.forEach((w, i) => {
+  if (g.name === 'wind') {
+    const orbs = g.getObjectByName('orbs');
+    orbs?.children.forEach((w, i) => {
+      const a = t * 1.85 + i * (TAU / 3);
+      const rad = 0.88 + Math.sin(t * 2.1 + i * 2.09) * 0.08;
+      const y = 1.08 + Math.sin(t * 2.4 + i * 2.09) * 0.24;
+      w.position.set(Math.sin(a) * rad, y, Math.cos(a) * rad);
+      w.rotation.set(Math.cos(t * 2.4 + i * 2.09) * 0.18, a + Math.PI / 2, Math.sin(t * 2.1 + i) * 0.14);
+      w.scale.setScalar(0.94 + Math.sin(t * 5.2 + i * 2.1) * 0.08);
+      const crystal = w.getObjectByName('crystal');
+      if (crystal) { crystal.rotation.y = t * 3.4 + i; crystal.rotation.x = t * 2.1 + i; }
+      const ringA = w.getObjectByName('ringA');
+      if (ringA) { ringA.rotation.z = t * 4.2 + i; ringA.rotation.x = 0.75 + Math.sin(t * 1.9 + i) * 0.35; }
+      const ringB = w.getObjectByName('ringB');
+      if (ringB) { ringB.rotation.z = -t * 3.3 + i; ringB.rotation.y = t * 2.4 + i; }
+      const blades = w.getObjectByName('blades');
+      if (blades) { blades.rotation.y = -t * 5.6 + i; blades.rotation.z = Math.sin(t * 2.8 + i) * 0.28; }
+      const flare = w.getObjectByName('flare') as THREE.Sprite | undefined;
+      if (flare) flare.scale.setScalar(0.42 + Math.sin(t * 6.5 + i * 1.7) * 0.09);
+    });
+    const wr = g.getObjectByName('windRing') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    const wo = g.getObjectByName('windOuter') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    if (wr) { wr.rotation.z = t * 1.4; wr.scale.setScalar(1 + Math.sin(t * 2.6) * 0.05); wr.material.opacity = 0.28 + Math.sin(t * 2.6) * 0.1; }
+    if (wo) { wo.rotation.z = -t * 0.9; wo.scale.setScalar(1 + Math.sin(t * 2.6 - 0.7) * 0.07); }
+  } else if (g.name === 'foxfire') g.children.forEach((w, i) => {
     const a = t * 1.6 + i * (TAU / 3);
     w.position.set(Math.sin(a) * 0.85, 1.05 + Math.sin(t * 2.3 + i) * 0.25, Math.cos(a) * 0.85);
-    w.scale.setScalar(0.85 + Math.sin(t * 9 + i * 2) * 0.15);
+    w.rotation.set(0, a + Math.PI / 2, 0);
+    w.scale.setScalar(0.9 + Math.sin(t * 7.5 + i * 2) * 0.1);
   });
   else if (g.name === 'neon') {
     const ring = g.getObjectByName('ring')! as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;

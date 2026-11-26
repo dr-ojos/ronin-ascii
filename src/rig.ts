@@ -457,9 +457,9 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const robe = new HangingCloth({
     cols: ROBE_COLS, rows: ROBE_ROWS, closed: true, material: robeMat,
     rest: (i, j, out) => {
-      // snug under the kusazuri (the plates hang over it), opening out below them like a long hakama
-      const a = (i / ROBE_COLS) * TAU, k = j / ROBE_ROWS, flare = 1 + 1.15 * THREE.MathUtils.smoothstep(k, 0.25, 1);
-      return out.set(Math.sin(a) * 0.165 * cs * flare, -robeLen * k, Math.cos(a) * 0.135 * cs * flare);
+      // Generous clearance over the thighs and shin guards so running/combat strides never poke through the robe
+      const a = (i / ROBE_COLS) * TAU, k = j / ROBE_ROWS, flare = 1 + 1.18 * THREE.MathUtils.smoothstep(k, 0.15, 1);
+      return out.set(Math.sin(a) * 0.178 * cs * flare, -robeLen * k, Math.cos(a) * 0.162 * cs * flare);
     }
   });
   robeG.add(robe.mesh); robe.mesh.name = 'robe';
@@ -780,9 +780,9 @@ export function createRealSamurai(gltf: GLTF): Avatar {
 
   // ---- robe and sleeves: the legs and the torso as capsules the cloth slides around
   const caps = {
-    lThigh: { a: new V(), b: new V(), r: 0.105 }, rThigh: { a: new V(), b: new V(), r: 0.105 },
-    lShin: { a: new V(), b: new V(), r: 0.09 }, rShin: { a: new V(), b: new V(), r: 0.09 },
-    pelvis: { a: new V(), b: new V(), r: 0.12 }, torso: { a: new V(), b: new V(), r: 0.17 }
+    lThigh: { a: new V(), b: new V(), r: 0.132 }, rThigh: { a: new V(), b: new V(), r: 0.132 },
+    lShin: { a: new V(), b: new V(), r: 0.114 }, rShin: { a: new V(), b: new V(), r: 0.114 },
+    pelvis: { a: new V(), b: new V(), r: 0.138 }, torso: { a: new V(), b: new V(), r: 0.175 }
   } satisfies Record<string, Capsule>;
   const legCaps = [caps.lThigh, caps.rThigh, caps.lShin, caps.rShin, caps.pelvis], armCaps = [caps.torso, caps.lThigh, caps.rThigh];
   const hoodCaps = [caps.torso];
