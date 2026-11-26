@@ -7,17 +7,23 @@ import type { TemplePlace } from './map';
 import { equipTechnique, SLOT_KEY, slotOf, TECHNIQUES, type Slot, type TempleTechniqueId } from './techniques';
 import { MAX_RANGED_CHARGES, ORB_INFO, type OrbElement } from './elemental-orb';
 import { templeMasters } from './temple-grounds';
+import { animateTempleMonk } from './temple-monks';
 import { angDiff } from './utils';
 
 const TALK_RANGE = 2.8;
 const jadeLabel = (n: number) => `${n} ${n === 1 ? 'sello' : 'sellos'} de jade`;
+let monkClock = 0;
 
 export function updateTemples(dt: number) {
-  for (const { temple, figure, x, z } of templeMasters) {
+  monkClock += dt;
+  for (const { temple, figure, rig, x, z } of templeMasters) {
     const dx = player.pos.x - x, dz = player.pos.z - z, distance = Math.hypot(dx, dz);
-    if (distance > 12) continue;
-    const heading = distance < 5 ? Math.atan2(dx, dz) - temple.facing : 0;
-    figure.rotation.y += angDiff(heading, figure.rotation.y) * Math.min(1, dt * 7);
+    if (distance > 32) continue;
+    const heading = distance < 6.5 ? Math.atan2(dx, dz) - temple.facing : 0;
+    const turnDiff = angDiff(heading, figure.rotation.y);
+    figure.rotation.y += turnDiff * Math.min(1, dt * 5.5);
+    const nearFactor = Math.max(0, 1 - distance / 6.5);
+    animateTempleMonk(rig, monkClock, distance < 10 ? angDiff(Math.atan2(dx, dz) - temple.facing, figure.rotation.y) : 0, nearFactor);
     if (distance < TALK_RANGE) state.prompt = `[ E ] aprender técnicas con ${temple.master}`;
   }
 }

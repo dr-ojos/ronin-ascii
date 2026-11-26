@@ -1,49 +1,15 @@
 import * as THREE from 'three';
 import { addLight } from './lights';
-import { ACTOR_LAYER } from './ascii';
-import { headAsset } from './assets';
-import { mangaFinish } from './manga-art';
 import { CLS, M, tagMat } from './materials';
 import { FOOTPRINTS, TEMPLES, type TemplePlace } from './map';
 import { addCollider } from './physics';
-import { realHead } from './real-head';
 import { add, box, floors, G, hangingLantern, MT, post, pyr, site, solidBox, stoneLantern, toWorld, torii } from './structures';
 import { TECHNIQUES } from './techniques';
+import { createTempleMonk, type TempleMonkRig } from './temple-monks';
 
-const hakama = new THREE.CylinderGeometry(0.35, 0.52, 1, 16);
-const kimono = new THREE.CylinderGeometry(0.48, 0.32, 1, 16);
-const skin = M(0xc48b6a);
-const collar = M(0xe5ddc5);
-const sandals = M(0x362820);
 const courtZ = 8;
 
-export const templeMasters: { temple: TemplePlace; figure: THREE.Group; x: number; z: number }[] = [];
-
-function makeMaster(temple: TemplePlace, cloth: THREE.Material) {
-  const figure = new THREE.Group();
-  figure.name = temple.master;
-  const face = headAsset && realHead({ hair: temple.technique === 'viento' ? 0x9c9794 : 0x221c1d, topknot: true });
-  if (face) {
-    face.group.position.set(0, 1.62, 0.03);
-    face.group.scale.setScalar(0.048);
-    figure.add(face.group);
-  } else add(figure, G.sphere, skin, 0, 1.67, 0.04, 0.25, 0.34, 0.26);
-  add(figure, G.cyl, skin, 0, 1.52, 0.02, 0.13, 0.23, 0.13);
-  add(figure, hakama, cloth, 0, 0.57, 0, 0.69, 0.99, 0.48);
-  add(figure, kimono, cloth, 0, 1.26, 0, 0.69, 0.53, 0.45);
-  add(figure, G.cyl, collar, 0, 1.01, 0, 0.53, 0.11, 0.34);
-  for (const side of [-1, 1]) {
-    add(figure, G.sphere, sandals, side * 0.13, 0.055, 0.08, 0.19, 0.11, 0.33);
-    const sleeve = add(figure, kimono, cloth, side * 0.27, 1.19, 0.04, 0.29, 0.54, 0.32);
-    sleeve.rotation.z = side * 0.27;
-    const lapel = box(figure, 0.055, 0.37, 0.035, collar, side * 0.042, 1.18, 0.173);
-    lapel.rotation.z = side * 0.46;
-    add(figure, G.sphere, skin, side * 0.07, 1.03, 0.2, 0.13, 0.09, 0.08);
-  }
-  mangaFinish(figure);
-  figure.traverse(o => o.layers.enable(ACTOR_LAYER));
-  return figure;
-}
+export const templeMasters: { temple: TemplePlace; figure: THREE.Group; rig: TempleMonkRig; x: number; z: number }[] = [];
 
 function crestMat(temple: TemplePlace, color: number) {
   const c = document.createElement('canvas'); c.width = 96; c.height = 160;
@@ -115,9 +81,10 @@ export function buildTemples() {
       addCollider({ x: tx, z: tz, r: 0.34 });
     }
 
-    const figure = makeMaster(temple, M(new THREE.Color(color).multiplyScalar(0.32)));
+    const rig = createTempleMonk(temple);
+    const figure = rig.root;
     figure.position.set(0, 0.025, courtZ); g.add(figure);
-    templeMasters.push({ temple, figure, x: cx, z: cz });
+    templeMasters.push({ temple, figure, rig, x: cx, z: cz });
     addCollider({ x: cx, z: cz, r: 0.38 });
     addLight({ x: cx, y: y + 2.8, z: cz, color, intensity: 6, distance: 12, decay: 1.45 });
     site(g, x, z, temple.r);
