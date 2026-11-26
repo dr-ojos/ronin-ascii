@@ -17,7 +17,7 @@ import { state } from './state';
 import type { ClassId } from './classes';
 import { mangaFinish, roninRobe } from './manga-art';
 import {
-  buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps,
+  buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps, blackFirePlateMaps,
   roninLamellarPBR, roninHachiPBR, roninMonTex,
   forgedMetalPBR, urushiLacquerPBR, braidedSilkPBR,
   buildContouredTorso, ellipseArcTube, buildForearmVambrace, buildContouredGreave, buildTassetPanel,
@@ -106,7 +106,7 @@ const extrude = (s: THREE.Shape, depth: number) => new THREE.ExtrudeGeometry(s, 
 function build(a: Armor) {
   const l = a.look!, glow = l.glow ?? 0.06, isNeon = l.neon !== undefined;
   sets.set(a.id, []);
-  const tronPbr = isNeon ? tronPlateMaps(l.neon) : null;
+  const tronPbr = isNeon ? (a.id === 'fuego-negro' ? blackFirePlateMaps() : tronPlateMaps(l.neon)) : null;
   const fullPbr = isNeon ? null : roninLamellarPBR(l, a.id);
   const lacPbr = urushiLacquerPBR();
   const metPbr = forgedMetalPBR();
@@ -569,9 +569,47 @@ function makeWindBladeMesh(mat: THREE.Material) {
   return new THREE.Mesh(new THREE.ShapeGeometry(s, 10), mat);
 }
 
-function buildAura(kind: 'foxfire' | 'wind' | 'fire' | 'lightning' | 'gold' | 'neon') {
+function buildAura(kind: 'foxfire' | 'wind' | 'fire' | 'lightning' | 'blackfire' | 'gold' | 'neon') {
   const g = new THREE.Group(); g.name = kind;
-  if (kind === 'fire') {
+  if (kind === 'blackfire') {
+    // Armadura del Fuego Negro: pitch-black abyssal flame orbs & tongues outlined by razor-thin white neon rims
+    const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
+    const voidMat = tagMat(new THREE.MeshBasicMaterial({ color: 0x020205, side: THREE.DoubleSide }), CLS.actor);
+    const rimMat = makeFresnelShellMat(0xffffff, 0xd8ecff, 0.96, 3.6);
+    const wakeGeo = makeOrbitWakeGeo(0.56, 0.011, 0.22);
+    for (let i = 0; i < 3; i++) {
+      const w = new THREE.Group();
+      // Jet-black abyssal flame core + rising black flame tongue
+      const core = new THREE.Mesh(new THREE.SphereGeometry(0.088, 16, 12), voidMat);
+      core.scale.y = 1.28; w.add(core);
+      const tongue = new THREE.Mesh(new THREE.ConeGeometry(0.064, 0.26, 12, 1, false), voidMat);
+      tongue.position.y = 0.16; tongue.name = 'tongue'; w.add(tongue);
+      // Razor-thin white neon Fresnel contour hugging the black flame
+      const rim = new THREE.Mesh(new THREE.SphereGeometry(0.104, 20, 14), rimMat);
+      rim.scale.y = 1.28; w.add(rim);
+      const tongueRim = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.28, 12, 1, true), rimMat);
+      tongueRim.position.y = 0.16; tongueRim.name = 'tongueRim'; w.add(tongueRim);
+      // Crisp thin white neon filament ring & fine orbital wake
+      const haloRing = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.0032, 5, 36), fxMat(0xffffff, 0.85));
+      haloRing.name = 'ringA'; w.add(haloRing);
+      const flare = fxSprite(anamorphicFlareTex, 0xffffff, 0.36, 0.36); flare.name = 'flare'; w.add(flare);
+      w.add(new THREE.Mesh(wakeGeo, fxMat(0xffffff, 0.72)));
+      orbGroup.add(w);
+    }
+    // Rising black-flame wisps with crisp white neon outlines
+    const embers = new THREE.Group(); embers.name = 'embers'; g.add(embers);
+    for (let i = 0; i < 6; i++) {
+      const e = new THREE.Group();
+      e.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.036, 0), voidMat));
+      e.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.044, 0), rimMat));
+      embers.add(e);
+    }
+    // Ultra-fine twin white neon contour rings at the feet
+    const ring1 = new THREE.Mesh(new THREE.RingGeometry(0.73, 0.748, 64), fxMat(0xffffff, 0.88));
+    ring1.rotation.x = -Math.PI / 2; ring1.position.y = 0.045; ring1.name = 'bfRing1'; g.add(ring1);
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.86, 0.872, 64), fxMat(0xdceeff, 0.55));
+    ring2.rotation.x = -Math.PI / 2; ring2.position.y = 0.042; ring2.name = 'bfRing2'; g.add(ring2);
+  } else if (kind === 'fire') {
     // Armadura de Kagutsuchi: 3 blazing solar-magma flame orbs + rising ember sparks + molten ground ring
     const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
     const fresnelMat = makeFresnelShellMat(0xfff4b8, 0xff4208, 0.90, 1.85);
@@ -903,7 +941,38 @@ export function updateOutfit() {
   const g = activeAura;
   if (!g) return;
   const t = state.time;
-  if (g.name === 'fire') {
+  if (g.name === 'blackfire') {
+    const orbs = g.getObjectByName('orbs');
+    orbs?.children.forEach((w, i) => {
+      const a = t * 1.95 + i * (TAU / 3);
+      const rad = 0.88 + Math.sin(t * 2.5 + i * 2.1) * 0.07;
+      const y = 1.08 + Math.sin(t * 2.9 + i * 2.09) * 0.24;
+      w.position.set(Math.sin(a) * rad, y, Math.cos(a) * rad);
+      w.rotation.set(0, a + Math.PI / 2, 0);
+      const sy = 0.88 + Math.sin(t * 13 + i * 2.7) * 0.24;
+      const tongue = w.getObjectByName('tongue');
+      const tongueRim = w.getObjectByName('tongueRim');
+      if (tongue) { tongue.scale.set(1, sy, 1); tongue.rotation.y = t * 4 + i; }
+      if (tongueRim) { tongueRim.scale.set(1, sy, 1); tongueRim.rotation.y = t * 4 + i; }
+      const ringA = w.getObjectByName('ringA');
+      if (ringA) ringA.rotation.set(0.85 + Math.sin(t * 2.2 + i) * 0.4, t * 3.8 + i, t * 2.5);
+      const flare = w.getObjectByName('flare') as THREE.Sprite | undefined;
+      if (flare) flare.scale.setScalar(0.32 + Math.sin(t * 8 + i * 2) * 0.08);
+    });
+    const embers = g.getObjectByName('embers');
+    embers?.children.forEach((e, i) => {
+      const p = (t * 0.62 + i / 6) % 1;
+      const a = t * 1.5 + i * (TAU / 6) + p * 1.8;
+      const r = 0.74 * (1 - p * 0.3);
+      e.position.set(Math.sin(a) * r, 0.14 + p * 1.72, Math.cos(a) * r);
+      e.rotation.set(t * 3 + i, t * 4, 0);
+      e.scale.setScalar(Math.sin(p * Math.PI) * 1.1);
+    });
+    const r1 = g.getObjectByName('bfRing1') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    const r2 = g.getObjectByName('bfRing2') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    if (r1) { r1.scale.setScalar(1 + Math.sin(t * 3.2) * 0.035); r1.material.opacity = 0.72 + Math.sin(t * 4.5) * 0.2; }
+    if (r2) { r2.scale.setScalar(1 + Math.sin(t * 3.2 - 0.7) * 0.05); r2.material.opacity = 0.42 + Math.sin(t * 4.5) * 0.15; }
+  } else if (g.name === 'fire') {
     const orbs = g.getObjectByName('orbs');
     orbs?.children.forEach((w, i) => {
       const a = t * 1.9 + i * (TAU / 3);

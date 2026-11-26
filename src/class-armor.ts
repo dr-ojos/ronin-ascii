@@ -446,6 +446,60 @@ export function roninMonTex(l: NonNullable<Armor['look']>, armorId?: string) {
   }, true, false);
 }
 
+/** Pitch-black abyssal flame plates with razor-thin white neon contours & flame filigree */
+export function blackFirePlateMaps(): PBRMaps {
+  const S = 512, rows = 5, rh = S / rows, scales = 10, sw = S / scales;
+  const traceFineContours = (x: CanvasRenderingContext2D, lineW: number, stroke: string) => {
+    x.strokeStyle = stroke;
+    x.lineWidth = lineW;
+    x.lineCap = 'round';
+    x.lineJoin = 'round';
+    for (let r = 0; r < rows; r++) {
+      const y0 = r * rh;
+      // Razor-thin horizontal white neon tier contour
+      x.beginPath(); x.moveTo(0, y0 + 2); x.lineTo(S, y0 + 2); x.stroke();
+      // Fine overlapping arched flame-scale outlines
+      for (let s = 0; s < scales; s++) {
+        const x0 = s * sw, cx = x0 + sw * 0.5;
+        x.beginPath();
+        x.moveTo(x0 + 3, y0 + rh - 4);
+        x.quadraticCurveTo(x0 + 3, y0 + 16, cx, y0 + 7);
+        x.quadraticCurveTo(x0 + sw - 3, y0 + 16, x0 + sw - 3, y0 + rh - 4);
+        x.stroke();
+        // Delicate licking black-flame curl rimmed in white neon on alternating scales
+        if ((r + s) % 2 === 0) {
+          x.beginPath();
+          x.moveTo(cx, y0 + rh - 10);
+          x.bezierCurveTo(cx - 10, y0 + rh * 0.56, cx + 8, y0 + rh * 0.42, cx - 2, y0 + 18);
+          x.stroke();
+        }
+      }
+    }
+  };
+  const map = makeTex(S, S, x => {
+    const bg = x.createLinearGradient(0, 0, 0, S);
+    bg.addColorStop(0, '#07070c'); bg.addColorStop(0.5, '#030306'); bg.addColorStop(1, '#010103');
+    x.fillStyle = bg; x.fillRect(0, 0, S, S);
+    addForgedGrain(x, S, S, 0.45);
+    traceFineContours(x, 3.2, 'rgba(220,238,255,0.28)');
+    traceFineContours(x, 1.35, '#ffffff');
+  });
+  const emissive = makeTex(S, S, x => {
+    x.fillStyle = '#000000'; x.fillRect(0, 0, S, S);
+    traceFineContours(x, 3.6, 'rgba(210,235,255,0.34)');
+    traceFineContours(x, 1.45, '#ffffff');
+  });
+  const bump = makeTex(S, S, x => {
+    x.fillStyle = '#505050'; x.fillRect(0, 0, S, S);
+    traceFineContours(x, 3.2, '#e8e8e8');
+  }, false);
+  const rough = makeTex(S, S, x => {
+    x.fillStyle = '#262626'; x.fillRect(0, 0, S, S);
+    traceFineContours(x, 2.2, '#101010');
+  }, false);
+  return { map, bump, rough, emissive };
+}
+
 /** TRON-style dark obsidian carbon armor plates bordered by razor-sharp glowing white neon circuits */
 export function tronPlateMaps(neonColor = 0xffffff): PBRMaps {
   const S = 512;
@@ -1334,7 +1388,7 @@ export function buildTassetPanel(
 function makeClassMaterials(cls: NewClassId, a: Armor) {
   const l = a.look!, glow = l.glow ?? 0.06, isNeon = l.neon !== undefined;
   const pbr = isNeon
-    ? tronPlateMaps(l.neon)
+    ? (a.id === 'fuego-negro' ? blackFirePlateMaps() : tronPlateMaps(l.neon))
     : cls === 'sohei' ? soheiLamellarMaps(l) : cls === 'xia' ? xiaShanwenMaps(l) : hwarangBrigandineMaps(l);
   const normalTex = heightToNormalTex(pbr.bump.image as HTMLCanvasElement, cls === 'xia' ? 2.6 : 2.3);
   const isClothFaced = !isNeon && cls === 'hwarang';
