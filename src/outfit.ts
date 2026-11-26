@@ -18,10 +18,15 @@ import type { ClassId } from './classes';
 import { mangaFinish, roninRobe } from './manga-art';
 import {
   buildClassArmor, brocadeKesaTex, cloudSilkTex, plumSilkTex, tronPlateMaps,
-  roninLamellarMaps, roninHachiMaps, roninMonTex, metalSurfaceMaps, lacquerSurfaceMaps,
+  roninHachiMaps, roninMonTex,
   buildContouredTorso, ellipseArcTube, buildForearmVambrace, buildContouredGreave, buildTassetPanel,
   type NewClassId
 } from './class-armor';
+import {
+  buildMasterLamellarPBR, makeArmorPlateMat,
+  getForgedMetalPBR, getUrushiLacquerPBR, getBraidedSilkPBR,
+  addSamuraiTorsoRelief, buildMenpoMask, attachArmorSignature,
+} from './armor-art';
 import { makeFresnelShellMat, softGlowTex, anamorphicFlareTex } from './vfx-art';
 
 const V = THREE.Vector3;
@@ -103,70 +108,73 @@ const extrude = (s: THREE.Shape, depth: number) => new THREE.ExtrudeGeometry(s, 
 function build(a: Armor) {
   const l = a.look!, glow = l.glow ?? 0.06, isNeon = l.neon !== undefined;
   sets.set(a.id, []);
-  const pbr = isNeon ? tronPlateMaps(l.neon) : roninLamellarMaps(l);
-  const lacMaps = lacquerSurfaceMaps();
-  const metMaps = metalSurfaceMaps();
+  const tronPbr = isNeon ? tronPlateMaps(l.neon) : null;
+  const masterPbr = isNeon ? null : buildMasterLamellarPBR(l, a.id, 'ronin');
+  const lacPbr = getUrushiLacquerPBR();
+  const metPbr = getForgedMetalPBR();
+  const silkPbr = getBraidedSilkPBR();
+
   const lam = (rx: number, ry: number) => {
-    const t = pbr.map.clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
-    const bump = pbr.bump.clone(); bump.repeat.set(rx, ry); bump.needsUpdate = true;
-    const rough = pbr.rough.clone(); rough.repeat.set(rx, ry); rough.needsUpdate = true;
-    if (isNeon && pbr.emissive) {
-      const em = pbr.emissive.clone(); em.repeat.set(rx, ry); em.needsUpdate = true;
-      return new THREE.MeshStandardMaterial({
-        map: t, bumpMap: bump, bumpScale: 0.016, roughnessMap: rough,
-        emissiveMap: em, emissive: l.neon!, emissiveIntensity: 2.3,
-        roughness: 0.28, metalness: 0.56, side: THREE.DoubleSide
+    if (isNeon && tronPbr) {
+      const t = tronPbr.map.clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
+      const bump = tronPbr.bump.clone(); bump.repeat.set(rx, ry); bump.needsUpdate = true;
+      const rough = tronPbr.rough.clone(); rough.repeat.set(rx, ry); rough.needsUpdate = true;
+      const em = tronPbr.emissive!.clone(); em.repeat.set(rx, ry); em.needsUpdate = true;
+      return new THREE.MeshPhysicalMaterial({
+        map: t, bumpMap: bump, bumpScale: 0.018, roughnessMap: rough,
+        emissiveMap: em, emissive: l.neon!, emissiveIntensity: 2.35,
+        roughness: 0.24, metalness: 0.62, clearcoat: 0.72, clearcoatRoughness: 0.14, side: THREE.DoubleSide
       });
     }
-    return new THREE.MeshStandardMaterial({
-      map: t, bumpMap: bump, bumpScale: 0.016, roughnessMap: rough,
-      emissiveMap: t, emissive: 0xffffff, emissiveIntensity: glow,
-      roughness: 0.36, metalness: 0.30, side: THREE.DoubleSide
-    });
+    return makeArmorPlateMat(masterPbr!, rx, ry, { clearcoat: 0.90, roughness: 0.86, metalness: 0.92 });
   };
-  const lacquer = new THREE.MeshStandardMaterial({
-    color: l.lame, bumpMap: lacMaps.bump, bumpScale: 0.008, roughnessMap: lacMaps.rough,
-    roughness: isNeon ? 0.22 : 0.28, metalness: isNeon ? 0.55 : 0.30,
-    emissive: l.lame, emissiveIntensity: isNeon ? 0.04 : glow, side: THREE.DoubleSide
+  const lacquer = new THREE.MeshPhysicalMaterial({
+    color: l.lame, normalMap: lacPbr.normal, normalScale: new THREE.Vector2(0.75, 0.75),
+    roughnessMap: lacPbr.rough, roughness: isNeon ? 0.22 : 0.34, metalness: isNeon ? 0.58 : 0.26,
+    clearcoat: isNeon ? 0.75 : 0.92, clearcoatRoughness: 0.12,
+    emissive: l.lame, emissiveIntensity: isNeon ? 0.04 : Math.min(0.08, glow * 0.35), side: THREE.DoubleSide
   });
-  const metal = new THREE.MeshStandardMaterial({
+  const metal = new THREE.MeshPhysicalMaterial({
     color: isNeon ? l.neon! : l.metal,
-    bumpMap: isNeon ? null : metMaps.bump, bumpScale: 0.007,
-    roughnessMap: isNeon ? null : metMaps.rough,
-    roughness: isNeon ? 0.12 : 0.26, metalness: isNeon ? 0.18 : 0.90,
-    emissive: isNeon ? l.neon! : l.metal, emissiveIntensity: isNeon ? 2.4 : Math.max(0.18, glow * 1.45), side: THREE.DoubleSide
+    normalMap: isNeon ? null : metPbr.normal, normalScale: new THREE.Vector2(0.85, 0.85),
+    roughnessMap: isNeon ? null : metPbr.rough,
+    roughness: isNeon ? 0.12 : 0.28, metalness: isNeon ? 0.18 : 0.95,
+    clearcoat: isNeon ? 0.2 : 0.40, clearcoatRoughness: 0.18,
+    emissive: isNeon ? l.neon! : l.metal, emissiveIntensity: isNeon ? 2.4 : Math.max(0.12, glow * 0.85), side: THREE.DoubleSide
   });
   if (isNeon) metal.userData.noGlyphs = true;
-  const lace = new THREE.MeshStandardMaterial({
-    color: isNeon ? 0xdceeff : l.lace, roughness: isNeon ? 0.2 : 0.78,
-    emissive: isNeon ? l.neon! : l.lace, emissiveIntensity: isNeon ? 1.55 : 0.15, side: THREE.DoubleSide
+  const lace = new THREE.MeshPhysicalMaterial({
+    color: isNeon ? 0xdceeff : l.lace,
+    normalMap: isNeon ? null : silkPbr.normal, normalScale: new THREE.Vector2(0.95, 0.95),
+    roughness: isNeon ? 0.2 : 0.86, metalness: 0.0, clearcoat: 0.0,
+    emissive: isNeon ? l.neon! : l.lace, emissiveIntensity: isNeon ? 1.55 : 0.08, side: THREE.DoubleSide
   });
   if (isNeon) lace.userData.noGlyphs = true;
 
   const hips = P('Hips');
 
-  // Armor replaces the travel outfit at the same attachment points, with an anatomically sculpted dō cuirass.
+  // Armor replaces the travel outfit at the same attachment points, with a layered 3D sculpted dō cuirass.
   if (rigChest) {
     const g = new THREE.Group();
     g.name = `cuirass-${a.id}`;
-    const torsoSpec = { chestW: 1.03, waistW: 0.96, depth: 0.98, pecSwell: 0.013, hemDip: 0.018, neckDip: 0.018 };
-    g.add(new THREE.Mesh(buildContouredTorso(torsoSpec), lam(5.2, 1.35)));
-    // muna-ita (upper chest collar rim), gilded lower hem, and waist cord
-    g.add(ellipseArcTube(0.118 * torsoSpec.chestW, 0.096 * torsoSpec.depth, 0.252, 0, TAU, 0.0065, metal, 36));
-    g.add(ellipseArcTube(0.220 * torsoSpec.chestW, 0.158 * torsoSpec.depth, 0.145, -1.05, 2.1, 0.0045, metal, 28));
-    g.add(ellipseArcTube(0.181 * torsoSpec.waistW, 0.132 * torsoSpec.depth, -0.262, 0, TAU, 0.0055, metal, 36));
+    const torsoSpec = { chestW: 1.03, waistW: 0.96, depth: 0.98, pecSwell: 0.014, hemDip: 0.018, neckDip: 0.018 };
+    g.add(new THREE.Mesh(buildContouredTorso(torsoSpec), lam(4.6, 1.3)));
+    // Physical 3D articulated abdominal tiers, muna-ita breastplate, sendan/kyūbi chest guards & back agemaki bow
+    addSamuraiTorsoRelief(g, torsoSpec, lam(4.6, 0.45), lacquer, metal, lace, a.tier);
+    // Collar gorget rim, lower gilded rim, and waist cord
+    g.add(ellipseArcTube(0.118 * torsoSpec.chestW, 0.096 * torsoSpec.depth, 0.252, 0, TAU, 0.0068, metal, 36));
     g.add(ellipseArcTube(0.182 * torsoSpec.waistW, 0.134 * torsoSpec.depth, -0.244, 0, TAU, 0.0085, lace, 36));
     // embossed clan crest (mon) medallion on the chest
-    const monR = a.tier >= 2.2 ? 0.048 : 0.040;
-    const monMat = new THREE.MeshStandardMaterial({
-      map: roninMonTex(l, a.id), roughness: 0.26, metalness: 0.78,
-      emissive: l.metal, emissiveIntensity: Math.max(0.14, glow * 1.2)
+    const monR = a.tier >= 2.2 ? 0.050 : 0.042;
+    const monMat = new THREE.MeshPhysicalMaterial({
+      map: roninMonTex(l, a.id), roughness: 0.24, metalness: 0.85, clearcoat: 0.65, clearcoatRoughness: 0.14,
+      emissive: l.metal, emissiveIntensity: Math.max(0.10, glow * 0.7)
     });
-    const mon = new THREE.Group(); mon.position.set(0, 0.068, 0.172 * torsoSpec.depth); mon.rotation.x = -0.07; g.add(mon);
-    const monDisc = new THREE.Mesh(new THREE.CylinderGeometry(monR, monR * 1.04, 0.010, 28), monMat);
+    const mon = new THREE.Group(); mon.position.set(0, 0.068, 0.175 * torsoSpec.depth); mon.rotation.x = -0.07; g.add(mon);
+    const monDisc = new THREE.Mesh(new THREE.CylinderGeometry(monR, monR * 1.04, 0.012, 28), monMat);
     monDisc.rotation.x = Math.PI / 2; mon.add(monDisc);
-    const monBezel = new THREE.Mesh(new THREE.TorusGeometry(monR, 0.0055, 7, 28), metal);
-    monBezel.position.z = 0.004; mon.add(monBezel);
+    const monBezel = new THREE.Mesh(new THREE.TorusGeometry(monR, 0.006, 7, 28), metal);
+    monBezel.position.z = 0.005; mon.add(monBezel);
     // watagami: contoured shoulder straps over the trapezius with gilded studs
     for (const s of [-1, 1]) {
       const strapCurve = new THREE.CatmullRomCurve3([
@@ -175,9 +183,9 @@ function build(a: Armor) {
         new V(0.116 * s, 0.244, -0.045),
         new V(0.104 * s, 0.172, -0.132 * torsoSpec.depth),
       ]);
-      g.add(new THREE.Mesh(new THREE.TubeGeometry(strapCurve, 18, 0.013, 6), lacquer));
-      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.011, 10, 8), metal);
-      stud.position.set(0.104 * s, 0.178, 0.144 * torsoSpec.depth); g.add(stud);
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(strapCurve, 18, 0.014, 6), lacquer));
+      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.0115, 10, 8), metal);
+      stud.position.set(0.104 * s, 0.178, 0.146 * torsoSpec.depth); g.add(stud);
     }
     if (isNeon) {
       // TRON glowing front rails & Identity Disc on the Ronin's back
@@ -188,12 +196,14 @@ function build(a: Armor) {
         ]);
         g.add(new THREE.Mesh(new THREE.TubeGeometry(rail, 22, 0.0042, 5), metal));
       }
-      const discGrp = new THREE.Group(); discGrp.position.set(0, 0.092, -0.168 * torsoSpec.depth); discGrp.rotation.x = 0.08;
+      const discGrp = new THREE.Group(); discGrp.position.set(0, 0.092, -0.174 * torsoSpec.depth); discGrp.rotation.x = 0.08;
       const core = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.078, 0.012, 32), lacquer); core.rotation.x = Math.PI / 2; discGrp.add(core);
       const outerR = new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.007, 8, 36), metal); outerR.position.z = -0.004; discGrp.add(outerR);
       const innerR = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.0045, 6, 32), lace); innerR.position.z = -0.006; discGrp.add(innerR);
       g.add(discGrp);
     }
+    // Bespoke 3D legendary/relic silhouette ornaments (Tengu feather wings, Raijin drums, frost shards, Oni horns, etc.)
+    attachArmorSignature(g, a, torsoSpec.depth, lacquer, metal, lace);
     overlay(a.id, rigChest, g);
   }
   // ---- kusazuri: sculpted overlapping tasset panels with gilded hems & woven obi
@@ -291,11 +301,13 @@ function build(a: Armor) {
       const dome: THREE.Vector2[] = [];
       for (let i = 0; i <= 12; i++) { const t = i / 12 * Math.PI / 2; dome.push(new THREE.Vector2(Math.cos(t) * r * (1 + 0.04 * Math.sin(t * 2)), Math.sin(t) * r * 0.95)); }
       dome[12].x = r * 0.1;
-      const bowl = new THREE.Mesh(new THREE.LatheGeometry(dome, 48), new THREE.MeshStandardMaterial({
-        map: ht.map, bumpMap: ht.bump, bumpScale: 0.014, roughnessMap: ht.rough,
-        emissiveMap: ht.map, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.30, metalness: 0.42, side: THREE.DoubleSide
+      const bowl = new THREE.Mesh(new THREE.LatheGeometry(dome, 48), new THREE.MeshPhysicalMaterial({
+        map: ht.map, bumpMap: ht.bump, bumpScale: 0.018, roughnessMap: ht.rough,
+        clearcoat: 0.92, clearcoatRoughness: 0.12, roughness: 0.28, metalness: 0.48, side: THREE.DoubleSide
       }));
       g.add(bowl);
+      // Sculpted Menpō armored lower-face mask on high-tier samurai helmets
+      if (a.tier >= 2.0) g.add(buildMenpoMask(lacquer, metal, lace, r));
       const tehen = new THREE.Mesh(new THREE.TorusGeometry(r * 0.11, r * 0.035, 6, 20), metal); tehen.rotation.x = Math.PI / 2; tehen.position.y = r * 0.94; g.add(tehen);
       const band = new THREE.Mesh(new THREE.TorusGeometry(r * 1.0, r * 0.04, 6, 40), metal); band.rotation.x = Math.PI / 2; g.add(band);
       // mabizashi: the visor over the eyes, only at the front
