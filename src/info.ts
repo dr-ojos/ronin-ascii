@@ -35,7 +35,7 @@ const SECTIONS: [string, [string, string][]][] = [
   ]],
   ['VISTA Y SONIDO', [
     ['Modo foto', 'F'],
-    ['Ver sin ASCII (3D)', 'T'],
+    ['Alternar modo ASCII / 3D', 'T'],
     ['Letras del guerrero', 'G'],
     ['Paleta de colores', 'C'],
     ['Densidad de letras', '+ / −'],

@@ -2,6 +2,7 @@
 import { battleLine, battleStatus } from './battle';
 import { affixLabel, bossHud } from './boss-mechanics';
 import { liberationHud, liberationStatus, liberatedCount } from './liberation';
+import { activeWorldEvent, worldEventHud } from './world-events';
 import { player, state } from './state';
 import { camps, discovered, placeCount, chestsLeft } from './encounters';
 import { upgradeList } from './upgrades';
@@ -22,13 +23,15 @@ export const overlay = document.getElementById('overlay')!;
 const esc = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
 const fmt = (n: number) => Math.floor(n).toLocaleString('es-ES');
 
-// Inline SVG icons for the Modo T (3D) HUD ledger: score star, traditional Japanese Mon coin, jade seal
+// Inline SVG icons for the Modo T (3D) HUD ledger and equipped gear
 const ICON_SCORE = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l1.9 4.2 4.6.5-3.4 3.1.9 4.5L8 11.5 4 13.8l.9-4.5L1.5 6.2l4.6-.5L8 1.5z" fill="#e6ebf5" opacity=".88"/></svg>';
 const ICON_MON = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="#ffd27a" stroke-width="1.6"/><rect x="6" y="6" width="4" height="4" stroke="#ffd27a" stroke-width="1.3"/></svg>';
 const ICON_JADE = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5L13.5 8 8 14.5 2.5 8 8 1.5z" stroke="#87efbd" stroke-width="1.5" fill="rgba(135,239,189,.2)"/></svg>';
+const ICON_WEAPON = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 2.5L6.2 9.8M4.8 8.4l2.8 2.8M3 13l2.2-2.2" stroke="#8fb4ff" stroke-width="1.6" stroke-linecap="round"/></svg>';
+const ICON_ARMOR = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2l5 2v4.2c0 2.9-2.1 5-5 5.8-2.9-.8-5-2.9-5-5.8V4l5-2z" stroke="#cfd8ea" stroke-width="1.4" fill="rgba(207,216,234,.12)"/></svg>';
 
 type THudRefs = {
-  crest: HTMLElement; name: HTMLElement; lv: HTMLElement; pts: HTMLElement; gear: HTMLElement;
+  crest: HTMLElement; name: HTMLElement; lv: HTMLElement; pts: HTMLElement; weaponTxt: HTMLElement; armorTxt: HTMLElement;
   vital: HTMLElement; hpNum: HTMLElement; hpMax: HTMLElement; hpBar: HTMLProgressElement;
   xpBar: HTMLProgressElement; xpTxt: HTMLElement;
   score: HTMLElement; mult: HTMLElement; best: HTMLElement; mon: HTMLElement; jade: HTMLElement; gain: HTMLElement;
@@ -38,6 +41,7 @@ type THudRefs = {
   dash: HTMLElement; dashTxt: HTMLElement; snare: HTMLElement; mute: HTMLElement;
   meta: HTMLElement; ups: HTMLElement;
   mission: HTMLElement; mTitle: HTMLElement; mBar: HTMLProgressElement; mSub: HTMLElement;
+  eventCard: HTMLElement; evKanji: HTMLElement; evTitle: HTMLElement; evBoss: HTMLElement; evWhere: HTMLElement;
   battleCard: HTMLElement; bCombo: HTMLElement; bSpirit: HTMLElement; bInfo: HTMLElement;
   bossCard: HTMLElement; bossName: HTMLElement; bossPhase: HTMLElement; bossAffix: HTMLElement;
   bossHp: HTMLProgressElement; bossStgRow: HTMLElement; bossStg: HTMLProgressElement; bossDazed: HTMLElement;
@@ -54,8 +58,11 @@ function mountTHud(): THudRefs {
         `<div class="th-crest" data-r="crest"></div>` +
         `<div class="th-id">` +
           `<div class="th-name-row"><span class="th-name" data-r="name"></span><span class="th-lv" data-r="lv"></span><span class="th-pts-badge" data-r="pts" hidden></span></div>` +
-          `<div class="th-gear" data-r="gear"></div>` +
         `</div>` +
+      `</div>` +
+      `<div class="th-gear">` +
+        `<span class="th-gear-item th-weapon">${ICON_WEAPON}<span data-r="weaponTxt"></span></span>` +
+        `<span class="th-gear-item th-armor">${ICON_ARMOR}<span data-r="armorTxt"></span></span>` +
       `</div>` +
       `<div class="th-vital" data-r="vital">` +
         `<div class="th-row-lbl"><span class="th-lbl">VIDA</span><span class="th-hp-num"><b data-r="hpNum"></b> <span data-r="hpMax"></span></span></div>` +
@@ -85,6 +92,9 @@ function mountTHud(): THudRefs {
       `<progress class="th-bar th-mbar" data-r="mBar" max="1" value="0" aria-label="Progreso de liberación"></progress>` +
       `<div class="th-msub" data-r="mSub"></div>` +
     `</section>` +
+    `<section class="th-card th-event" data-r="eventCard" hidden>` +
+      `<div class="th-ev-row"><div class="th-ev-kanji" data-r="evKanji"></div><div class="th-ev-body"><div class="th-ev-title" data-r="evTitle"></div><div class="th-ev-boss" data-r="evBoss"></div><div class="th-ev-where" data-r="evWhere"></div></div></div>` +
+    `</section>` +
     `<section class="th-card th-battle" data-r="battleCard" hidden>` +
       `<div><span class="th-bcombo" data-r="bCombo"></span><span class="th-bspirit" data-r="bSpirit"></span></div>` +
       `<span class="th-binfo" data-r="bInfo"></span>` +
@@ -98,7 +108,7 @@ function mountTHud(): THudRefs {
     `</section>`;
   const q = <T extends HTMLElement>(k: string) => hud.querySelector<T>(`[data-r="${k}"]`)!;
   return {
-    crest: q('crest'), name: q('name'), lv: q('lv'), pts: q('pts'), gear: q('gear'),
+    crest: q('crest'), name: q('name'), lv: q('lv'), pts: q('pts'), weaponTxt: q('weaponTxt'), armorTxt: q('armorTxt'),
     vital: q('vital'), hpNum: q('hpNum'), hpMax: q('hpMax'), hpBar: q('hpBar'),
     xpBar: q('xpBar'), xpTxt: q('xpTxt'),
     score: q('score'), mult: q('mult'), best: q('best'), mon: q('mon'), jade: q('jade'), gain: q('gain'),
@@ -109,6 +119,7 @@ function mountTHud(): THudRefs {
     dash: q('dash'), dashTxt: q('dashTxt'), snare: q('snare'), mute: q('mute'),
     meta: q('meta'), ups: q('ups'),
     mission: q('mission'), mTitle: q('mTitle'), mBar: q('mBar'), mSub: q('mSub'),
+    eventCard: q('eventCard'), evKanji: q('evKanji'), evTitle: q('evTitle'), evBoss: q('evBoss'), evWhere: q('evWhere'),
     battleCard: q('battleCard'), bCombo: q('bCombo'), bSpirit: q('bSpirit'), bInfo: q('bInfo'),
     bossCard: q('bossCard'), bossName: q('bossName'), bossPhase: q('bossPhase'), bossAffix: q('bossAffix'),
     bossHp: q('bossHp'), bossStgRow: q('bossStgRow'), bossStg: q('bossStg'), bossDazed: q('bossDazed')
@@ -143,7 +154,8 @@ function updateTHud() {
   r.lv.textContent = `NV. ${lv}`;
   r.pts.hidden = !free;
   if (free) r.pts.textContent = `+${free} U`;
-  r.gear.textContent = weapon().name + (state.armor !== 'kimono' ? ` · ${armor().name}` : '');
+  r.weaponTxt.textContent = weapon().name;
+  r.armorTxt.textContent = armor().name;
 
   const hp = Math.max(0, Math.ceil(player.hp)), maxHp = Math.max(1, Math.round(player.maxHp));
   r.hpNum.textContent = String(hp);
@@ -226,6 +238,16 @@ function updateTHud() {
     r.mBar.value = m.cleared;
     const bossTxt = m.liveBosses.length ? ` · Jefe${m.liveBosses.length > 1 ? 's' : ''}: ${m.liveBosses.join(', ')}` : ' · Jefes abatidos';
     r.mSub.textContent = `Zonas ${m.cleared}/${m.total} · ${m.remainingFoes} oni restantes${bossTxt}`;
+  }
+
+  const ev = activeWorldEvent();
+  r.eventCard.hidden = !ev;
+  if (ev) {
+    r.eventCard.style.setProperty('--ev', ev.colorHex);
+    r.evKanji.textContent = ev.kanji;
+    r.evTitle.textContent = `EVENTO · ${ev.name.toUpperCase()}`;
+    r.evBoss.textContent = ev.bossName;
+    r.evWhere.textContent = ev.dist > 28 ? `${ev.compass} · ${ev.dist} m · sigue el pilar de luz` : '¡ EN COMBATE COLOSAL !';
   }
 
   const b = battleStatus();
@@ -329,7 +351,7 @@ export function updateHud(dt: number) {
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}   <span class="y">${threatLabel()}</span>\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}   ${towns}\n` +
     (ups ? `<span class="y">${ups}</span>\n` : '') +
-    liberationHud() + battleLine() + foeBar +
+    liberationHud() + worldEventHud() + battleLine() + foeBar +
     `${gain}\n` +
     `<span class="d">esquiva ${player.dashCd > 0 ? '·'.repeat(Math.ceil(player.dashCd * 8)) : 'lista'}${sfx.muted ? '  ·  sin sonido' : ''}</span>${player.snareT > 0 ? ' <span class="r">· telaraña</span>' : ''}`;
 }

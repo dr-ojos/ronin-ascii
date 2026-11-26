@@ -43,8 +43,8 @@ export const state = {
   shake: 0, hitStop: 0, time: 0,
   // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes
   raining: false, rainAmt: 0, rainT: 140 + Math.random() * 160,
-  // toggles
-  asciiOn: true, colorMode: 0, photo: false, bigMap: false
+  // toggles (Modo T 3D is default; press T to toggle ASCII mode)
+  asciiOn: false, colorMode: 0, photo: false, bigMap: false
 };
 
 /** keys currently held, by KeyboardEvent.code */

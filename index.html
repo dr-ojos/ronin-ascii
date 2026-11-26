@@ -25,21 +25,26 @@
   #hud[data-mode="t"] .th-card::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;border-radius:2px;
     background:linear-gradient(180deg,transparent,rgba(255,210,122,.75),transparent)}
   #hud[data-mode="t"] .th-main::before{background:linear-gradient(180deg,#ff5a4a,#ffd27a 55%,rgba(255,210,122,.15))}
-  #hud[data-mode="t"] .th-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
-  #hud[data-mode="t"] .th-crest{flex:none;width:36px;height:36px;border-radius:7px;display:grid;place-items:center;
-    font-family:"Hiragino Mincho ProN","Yu Mincho",Georgia,serif;font-size:21px;line-height:1;color:#fff4dc;
+  #hud[data-mode="t"] .th-head{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+  #hud[data-mode="t"] .th-crest{flex:none;width:34px;height:34px;border-radius:7px;display:grid;place-items:center;
+    font-family:"Hiragino Mincho ProN","Yu Mincho",Georgia,serif;font-size:20px;line-height:1;color:#fff4dc;
     background:radial-gradient(circle at 32% 28%,rgba(255,98,74,.45),rgba(130,24,24,.52) 68%,rgba(14,10,16,.88));
     border:1px solid rgba(255,140,110,.55);box-shadow:0 0 14px rgba(255,90,74,.25),inset 0 0 8px rgba(255,210,122,.16)}
-  #hud[data-mode="t"] .th-id{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
-  #hud[data-mode="t"] .th-name-row{display:flex;align-items:center;gap:6px;min-width:0}
+  #hud[data-mode="t"] .th-id{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+  #hud[data-mode="t"] .th-name-row{display:flex;align-items:center;flex-wrap:wrap;gap:5px 6px;min-width:0}
   #hud[data-mode="t"] .th-name{font-size:13px;font-weight:700;letter-spacing:.09em;color:#f7f2e7;text-transform:uppercase;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    overflow-wrap:anywhere}
   #hud[data-mode="t"] .th-lv{flex:none;font-size:10px;font-weight:800;letter-spacing:.09em;padding:2px 6px;border-radius:4px;
     color:#ffd27a;background:rgba(255,210,122,.13);border:1px solid rgba(255,210,122,.34);font-variant-numeric:tabular-nums}
   #hud[data-mode="t"] .th-pts-badge{flex:none;font-size:10px;font-weight:800;letter-spacing:.05em;padding:2px 6px;border-radius:4px;
     color:#090b10;background:#ffd27a;box-shadow:0 0 10px rgba(255,210,122,.5);animation:pts 1.2s ease-in-out infinite}
   #hud[data-mode="t"] .th-pts-badge[hidden]{display:none}
-  #hud[data-mode="t"] .th-gear{font-size:11px;color:#9bb0d4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.02em}
+  #hud[data-mode="t"] .th-gear{display:flex;flex-wrap:wrap;gap:4px 6px;margin-bottom:9px}
+  #hud[data-mode="t"] .th-gear-item{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:5px;
+    font-size:11px;font-weight:600;line-height:1.25;letter-spacing:.01em;color:#cfe0ff;
+    background:rgba(143,180,255,.09);border:1px solid rgba(143,180,255,.22);white-space:normal;overflow-wrap:anywhere}
+  #hud[data-mode="t"] .th-gear-item.th-armor{color:#d8e3f5;background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
+  #hud[data-mode="t"] .th-gear-item svg{width:12px;height:12px;flex:none;opacity:.85}
   /* Native progress bars styled per modern-web-guidance */
   #hud[data-mode="t"] progress.th-bar{appearance:none;-webkit-appearance:none;display:block;width:100%;height:9px;border:0 solid;
     border-radius:999px;overflow:clip;background:rgba(255,255,255,.08);
@@ -112,8 +117,20 @@
   #hud[data-mode="t"] .th-ups[hidden]{display:none}
   #hud[data-mode="t"] .th-up{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;color:#ffd27a;
     background:rgba(255,210,122,.11);border:1px solid rgba(255,210,122,.26)}
-  /* Contextual cards: Mission, Battle, Boss */
-  #hud[data-mode="t"] .th-mission[hidden],#hud[data-mode="t"] .th-battle[hidden],#hud[data-mode="t"] .th-boss[hidden]{display:none}
+  /* Contextual cards: Mission, Event, Battle, Boss */
+  #hud[data-mode="t"] .th-mission[hidden],#hud[data-mode="t"] .th-event[hidden],#hud[data-mode="t"] .th-battle[hidden],#hud[data-mode="t"] .th-boss[hidden]{display:none}
+  #hud[data-mode="t"] .th-event{border-color:color-mix(in srgb,var(--ev,#ff3b58) 52%,transparent);
+    background:linear-gradient(155deg,color-mix(in srgb,var(--ev,#ff3b58) 18%,rgba(12,10,18,.9)),rgba(6,8,14,.84))}
+  #hud[data-mode="t"] .th-event::before{background:linear-gradient(180deg,var(--ev,#ff3b58),#ffd27a)}
+  #hud[data-mode="t"] .th-ev-row{display:flex;align-items:center;gap:10px}
+  #hud[data-mode="t"] .th-ev-kanji{flex:none;width:34px;height:34px;border-radius:6px;display:grid;place-items:center;
+    font-family:"Hiragino Mincho ProN","Yu Mincho",Georgia,serif;font-size:20px;font-weight:900;color:#fff8ee;
+    background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--ev,#ff3b58) 55%,transparent),rgba(10,8,16,.9));
+    border:1px solid color-mix(in srgb,var(--ev,#ff3b58) 70%,transparent);text-shadow:0 0 10px var(--ev,#ff3b58)}
+  #hud[data-mode="t"] .th-ev-body{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+  #hud[data-mode="t"] .th-ev-title{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--ev,#ff3b58);text-transform:uppercase}
+  #hud[data-mode="t"] .th-ev-boss{font-size:12px;font-weight:800;color:#fff4dc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #hud[data-mode="t"] .th-ev-where{font-size:10.5px;color:#c9d2e3;font-variant-numeric:tabular-nums}
   #hud[data-mode="t"] .th-mission{border-color:rgba(135,239,189,.35)}
   #hud[data-mode="t"] .th-mission::before{background:#87efbd}
   #hud[data-mode="t"] .th-mtitle{font-size:11px;font-weight:800;letter-spacing:.1em;color:#87efbd;margin-bottom:5px}
