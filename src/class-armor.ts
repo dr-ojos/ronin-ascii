@@ -4,7 +4,7 @@
 // fitting snugly to the mocap skeleton (anatomical torso loft, cupped deltoid pauldrons, fitted
 // forearm vambraces, overlapping hip tassets, and contoured shin greaves with kneecaps).
 import * as THREE from 'three';
-import type { Armor } from './armor';
+import type { Armor, RobeTheme } from './armor';
 import type { ClassId } from './classes';
 
 const V = THREE.Vector3;
@@ -583,6 +583,183 @@ export function tronPlateMaps(neonColor = 0xffffff): PBRMaps {
   }, false);
 
   return { map, bump, rough, emissive };
+}
+
+const cachedSpecialRobeMaps = new Map<RobeTheme, PBRMaps>();
+/** Procedural 512x512 glowing elemental / neon silk maps for the special tunics of Sōhei, Xiákè and Hwarang */
+export function specialRobeMaps(theme: RobeTheme): PBRMaps {
+  const hit = cachedSpecialRobeMaps.get(theme);
+  if (hit) return hit;
+  const S = 512;
+
+  const drawFlameSilk = (
+    x: CanvasRenderingContext2D,
+    strokeMain: string,
+    strokeSoft: string,
+    emberCol: string,
+    lineMain: number,
+    lineSoft: number
+  ) => {
+    x.lineCap = 'round';
+    x.lineJoin = 'round';
+    // Flowing vertical flame ribbons and curled fire-crests woven into the silk
+    for (let col = 0; col < 8; col++) {
+      const cx = (col + 0.5) * (S / 8);
+      for (const [lw, colStr] of [[lineSoft, strokeSoft], [lineMain, strokeMain]] as const) {
+        x.strokeStyle = colStr;
+        x.lineWidth = lw;
+        x.beginPath();
+        x.moveTo(cx, S);
+        for (let y = S - 32; y >= 0; y -= 32) {
+          const wave = Math.sin(y * 0.036 + col * 1.45) * 18;
+          x.lineTo(cx + wave, y);
+        }
+        x.stroke();
+        // Licking side tongues along each ribbon
+        for (let row = 0; row < 4; row++) {
+          const y0 = row * 128 + ((col & 1) ? 48 : 16);
+          const dir = ((col + row) & 1) ? 1 : -1;
+          x.beginPath();
+          x.moveTo(cx, y0 + 54);
+          x.bezierCurveTo(cx + dir * 24, y0 + 28, cx - dir * 10, y0 + 12, cx + dir * 16, y0 - 10);
+          x.stroke();
+        }
+      }
+    }
+    // Glowing ember sparks / celestial motes drifting across the weave
+    x.fillStyle = emberCol;
+    for (let i = 0; i < 42; i++) {
+      const ex = hash2(i, 2.3) * S, ey = hash2(i, 6.7) * S, r = 1.6 + hash2(i, 9.1) * 3.0;
+      x.beginPath(); x.arc(ex, ey, r, 0, TAU); x.fill();
+    }
+  };
+
+  let res: PBRMaps;
+  if (theme === 'fire') {
+    const map = makeTex(S, S, x => {
+      const bg = x.createLinearGradient(0, 0, 0, S);
+      bg.addColorStop(0, '#3a0a06'); bg.addColorStop(0.55, '#591108'); bg.addColorStop(1, '#8c1e0a');
+      x.fillStyle = bg; x.fillRect(0, 0, S, S);
+      x.fillStyle = 'rgba(255,190,110,0.05)';
+      for (let y = 0; y < S; y += 4) x.fillRect(0, y, S, 1.5);
+      drawFlameSilk(x, '#ffb838', 'rgba(255,78,16,0.48)', '#ffe88a', 2.4, 7.5);
+    });
+    const emissive = makeTex(S, S, x => {
+      x.fillStyle = '#0e0200'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#ffaa28', 'rgba(255,66,10,0.55)', '#fff0a6', 2.8, 9.0);
+    });
+    const bump = makeTex(S, S, x => {
+      x.fillStyle = '#686868'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#dcdcdc', '#989898', '#f0f0f0', 3.0, 7.0);
+    }, false);
+    const rough = makeTex(S, S, x => {
+      x.fillStyle = '#9c9c9c'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#383838', '#686868', '#222222', 3.0, 7.0);
+    }, false);
+    res = { map, bump, rough, emissive };
+  } else if (theme === 'whitefire') {
+    const map = makeTex(S, S, x => {
+      const bg = x.createLinearGradient(0, 0, 0, S);
+      bg.addColorStop(0, '#d8e6f4'); bg.addColorStop(0.5, '#eef5fc'); bg.addColorStop(1, '#ffffff');
+      x.fillStyle = bg; x.fillRect(0, 0, S, S);
+      x.fillStyle = 'rgba(140,195,255,0.09)';
+      for (let y = 0; y < S; y += 4) x.fillRect(0, y, S, 1.5);
+      drawFlameSilk(x, '#ffffff', 'rgba(155,220,255,0.55)', '#ffffff', 2.6, 8.5);
+    });
+    const emissive = makeTex(S, S, x => {
+      x.fillStyle = '#1b2736'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#ffffff', 'rgba(150,220,255,0.58)', '#ffffff', 3.0, 9.5);
+    });
+    const bump = makeTex(S, S, x => {
+      x.fillStyle = '#707070'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#ececec', '#a8a8a8', '#ffffff', 3.0, 7.0);
+    }, false);
+    const rough = makeTex(S, S, x => {
+      x.fillStyle = '#787878'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#1e1e1e', '#4c4c4c', '#141414', 3.0, 7.0);
+    }, false);
+    res = { map, bump, rough, emissive };
+  } else if (theme === 'blackfire') {
+    const map = makeTex(S, S, x => {
+      const bg = x.createLinearGradient(0, 0, 0, S);
+      bg.addColorStop(0, '#06060b'); bg.addColorStop(0.5, '#030306'); bg.addColorStop(1, '#010103');
+      x.fillStyle = bg; x.fillRect(0, 0, S, S);
+      x.fillStyle = 'rgba(255,255,255,0.022)';
+      for (let y = 0; y < S; y += 5) x.fillRect(0, y, S, 1.2);
+      drawFlameSilk(x, '#ffffff', 'rgba(205,232,255,0.30)', '#ffffff', 1.4, 3.8);
+    });
+    const emissive = makeTex(S, S, x => {
+      x.fillStyle = '#000000'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#ffffff', 'rgba(200,232,255,0.36)', '#ffffff', 1.55, 4.2);
+    });
+    const bump = makeTex(S, S, x => {
+      x.fillStyle = '#585858'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#e6e6e6', '#8a8a8a', '#ffffff', 2.4, 5.0);
+    }, false);
+    const rough = makeTex(S, S, x => {
+      x.fillStyle = '#626262'; x.fillRect(0, 0, S, S);
+      drawFlameSilk(x, '#161616', '#3c3c3c', '#101010', 2.4, 5.0);
+    }, false);
+    res = { map, bump, rough, emissive };
+  } else {
+    // 'neon': obsidian cyber-silk with sharp electric cyan & magenta glowing circuit geometry
+    const drawNeonSilk = (x: CanvasRenderingContext2D, cyanMain: string, cyanSoft: string, magMain: string, magSoft: string) => {
+      x.lineJoin = 'miter';
+      const rows = 4, rh = S / rows;
+      for (let r = 0; r < rows; r++) {
+        const y0 = r * rh;
+        const isMag = (r & 1) === 1;
+        const mainC = isMag ? magMain : cyanMain;
+        const softC = isMag ? magSoft : cyanSoft;
+        for (const [lw, col] of [[6.5, softC], [2.2, mainC]] as const) {
+          x.strokeStyle = col; x.lineWidth = lw;
+          x.beginPath(); x.moveTo(0, y0 + 6); x.lineTo(S, y0 + 6); x.stroke();
+          for (let c = 0; c < 4; c++) {
+            const x0 = c * 128, cx = x0 + 64;
+            x.beginPath();
+            x.moveTo(x0 + 12, y0 + 22);
+            x.lineTo(cx, y0 + 46);
+            x.lineTo(x0 + 116, y0 + 22);
+            x.moveTo(cx, y0 + 46);
+            x.lineTo(cx, y0 + rh - 22);
+            x.lineTo(x0 + 96, y0 + rh - 12);
+            x.moveTo(cx, y0 + rh - 22);
+            x.lineTo(x0 + 32, y0 + rh - 12);
+            x.stroke();
+          }
+        }
+        x.fillStyle = isMag ? cyanMain : magMain;
+        for (let c = 0; c < 4; c++) {
+          const cx = c * 128 + 64;
+          x.beginPath(); x.arc(cx, y0 + 46, 3.6, 0, TAU); x.fill();
+        }
+      }
+    };
+    const map = makeTex(S, S, x => {
+      const bg = x.createLinearGradient(0, 0, 0, S);
+      bg.addColorStop(0, '#090d1a'); bg.addColorStop(0.5, '#060914'); bg.addColorStop(1, '#04060d');
+      x.fillStyle = bg; x.fillRect(0, 0, S, S);
+      x.fillStyle = 'rgba(100,220,255,0.035)';
+      for (let y = 0; y < S; y += 6) x.fillRect(0, y, S, 1.5);
+      drawNeonSilk(x, '#4cf5ff', 'rgba(0,225,255,0.34)', '#ff52d4', 'rgba(255,40,200,0.32)');
+    });
+    const emissive = makeTex(S, S, x => {
+      x.fillStyle = '#000000'; x.fillRect(0, 0, S, S);
+      drawNeonSilk(x, '#4cf5ff', 'rgba(0,225,255,0.44)', '#ff52d4', 'rgba(255,40,200,0.42)');
+    });
+    const bump = makeTex(S, S, x => {
+      x.fillStyle = '#707070'; x.fillRect(0, 0, S, S);
+      drawNeonSilk(x, '#f0f0f0', '#303030', '#f0f0f0', '#303030');
+    }, false);
+    const rough = makeTex(S, S, x => {
+      x.fillStyle = '#505050'; x.fillRect(0, 0, S, S);
+      drawNeonSilk(x, '#141414', '#2a2a2a', '#141414', '#2a2a2a');
+    }, false);
+    res = { map, bump, rough, emissive };
+  }
+
+  cachedSpecialRobeMaps.set(theme, res);
+  return res;
 }
 
 // ------------------------------------------------------------ procedural PBR armor textures (512x512)
