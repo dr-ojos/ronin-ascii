@@ -16,6 +16,7 @@ import { updateInventoryButton } from './inventory';
 import { updateInfoButton } from './info';
 import { syncQuality } from './apply-quality';
 import { update } from './game';
+import { cineTimeScale, updateCinematic } from './cinematic';
 import { state, player } from './state';
 import { setDetailedSurfaces } from './surfaces';
 import { fitGlyphs } from './surface-glyphs';
@@ -31,6 +32,9 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 function frame() {
   requestAnimationFrame(frame);
   let dt = Math.min(clock.getDelta(), 0.05);
+  // a technique's cinematic slows time (cinematic.ts), on its own clock
+  updateCinematic(dt);
+  if (!state.menu) dt *= cineTimeScale();
   if (state.hitStop > 0) { state.hitStop -= dt; dt *= 0.1; }
   // photo mode freezes the game: never leave the ronin hidden mid-blink
   if (state.photo) { state.time += dt; state.yaw += dt * 0.35; sam.root.visible = true; } else update(dt);

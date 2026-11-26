@@ -15,8 +15,9 @@ import { player, state } from './state';
 import { clearBladeDance, startBladeDance, updateBladeDance } from './blade-dance';
 import { clearFourFlames, startFourFlames, updateFourFlames } from './four-flames';
 import { clearTechniqueWaves, startTechniqueWave, updateTechniqueWaves } from './technique-waves';
-import { SLOT_KEY, slotTechnique, TECHNIQUES, type Slot } from './techniques';
-import { clearArts, isArt, startArt, updateArts } from './arts';
+import { SLOT_KEY, slotTechnique, TECHNIQUES, type Slot, type TechniqueId } from './techniques';
+import { chargeAura, clearArts, isArt, startArt, updateArts } from './arts';
+import { beginCast, clearCinematic, release } from './cinematic';
 import { rnd } from './utils';
 import { clearFlares, flare, updateFlares } from './flare';
 import { clearSutras, startSutras, updateSutras } from './sutra-shield';
@@ -29,6 +30,7 @@ const CHARGE_TIME = 45;     // seconds to fill the charge from empty
 const KILL_BONUS = 0.04;    // each kill fills this much more
 const RANGE = 15;           // metres around you the lightning reaches
 const MAX_BOLTS = 8;
+const GATHER = 0.24;        // game seconds the power gathers (slowed down: most of a real second)
 
 /** fill both charges (time passing, or a kill); each fills at the pace of its own technique's rank */
 export function charge(amount: number) {
@@ -94,33 +96,32 @@ export function trySpecial(slot: Slot = 1) {
   if (state[key] < 1) { showMsg(`Cargando ${TECHNIQUES[id].name} · ${Math.floor(state[key] * 100)} %`, 1.2); return; }
   if (player.dancing) return;
   state[key] = 0;
-  state.casting = id;   // its rank sets the damage (progression.ts)
-  if (id === 'tajos') {
-    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
-    startBladeDance();
-    return;
-  }
-  if (isArt(id)) {
-    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
-    startArt(id);
-    return;
-  }
+  // the cinematic (cinematic.ts): a breath of slow motion while the power gathers round you, then the technique
+  const t = TECHNIQUES[id];
+  beginCast(t.name, t.kanji, t.color);
+  showMsg('', 0.01);
+  player.dancing = true;
+  player.invuln = Math.max(player.invuln, GATHER + 0.7);
+  Object.assign(player, { combo: 3, attackT: 0, attackDur: 1.2, hitDone: true });
+  chargeAura(id, GATHER);
+  sfx.taiko(0.7);
+  pending.push({ t: GATHER, fn: () => {
+    player.dancing = false;
+    release(t.color);
+    state.casting = id;   // its rank sets the damage (progression.ts)
+    cast(id);
+  } });
+}
+
+function cast(id: TechniqueId) {
+  if (id === 'tajos') { startBladeDance(); return; }
+  if (isArt(id)) { startArt(id); return; }
   Object.assign(player, { combo: id === 'viento' || id === 'sutras' ? 0 : id === 'agua' ? 1 : 2, attackT: 0, attackDur: id === 'campana' ? 0.62 : 0.55,
     hitDone: true, invuln: Math.max(player.invuln, id === 'rayo' ? 0.8 : 0.48) });
-  if (id === 'sutras') {
-    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
-    startSutras();
-    return;
-  }
-  if (id === 'feijian') {
-    state.hitStop = 0.06;
-    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
-    startFlyingSwords();
-    return;
-  }
+  if (id === 'sutras') { startSutras(); return; }
+  if (id === 'feijian') { state.hitStop = 0.06; startFlyingSwords(); return; }
   if (id !== 'rayo') {
     state.hitStop = 0.07;
-    showMsg(`— ${TECHNIQUES[id].name.toUpperCase()} —`, 0.9);
     if (id === 'cuatroLlamas') startFourFlames();
     else startTechniqueWave(id);
     return;
@@ -189,6 +190,7 @@ export function resetSpecial() {
   if (technique2 === technique) technique2 = technique === start2 ? start : start2;
   Object.assign(state, { special: 0, special2: 0, jade: 0, technique, technique2, casting: technique, learnedTechniques: learned });
   clearArts();
+  clearCinematic();
   clearSutras();
   clearFlyingSwords();
   clearBladeDance();

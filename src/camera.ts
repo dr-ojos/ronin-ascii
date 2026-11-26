@@ -9,6 +9,7 @@ import { groundY } from './terrain';
 import { shopCameraPos, shopFocus, shopStageActive } from './shop-stage';
 import { player, state } from './state';
 import { rnd } from './utils';
+import { cineCam } from './cinematic';
 
 const tmp = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
@@ -36,9 +37,11 @@ export function updateCamera(dt: number) {
     camera.lookAt(tmp.copy(shopFocus).addScaledVector(shopRight, halfWidth * occupied / innerWidth));
     return;
   }
-  const pt = state.photo ? (0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025)) * (1 - close) - 0.03 * close : dress ? 0.32 : state.pitch, cp = Math.cos(pt);
+  // a technique's cinematic pushes the camera in, a little lower (cinematic.ts)
+  const cine = state.photo || dress ? null : cineCam();
+  const pt = state.photo ? (0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025)) * (1 - close) - 0.03 * close : dress ? 0.32 : state.pitch + (cine?.pitch ?? 0), cp = Math.cos(pt);
   // inside Masa's shop the camera comes in closer (its roof is hidden, shop.ts)
-  const camDist = state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.camDistUser;
+  const camDist = (state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.camDistUser) * (cine?.dist ?? 1);
   camera.position.set(
     camTarget.x + Math.sin(state.yaw) * cp * camDist,
     camTarget.y + Math.sin(pt) * camDist,
@@ -62,6 +65,7 @@ export function updateCamera(dt: number) {
     return;
   }
   camera.lookAt(camTarget);
+  if (cine?.roll) camera.rotateZ(cine.roll);   // a slight Dutch angle while a technique plays
 }
 
 const _l0 = new THREE.Vector3(), _l1 = new THREE.Vector3();
