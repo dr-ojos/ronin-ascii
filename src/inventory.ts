@@ -22,10 +22,11 @@ const IMAGE_KIN: Record<string, string> = {
   'zanbato-hierro': 'espada-forja', 'zanbato-jade': 'espada-montana', 'zanbato-sol': 'espada-montana',
   matadragones: 'espada-montana', 'carmesi-sangre': 'muramasa', 'colmillo-oni': 'espada-forja',
   'verdugo-luna': 'espada-montana', 'alas-eclipse': 'masamune',
+  'espada-fuego': 'kagutsuchi', 'espada-fuego-verde': 'aurora', 'espada-fuego-purpura': 'kogarasu', 'espada-fuego-blanco': 'masamune',
   'kuro-odachi': 'muramasa', 'martillo-raijin': 'susanoo', 'filo-ikazuchi': 'raiken',
   'hoja-enma': 'masamune', 'lanza-bosque': 'guandao',
   'lanza-hueso': 'yari-marea', 'hoz-ceniza': 'muramasa',
-  neon: 'kurogane', 'coraza-sepulcral': 'lacado', 'manto-tengu': 'garza',
+  neon: 'kurogane', kagutsuchi: 'hachiman', raijin: 'oyoroi', 'coraza-sepulcral': 'lacado', 'manto-tengu': 'garza',
   'yoroi-shuten': 'hachiman', 'coraza-escarcha': 'tsukuyomi', 'coraza-tambor': 'oyoroi'
 };
 const itemImage = (group: string, id: string) => `${import.meta.env.BASE_URL}inventory/${group}/${IMAGE_KIN[id] ?? id}.webp`;

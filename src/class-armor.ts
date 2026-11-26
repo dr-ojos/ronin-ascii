@@ -172,7 +172,8 @@ export function braidedSilkPBR() {
 export function roninLamellarPBR(l: NonNullable<Armor['look']>, armorId: string): FullPBRMaps {
   const S = 512, rows = 5, rh = S / rows, scales = 20, sw = S / scales;
   const isWind = armorId === 'manto-tengu';
-  const isEmber = armorId === 'yoroi-shuten' || armorId === 'coraza-sepulcral';
+  const isEmber = armorId === 'kagutsuchi' || armorId === 'yoroi-shuten' || armorId === 'coraza-sepulcral';
+  const isLightning = armorId === 'raijin';
   const isFrost = armorId === 'coraza-escarcha';
   const isImperial = armorId === 'hachiman' || armorId === 'oyoroi' || armorId === 'coraza-tambor';
 
@@ -326,24 +327,32 @@ export function roninLamellarPBR(l: NonNullable<Armor['look']>, armorId: string)
   }, false);
 
   let emissive: THREE.CanvasTexture | undefined;
-  if (isWind || isEmber || isFrost) {
-    const glowCol = isWind ? '#5ef5c8' : isEmber ? '#ff5418' : '#7ae8ff';
+  if (isWind || isEmber || isLightning || isFrost) {
+    const glowCol = isWind ? '#5ef5c8' : isEmber ? '#ff5a18' : isLightning ? '#66dcff' : '#7ae8ff';
     emissive = makeTex(S, S, x => {
       x.fillStyle = '#000000'; x.fillRect(0, 0, S, S);
-      x.strokeStyle = glowCol; x.shadowColor = glowCol; x.shadowBlur = 7;
+      x.strokeStyle = glowCol; x.shadowColor = glowCol; x.shadowBlur = isLightning ? 9 : 7;
       for (let r = 0; r < rows; r++) {
         const y0 = r * rh;
-        x.lineWidth = 1.8;
+        x.lineWidth = isEmber || isLightning ? 2.2 : 1.8;
         x.beginPath(); x.moveTo(0, y0 + 7); x.lineTo(S, y0 + 7); x.stroke();
         if (r === 1 || r === 3) {
-          x.lineWidth = 2.0;
+          x.lineWidth = isLightning ? 2.4 : 2.0;
           for (let wx = 16; wx < S; wx += 64) {
             x.beginPath();
             if (isWind) {
               x.moveTo(wx - 14, y0 + rh * 0.54);
               x.bezierCurveTo(wx, y0 + rh * 0.24, wx + 22, y0 + rh * 0.26, wx + 30, y0 + rh * 0.48);
+            } else if (isLightning) {
+              // Crisp jagged thunderbolt forks across the storm-steel plates
+              x.moveTo(wx - 16, y0 + rh * 0.26);
+              x.lineTo(wx - 2, y0 + rh * 0.48);
+              x.lineTo(wx - 8, y0 + rh * 0.54);
+              x.lineTo(wx + 12, y0 + rh * 0.78);
+              x.moveTo(wx - 2, y0 + rh * 0.48);
+              x.lineTo(wx + 16, y0 + rh * 0.36);
             } else if (isEmber) {
-              x.moveTo(wx - 12, y0 + rh * 0.35); x.lineTo(wx + 4, y0 + rh * 0.58); x.lineTo(wx + 20, y0 + rh * 0.42);
+              x.moveTo(wx - 14, y0 + rh * 0.34); x.lineTo(wx + 2, y0 + rh * 0.60); x.lineTo(wx + 14, y0 + rh * 0.40); x.lineTo(wx + 28, y0 + rh * 0.64);
             } else {
               x.moveTo(wx, y0 + rh * 0.26); x.lineTo(wx + 12, y0 + rh * 0.5); x.lineTo(wx, y0 + rh * 0.74); x.lineTo(wx - 12, y0 + rh * 0.5); x.closePath();
             }

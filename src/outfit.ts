@@ -569,9 +569,63 @@ function makeWindBladeMesh(mat: THREE.Material) {
   return new THREE.Mesh(new THREE.ShapeGeometry(s, 10), mat);
 }
 
-function buildAura(kind: 'foxfire' | 'wind' | 'gold' | 'neon') {
+function buildAura(kind: 'foxfire' | 'wind' | 'fire' | 'lightning' | 'gold' | 'neon') {
   const g = new THREE.Group(); g.name = kind;
-  if (kind === 'wind') {
+  if (kind === 'fire') {
+    // Armadura de Kagutsuchi: 3 blazing solar-magma flame orbs + rising ember sparks + molten ground ring
+    const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
+    const fresnelMat = makeFresnelShellMat(0xfff4b8, 0xff4208, 0.90, 1.85);
+    const wakeGeo = makeOrbitWakeGeo(0.52, 0.028, 0.22);
+    for (let i = 0; i < 3; i++) {
+      const w = new THREE.Group();
+      w.add(new THREE.Mesh(new THREE.SphereGeometry(0.060, 14, 10), fxMat(0xfff6cc, 0.95)));
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 14), fresnelMat);
+      shell.scale.y = 1.25; w.add(shell);
+      const tongue = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.26, 10, 1, true), fxMat(0xff6a18, 0.52));
+      tongue.position.y = 0.16; tongue.name = 'tongue'; w.add(tongue);
+      w.add(fxSprite(softGlowTex, 0xff6a1a, 0.66, 0.64));
+      const flare = fxSprite(anamorphicFlareTex, 0xffe49e, 0.42, 0.44); flare.name = 'flare'; w.add(flare);
+      w.add(new THREE.Mesh(wakeGeo, fxMat(0xff5210, 0.46)));
+      orbGroup.add(w);
+    }
+    const embers = new THREE.Group(); embers.name = 'embers'; g.add(embers);
+    for (let i = 0; i < 6; i++) {
+      embers.add(fxSprite(softGlowTex, i % 2 ? 0xffb838 : 0xff5a14, 0.82, 0.14));
+    }
+    const fireRing = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.84, 56), fxMat(0xff5a14, 0.42));
+    fireRing.rotation.x = -Math.PI / 2; fireRing.position.y = 0.045; fireRing.name = 'fireRing'; g.add(fireRing);
+    const fireOuter = new THREE.Mesh(new THREE.RingGeometry(0.84, 1.02, 56), fxMat(0xffa428, 0.20));
+    fireOuter.rotation.x = -Math.PI / 2; fireOuter.position.y = 0.042; fireOuter.name = 'fireOuter'; g.add(fireOuter);
+  } else if (kind === 'lightning') {
+    // Armadura de Raijin: 3 crackling storm-charge plasma nodes + snapping 3D lightning arcs + voltage ring
+    const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
+    const fresnelMat = makeFresnelShellMat(0xffffff, 0x38bcff, 0.92, 2.0);
+    for (let i = 0; i < 3; i++) {
+      const w = new THREE.Group();
+      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.052, 0), fxMat(0xffffff, 0.98));
+      core.name = 'core'; w.add(core);
+      w.add(new THREE.Mesh(new THREE.SphereGeometry(0.105, 18, 14), fresnelMat));
+      w.add(fxSprite(softGlowTex, 0x48c4ff, 0.64, 0.56));
+      const flare = fxSprite(anamorphicFlareTex, 0xe8faff, 0.62, 0.58); flare.name = 'flare'; w.add(flare);
+      const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.142, 0.005, 5, 28), fxMat(0xb8eeff, 0.85));
+      ringA.name = 'ringA'; w.add(ringA);
+      const ringB = new THREE.Mesh(new THREE.TorusGeometry(0.172, 0.0038, 5, 28), fxMat(0x38b6ff, 0.65));
+      ringB.name = 'ringB'; w.add(ringB);
+      orbGroup.add(w);
+    }
+    // 3 snapping jagged electric arc lines jumping between the 3 orbiting storm nodes
+    const arcs = new THREE.Group(); arcs.name = 'arcs'; g.add(arcs);
+    const arcMat = tagMat(new THREE.LineBasicMaterial({ color: 0xb8f0ff, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending }), CLS.light);
+    for (let i = 0; i < 3; i++) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9 * 3), 3));
+      arcs.add(new THREE.Line(geo, arcMat));
+    }
+    const boltRing = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.79, 48), fxMat(0x68d4ff, 0.50));
+    boltRing.rotation.x = -Math.PI / 2; boltRing.position.y = 0.045; boltRing.name = 'boltRing'; g.add(boltRing);
+    const boltOuter = new THREE.Mesh(new THREE.RingGeometry(0.80, 0.94, 48), fxMat(0xd4f6ff, 0.24));
+    boltOuter.rotation.x = -Math.PI / 2; boltOuter.position.y = 0.042; boltOuter.name = 'boltOuter'; g.add(boltOuter);
+  } else if (kind === 'wind') {
     // Armadura de los Cinco Vientos: 3 luminous jade-emerald wind-spirit orbs with faceted crystal cores,
     // volumetric Fresnel plasma shells, counter-rotating cyclone rings, crescent wind-blades, glow halos & wakes
     const orbGroup = new THREE.Group(); orbGroup.name = 'orbs'; g.add(orbGroup);
@@ -849,7 +903,74 @@ export function updateOutfit() {
   const g = activeAura;
   if (!g) return;
   const t = state.time;
-  if (g.name === 'wind') {
+  if (g.name === 'fire') {
+    const orbs = g.getObjectByName('orbs');
+    orbs?.children.forEach((w, i) => {
+      const a = t * 1.9 + i * (TAU / 3);
+      const rad = 0.86 + Math.sin(t * 2.8 + i * 2.1) * 0.07;
+      const y = 1.06 + Math.sin(t * 3.1 + i * 2.09) * 0.22;
+      w.position.set(Math.sin(a) * rad, y, Math.cos(a) * rad);
+      w.rotation.set(0, a + Math.PI / 2, 0);
+      w.scale.setScalar(0.92 + Math.sin(t * 8.5 + i * 2.3) * 0.11);
+      const tongue = w.getObjectByName('tongue');
+      if (tongue) { tongue.scale.set(1, 0.85 + Math.sin(t * 14 + i * 3) * 0.28, 1); tongue.rotation.y = t * 5 + i; }
+      const flare = w.getObjectByName('flare') as THREE.Sprite | undefined;
+      if (flare) flare.scale.setScalar(0.40 + Math.sin(t * 9.5 + i * 2) * 0.10);
+    });
+    const embers = g.getObjectByName('embers');
+    embers?.children.forEach((sp, i) => {
+      const p = (t * 0.65 + i / 6) % 1;
+      const a = t * 1.4 + i * (TAU / 6) + p * 1.5;
+      const r = 0.72 * (1 - p * 0.35);
+      sp.position.set(Math.sin(a) * r, 0.15 + p * 1.65, Math.cos(a) * r);
+      sp.scale.setScalar(0.15 * Math.sin(p * Math.PI));
+    });
+    const fr = g.getObjectByName('fireRing') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    const fo = g.getObjectByName('fireOuter') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    if (fr) { fr.rotation.z = t * 1.2; fr.scale.setScalar(1 + Math.sin(t * 4.2) * 0.05); fr.material.opacity = 0.34 + Math.sin(t * 6.5) * 0.12; }
+    if (fo) { fo.rotation.z = -t * 0.8; fo.scale.setScalar(1 + Math.sin(t * 4.2 - 0.8) * 0.08); }
+  } else if (g.name === 'lightning') {
+    const orbs = g.getObjectByName('orbs');
+    const pts: THREE.Vector3[] = [];
+    orbs?.children.forEach((w, i) => {
+      const a = t * 2.55 + i * (TAU / 3);
+      const rad = 0.84 + Math.sin(t * 6.5 + i * 2.4) * 0.06;
+      const y = 1.08 + Math.sin(t * 3.8 + i * 2.09) * 0.26;
+      w.position.set(Math.sin(a) * rad, y, Math.cos(a) * rad);
+      pts.push(w.position);
+      const snap = Math.floor(t * 18 + i * 3);
+      const core = w.getObjectByName('core');
+      if (core) core.rotation.set(t * 6 + i, t * 8, 0);
+      const ringA = w.getObjectByName('ringA');
+      if (ringA) ringA.rotation.set(snap * 1.1 + i, t * 7, snap * 0.7);
+      const ringB = w.getObjectByName('ringB');
+      if (ringB) ringB.rotation.set(-snap * 0.9, -t * 6 + i, snap * 1.3);
+      const flare = w.getObjectByName('flare') as THREE.Sprite | undefined;
+      if (flare) flare.scale.setScalar(0.46 + (Math.sin(t * 28 + i * 4.1) > 0.2 ? 0.22 : 0));
+    });
+    const arcs = g.getObjectByName('arcs');
+    if (arcs && pts.length === 3) {
+      const tick = Math.floor(t * 22);
+      arcs.children.forEach((obj, i) => {
+        const line = obj as THREE.Line;
+        const pos = line.geometry.attributes.position as THREE.BufferAttribute;
+        const p0 = pts[i], p1 = pts[(i + 1) % 3];
+        for (let s = 0; s < 9; s++) {
+          const u = s / 8;
+          const env = Math.sin(u * Math.PI);
+          const jx = env * Math.sin(tick * 13.7 + i * 5.3 + s * 4.1) * 0.16;
+          const jy = env * Math.cos(tick * 17.3 + i * 3.7 + s * 5.9) * 0.16;
+          const jz = env * Math.sin(tick * 11.1 + i * 7.1 + s * 3.3) * 0.16;
+          pos.setXYZ(s, p0.x + (p1.x - p0.x) * u + jx, p0.y + (p1.y - p0.y) * u + jy, p0.z + (p1.z - p0.z) * u + jz);
+        }
+        pos.needsUpdate = true;
+      });
+    }
+    const br = g.getObjectByName('boltRing') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    const bo = g.getObjectByName('boltOuter') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined;
+    if (br) { br.rotation.z = t * 2.8; br.material.opacity = 0.35 + (Math.sin(t * 24) > 0 ? 0.28 : 0.05); }
+    if (bo) { bo.rotation.z = -t * 1.9; bo.scale.setScalar(1 + Math.sin(t * 12) * 0.05); }
+  } else if (g.name === 'wind') {
     const orbs = g.getObjectByName('orbs');
     orbs?.children.forEach((w, i) => {
       const a = t * 1.85 + i * (TAU / 3);
