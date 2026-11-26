@@ -15,7 +15,7 @@ const ownedWeapons = () => WEAPONS.filter(w => owns(w.id));
 const IMAGE_KIN: Record<string, string> = {
   kusanagi: 'masamune', 'ame-nuboko': 'yari-marea', 'hoo-tsubasa': 'gemelas-ocaso', tenrai: 'espada-montana', mugen: 'aurora',
   // the newer techniques borrow the picture of a kindred one
-  iai: 'tajos', rueda: 'campana', palma: 'feijian', flechas: 'petalos', tornado: 'viento', meteoro: 'cuatroLlamas', hielo: 'agua', tierra: 'rayo',
+  iai: 'tajos', rueda: 'campana', palma: 'feijian', flechas: 'petalos', tornado: 'viento', meteoro: 'cuatroLlamas', hielo: 'agua', tierra: 'rayo', espectros: 'tajos',
   kongo: 'tetsubo-monje', jizo: 'shakujo', fudo: 'bishamon',
   'estoque-plata': 'sakura', 'estoque-ambar': 'raiken', 'estoque-estrella': 'aurora',
   'odachi-niebla': 'nodachi', 'odachi-carmesi': 'muramasa', 'odachi-eclipse': 'susanoo',

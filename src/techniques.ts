@@ -41,6 +41,8 @@ export const TECHNIQUES = {
     description: 'Un aliento helado en abanico de 11 m congela a los onis 3 s. Cuando el hielo se rompe, vuelve a herirlos.' },
   tierra: { name: 'Grieta del Trueno', short: 'Grieta', kanji: '雷裂', color: 0xd9b27a, cost: 4,
     description: 'Golpeas la tierra y una grieta corre 18 m: colmillos de roca y chispas lanzan por los aires a cada oni del camino.' },
+  espectros: { name: 'Clones Espectrales', short: 'Espectros', kanji: '分身', color: 0x72f0ff, cost: 4,
+    description: 'Invocas 3 copias espectrales de tu guerrero que persiguen y atacan a los onis durante 4 s.' },
 } as const;
 
 export type TechniqueId = keyof typeof TECHNIQUES;

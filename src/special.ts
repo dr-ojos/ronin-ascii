@@ -21,6 +21,7 @@ import { rnd } from './utils';
 import { clearFlares, flare, updateFlares } from './flare';
 import { clearSutras, startSutras, updateSutras } from './sutra-shield';
 import { clearFlyingSwords, startFlyingSwords, updateFlyingSwords } from './flying-swords';
+import { clearSpectralClones, startSpectralClones, updateSpectralClones } from './spectral-clones';
 import { chargeRanged, clearElementalOrbs, MAX_RANGED_CHARGES, ORB_ELEMENTS, updateElementalOrbs } from './elemental-orb';
 import { clearVfxArt, spawnCinematicBolt, spawnLightningTelegraph, spawnStormCanopy, updateVfxArt } from './vfx-art';
 import { cls } from './classes';
@@ -103,6 +104,7 @@ function cast(id: TechniqueId) {
   Object.assign(player, { combo: id === 'viento' || id === 'sutras' ? 0 : id === 'agua' ? 1 : 2, attackT: 0, attackDur: id === 'campana' ? 0.62 : 0.55,
     hitDone: true, invuln: Math.max(player.invuln, id === 'rayo' ? 0.8 : 0.48) });
   if (id === 'sutras') { startSutras(); return; }
+  if (id === 'espectros') { state.hitStop = 0.06; startSpectralClones(); return; }
   if (id === 'feijian') { state.hitStop = 0.06; startFlyingSwords(); return; }
   if (id !== 'rayo') {
     state.hitStop = 0.07;
@@ -154,6 +156,7 @@ export function updateSpecial(dt: number) {
   updateFlares(dt);
   updateSutras(dt);
   updateFlyingSwords(dt);
+  updateSpectralClones(dt);
   updateElementalOrbs(dt);
   updateArts(dt);
   updateVfxArt(dt);
@@ -164,9 +167,10 @@ export function updateSpecial(dt: number) {
 }
 
 export function resetSpecial() {
-  // the class's own two techniques and every one already learnt (vault.ts); the jade seals belong to the run
+  // the class's own two techniques, Clones Espectrales, and every one already learnt (vault.ts)
   const start = cls().technique, start2 = cls().technique2, v = readVault();
-  const learned = [start, start2, ...v.techniques.filter(t => t !== start && t !== start2 && t in TECHNIQUES)];
+  const base: TechniqueId[] = [start, start2, 'espectros'];
+  const learned = [...base, ...v.techniques.filter(t => !base.includes(t) && t in TECHNIQUES)];
   const technique = v.technique && learned.includes(v.technique) ? v.technique : start;
   let technique2 = v.technique2 && learned.includes(v.technique2) ? v.technique2 : start2;
   if (technique2 === technique) technique2 = technique === start2 ? start : start2;
@@ -183,6 +187,7 @@ export function resetSpecial() {
   clearCinematic();
   clearSutras();
   clearFlyingSwords();
+  clearSpectralClones();
   clearBladeDance();
   clearTechniqueWaves();
   clearFourFlames();
