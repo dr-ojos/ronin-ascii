@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { sam } from './avatar';
 import { samuraiArmorGltf } from './assets';
-import { mountSamuraiGlb } from './samurai-glb';
+import { createGlbArmorManager } from './samurai-glb';
 import { ACTOR_LAYER } from './ascii';
 import { CLS, tagMat, tagTree } from './materials';
 import { applyLook, opt } from './look';
@@ -57,15 +57,19 @@ const auras = new Map<string, THREE.Group>();
 
 const baseLayers: THREE.Object3D[] = [];
 const baseSkinnedMeshes: THREE.SkinnedMesh[] = [];
-const baseHeadChildren: THREE.Object3D[] = [];
+const baseExtraAttachments: THREE.Object3D[] = [];
 root.traverse(o => {
   if (o.userData.equipmentLayer) baseLayers.push(o);
   if ((o as THREE.SkinnedMesh).isSkinnedMesh) baseSkinnedMeshes.push(o as THREE.SkinnedMesh);
 });
-if (bones.Head) for (const c of bones.Head.children) if (!(c as THREE.Bone).isBone) baseHeadChildren.push(c);
+// Collect non-bone attachments on Head & Feet (scanned head, kasa, tan foot wraps) so they hide cleanly when Samurai GLB is worn
+for (const bName of ['Head', 'LeftFoot', 'RightFoot'] as const) {
+  const b = bones[bName];
+  if (b) for (const c of b.children) if (!(c as THREE.Bone).isBone) baseExtraAttachments.push(c);
+}
 const rigChest = baseLayers.find(o => o.userData.equipmentLayer === 'chest');
 const rigWaist = baseLayers.find(o => o.userData.equipmentLayer === 'waist');
-const samuraiGlb = samuraiArmorGltf ? mountSamuraiGlb(samuraiArmorGltf, root, bones) : null;
+const glbArmors = createGlbArmorManager(root, bones, samuraiArmorGltf, () => dressUp());
 // the straw kasa (rig.ts), already fitted on the scanned head: the jingasa is built in its frame
 let kasaMesh: THREE.Mesh | undefined;
 root.traverse(o => { const m = o as THREE.Mesh; if (!kasaMesh && m.isMesh && m.userData.part === 'hat' && (m.geometry as THREE.ConeGeometry).type === 'ConeGeometry' && (m.geometry as THREE.ConeGeometry).parameters.radius > 0.2) kasaMesh = m; });
@@ -764,15 +768,11 @@ export function dressUp(cur = armor()) {
   if (own && cur.look) worn = ensureClassArmor(state.cls as NewClassId, cur);
   else if (own && !sets.has(cur.id)) worn = own;
   else worn = cur.id;
-  // When wearing plated armor as Ronin and the real CC0 Samurai GLB is loaded, use the sculpted
-  // 41k-triangle rigged Samurai model instead of procedural plates!
-  const useSamuraiGlb = !!samuraiGlb && !own && !!cur.look;
-  if (samuraiGlb) {
-    if (useSamuraiGlb) samuraiGlb.setArmor(cur);
-    samuraiGlb.setVisible(useSamuraiGlb);
-  }
+  // When wearing plated armor as Ronin, select the matching real CC0 rigged GLB silhouette
+  // (samurai O-Yoroi, agile shinobi/wind, leather scout, or heavy full-plate juggernaut).
+  const useSamuraiGlb = glbArmors.apply(cur, !own && !!cur.look);
   for (const m of baseSkinnedMeshes) m.visible = !useSamuraiGlb;
-  for (const c of baseHeadChildren) c.visible = !useSamuraiGlb;
+  for (const c of baseExtraAttachments) c.visible = !useSamuraiGlb;
   for (const [id, list] of sets) for (const o of list) o.visible = !useSamuraiGlb && id === worn;
   for (const [id, g] of auras) g.visible = id === cur.id;
   activeAura = auras.get(cur.id);
@@ -815,9 +815,9 @@ export function dressUp(cur = armor()) {
 }
 dressUp();
 
-/** every frame: sync real Samurai GLB skeleton and animate the auras */
+/** every frame: sync real GLB armor skeleton, snap weapons to palms, and animate the auras */
 export function updateOutfit() {
-  samuraiGlb?.sync();
+  glbArmors.sync(sam.katana, sam.offhand);
   const g = activeAura;
   if (!g) return;
   const t = state.time;
