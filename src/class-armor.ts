@@ -45,7 +45,391 @@ function makeTex(
   return t;
 }
 
-interface PBRMaps { map: THREE.CanvasTexture; bump: THREE.CanvasTexture; rough: THREE.CanvasTexture; emissive?: THREE.CanvasTexture }
+export interface PBRMaps { map: THREE.CanvasTexture; bump: THREE.CanvasTexture; rough: THREE.CanvasTexture; emissive?: THREE.CanvasTexture }
+
+/** Fast deterministic hash for procedural forged-metal & lacquer micro-grain */
+function hash2(x: number, y: number) {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
+/** Paint subtle hand-forged patina & brushed micro-grain onto an armor canvas */
+function paintMicroGrain(x: CanvasRenderingContext2D, w: number, h: number, strength = 1, brushAlpha = 0.045) {
+  // Fine horizontal anisotropic brush strokes
+  for (let i = 0; i < 160; i++) {
+    const yy = hash2(i, 1.3) * h;
+    const xx = hash2(i, 2.7) * w;
+    const len = 18 + hash2(i, 4.1) * 76;
+    const bright = hash2(i, 5.9) > 0.48;
+    x.fillStyle = bright
+      ? `rgba(255,255,255,${(brushAlpha * strength).toFixed(3)})`
+      : `rgba(0,0,0,${(brushAlpha * 1.15 * strength).toFixed(3)})`;
+    x.fillRect(xx, yy, len, 1.1);
+  }
+  // Subtle hammered dimples / patina speckles
+  for (let i = 0; i < 110; i++) {
+    const cx = hash2(i, 7.2) * w;
+    const cy = hash2(i, 9.4) * h;
+    const rad = 2.5 + hash2(i, 11.1) * 7.5;
+    const g = x.createRadialGradient(cx - rad * 0.25, cy - rad * 0.25, 0.5, cx, cy, rad);
+    const a = 0.055 * strength;
+    g.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`);
+    g.addColorStop(0.65, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(0,0,0,${(a * 1.1).toFixed(3)})`);
+    x.fillStyle = g;
+    x.beginPath();
+    x.arc(cx, cy, rad, 0, TAU);
+    x.fill();
+  }
+}
+
+let cachedMetalMaps: { bump: THREE.CanvasTexture; rough: THREE.CanvasTexture } | null = null;
+/** Shared brushed & hand-hammered metal PBR surface maps (cached once) */
+export function metalSurfaceMaps() {
+  if (cachedMetalMaps) return cachedMetalMaps;
+  const S = 256;
+  const bump = makeTex(S, S, x => {
+    x.fillStyle = '#808080';
+    x.fillRect(0, 0, S, S);
+    paintMicroGrain(x, S, S, 1.8, 0.08);
+    // Crisp brushed directional sheen lines
+    for (let y = 0; y < S; y += 3) {
+      const v = 114 + Math.floor(hash2(y, 17.3) * 28);
+      x.fillStyle = `rgb(${v},${v},${v})`;
+      x.fillRect(0, y, S, 1);
+    }
+  }, false);
+  const rough = makeTex(S, S, x => {
+    x.fillStyle = '#424242';
+    x.fillRect(0, 0, S, S);
+    paintMicroGrain(x, S, S, 1.5, 0.09);
+    // Subtle burnished bright streaks
+    for (let i = 0; i < 90; i++) {
+      const yy = hash2(i, 21.1) * S;
+      const xx = hash2(i, 23.7) * S;
+      x.fillStyle = hash2(i, 29.3) > 0.5 ? 'rgba(20,20,20,0.22)' : 'rgba(130,130,130,0.16)';
+      x.fillRect(xx, yy, 24 + hash2(i, 31.4) * 58, 1.5);
+    }
+  }, false);
+  cachedMetalMaps = { bump, rough };
+  return cachedMetalMaps;
+}
+
+let cachedLacquerMaps: { bump: THREE.CanvasTexture; rough: THREE.CanvasTexture } | null = null;
+/** Shared urushi satin lacquer PBR surface maps with subtle forged iron undertone (cached once) */
+export function lacquerSurfaceMaps() {
+  if (cachedLacquerMaps) return cachedLacquerMaps;
+  const S = 256;
+  const bump = makeTex(S, S, x => {
+    x.fillStyle = '#808080';
+    x.fillRect(0, 0, S, S);
+    paintMicroGrain(x, S, S, 1.25, 0.055);
+  }, false);
+  const rough = makeTex(S, S, x => {
+    x.fillStyle = '#4e4e4e';
+    x.fillRect(0, 0, S, S);
+    paintMicroGrain(x, S, S, 1.15, 0.07);
+  }, false);
+  cachedLacquerMaps = { bump, rough };
+  return cachedLacquerMaps;
+}
+
+/** Ronin: 512x512 high-detail PBR kozane lamellar plates, sugake odoshi silk cords, gilded rivets & hishinui knots */
+export function roninLamellarMaps(l: NonNullable<Armor['look']>): PBRMaps {
+  const S = 512, rows = 6, rh = S / rows, scales = 24, sw = S / scales;
+  const map = makeTex(S, S, x => {
+    for (let r = 0; r < rows; r++) {
+      const y0 = r * rh;
+      // Deep glossy urushi lacquer plate gradient
+      const g = x.createLinearGradient(0, y0, 0, y0 + rh);
+      g.addColorStop(0, css(l.lame, 1.65));
+      g.addColorStop(0.11, css(l.lame, 1.24));
+      g.addColorStop(0.55, css(l.lame, 0.94));
+      g.addColorStop(0.86, css(l.lame, 0.62));
+      g.addColorStop(1, css(l.lame, 0.34));
+      x.fillStyle = g;
+      x.fillRect(0, y0, S, rh);
+
+      // Individual bevelled kozane lames with subtle metallic edge highlight
+      for (let s = 0; s < scales; s++) {
+        const sx = s * sw;
+        const sg = x.createLinearGradient(sx, y0, sx + sw, y0);
+        sg.addColorStop(0, 'rgba(0,0,0,0.40)');
+        sg.addColorStop(0.18, 'rgba(255,255,255,0.18)');
+        sg.addColorStop(0.55, 'rgba(255,255,255,0.05)');
+        sg.addColorStop(0.88, 'rgba(0,0,0,0.12)');
+        sg.addColorStop(1, 'rgba(0,0,0,0.48)');
+        x.fillStyle = sg;
+        x.fillRect(sx, y0 + 5, sw, rh - 9);
+        // Specular lacquer bead along upper rounded tip of each scale
+        x.fillStyle = css(l.lame, 1.9, 0.36);
+        x.fillRect(sx + 2, y0 + 6, sw - 4, 2.5);
+      }
+
+      // Deep ambient occlusion shadow under the overlapping upper tier
+      const sh = x.createLinearGradient(0, y0 + rh - 12, 0, y0 + rh);
+      sh.addColorStop(0, 'rgba(0,0,0,0)');
+      sh.addColorStop(0.55, 'rgba(0,0,0,0.38)');
+      sh.addColorStop(1, 'rgba(0,0,0,0.82)');
+      x.fillStyle = sh;
+      x.fillRect(0, y0 + rh - 12, S, 12);
+
+      // Top silk edge braid (fukurin) + metallic piping
+      x.fillStyle = css(l.lace, 0.82);
+      x.fillRect(0, y0, S, 5);
+      x.fillStyle = css(l.metal, 1.25, 0.78);
+      x.fillRect(0, y0 + 5, S, 2.2);
+
+      // Paired braided silk lacing cords (sugake odoshi) with drop shadows & chevron weave
+      for (let cx = 32; cx < S; cx += 64) {
+        for (const dx of [-11, 4]) {
+          const bx = cx + dx;
+          // Recessed shadow behind cord
+          x.fillStyle = 'rgba(0,0,0,0.48)';
+          x.fillRect(bx - 1.5, y0 + 1, 12, rh - 4);
+          // Main silk braid
+          x.fillStyle = css(l.lace, 0.98);
+          x.fillRect(bx, y0 + 1, 9, rh - 5);
+          // Woven chevron pattern
+          x.fillStyle = css(l.lace, 0.45);
+          for (let yy = y0 + 4; yy < y0 + rh - 6; yy += 6) {
+            x.fillRect(bx, yy, 4.5, 2.2);
+            x.fillRect(bx + 4.5, yy + 3, 4.5, 2.2);
+          }
+          // Silk sheen highlight
+          x.fillStyle = css(l.lace, 1.5, 0.62);
+          x.fillRect(bx + 2, y0 + 1, 2, rh - 6);
+        }
+      }
+
+      // Domed gilded rivets (byō) on alternating rows
+      if (r === 0 || r === 2 || r === 4) {
+        for (let cx = 0; cx < S; cx += 64) {
+          const cy = y0 + rh * 0.44;
+          x.fillStyle = 'rgba(0,0,0,0.52)';
+          x.beginPath(); x.arc(cx, cy + 1.5, 6.2, 0, TAU); x.fill();
+          const rg = x.createRadialGradient(cx - 1.8, cy - 1.8, 0.8, cx, cy, 5.4);
+          rg.addColorStop(0, css(l.metal, 1.85));
+          rg.addColorStop(0.6, css(l.metal, 1.05));
+          rg.addColorStop(1, css(l.metal, 0.35));
+          x.fillStyle = rg;
+          x.beginPath(); x.arc(cx, cy, 5.4, 0, TAU); x.fill();
+        }
+      }
+
+      // Hishinui: crisp cross-laced silk knots along the bottom lame
+      if (r === rows - 1) {
+        x.lineCap = 'round';
+        for (let cx = 16; cx < S; cx += 32) {
+          const cy = y0 + rh * 0.66;
+          x.strokeStyle = 'rgba(0,0,0,0.55)';
+          x.lineWidth = 5.2;
+          x.beginPath();
+          x.moveTo(cx - 7, cy - 5); x.lineTo(cx + 7, cy + 7);
+          x.moveTo(cx + 7, cy - 5); x.lineTo(cx - 7, cy + 7);
+          x.stroke();
+          x.strokeStyle = css(l.lace, 1.28);
+          x.lineWidth = 3.2;
+          x.beginPath();
+          x.moveTo(cx - 7, cy - 6); x.lineTo(cx + 7, cy + 6);
+          x.moveTo(cx + 7, cy - 6); x.lineTo(cx - 7, cy + 6);
+          x.stroke();
+        }
+      }
+    }
+    paintMicroGrain(x, S, S, 0.65, 0.032);
+  });
+
+  const bump = makeTex(S, S, x => {
+    x.fillStyle = '#707070'; x.fillRect(0, 0, S, S);
+    for (let r = 0; r < rows; r++) {
+      const y0 = r * rh;
+      const g = x.createLinearGradient(0, y0, 0, y0 + rh);
+      g.addColorStop(0, '#d8d8d8'); g.addColorStop(0.80, '#888888'); g.addColorStop(1, '#1c1c1c');
+      x.fillStyle = g; x.fillRect(0, y0, S, rh);
+      for (let s = 0; s < scales; s++) {
+        x.fillStyle = '#2e2e2e'; x.fillRect(s * sw, y0, 2.2, rh);
+        x.fillStyle = '#e6e6e6'; x.fillRect(s * sw + 3, y0 + 6, sw - 7, 4);
+      }
+      for (let cx = 32; cx < S; cx += 64) {
+        for (const dx of [-11, 4]) {
+          x.fillStyle = '#f2f2f2'; x.fillRect(cx + dx, y0 + 1, 9, rh - 5);
+          x.fillStyle = '#888888';
+          for (let yy = y0 + 4; yy < y0 + rh - 6; yy += 6) x.fillRect(cx + dx, yy, 9, 2);
+        }
+      }
+      if (r === 0 || r === 2 || r === 4) {
+        for (let cx = 0; cx < S; cx += 64) {
+          const cy = y0 + rh * 0.44;
+          const rg = x.createRadialGradient(cx, cy, 0.5, cx, cy, 6);
+          rg.addColorStop(0, '#ffffff'); rg.addColorStop(0.65, '#d0d0d0'); rg.addColorStop(1, '#303030');
+          x.fillStyle = rg;
+          x.beginPath(); x.arc(cx, cy, 6, 0, TAU); x.fill();
+        }
+      }
+    }
+    paintMicroGrain(x, S, S, 0.85, 0.045);
+  }, false);
+
+  const rough = makeTex(S, S, x => {
+    // Glossy urushi lacquer base
+    x.fillStyle = '#404040'; x.fillRect(0, 0, S, S);
+    for (let r = 0; r < rows; r++) {
+      const y0 = r * rh;
+      // Matte silk cords & top edge braid
+      x.fillStyle = '#d4d4d4';
+      x.fillRect(0, y0, S, 5);
+      for (let cx = 32; cx < S; cx += 64) {
+        x.fillRect(cx - 11, y0, 9, rh);
+        x.fillRect(cx + 4, y0, 9, rh);
+      }
+      // Mirror-bright metallic piping & rivets
+      x.fillStyle = '#242424';
+      x.fillRect(0, y0 + 5, S, 2.5);
+      if (r === 0 || r === 2 || r === 4) {
+        for (let cx = 0; cx < S; cx += 64) {
+          x.beginPath(); x.arc(cx, y0 + rh * 0.44, 5.5, 0, TAU); x.fill();
+        }
+      }
+    }
+    paintMicroGrain(x, S, S, 0.7, 0.04);
+  }, false);
+
+  return { map, bump, rough };
+}
+
+/** Ronin kabuto hachi bowl: 24 sculpted suji-bachi iron gores with raised ribs & hoshi rivets (PBR) */
+export function roninHachiMaps(l: NonNullable<Armor['look']>): PBRMaps {
+  const W = 512, H = 256, n = 24, gw = W / n;
+  const map = makeTex(W, H, x => {
+    for (let i = 0; i < n; i++) {
+      const x0 = i * gw;
+      const g = x.createLinearGradient(x0, 0, x0 + gw, 0);
+      g.addColorStop(0, css(l.lame, 0.48));
+      g.addColorStop(0.24, css(l.lame, 1.05));
+      g.addColorStop(0.5, css(l.lame, 1.48));
+      g.addColorStop(0.82, css(l.lame, 0.92));
+      g.addColorStop(1, css(l.lame, 0.45));
+      x.fillStyle = g;
+      x.fillRect(x0, 0, gw, H);
+      // Raised suji metallic seam ridge
+      x.fillStyle = css(l.metal, 1.12);
+      x.fillRect(x0 - 1.2, 0, 2.4, H);
+      x.fillStyle = css(l.metal, 1.65, 0.6);
+      x.fillRect(x0 - 0.5, 0, 1, H);
+      // Hoshi star-rivets climbing each gore
+      for (let y = 18; y < H - 16; y += 22) {
+        const cx = x0 + gw * 0.5;
+        x.fillStyle = 'rgba(0,0,0,0.5)';
+        x.beginPath(); x.arc(cx, y + 1.2, 3.2, 0, TAU); x.fill();
+        const rg = x.createRadialGradient(cx - 1, y - 1, 0.4, cx, y, 2.8);
+        rg.addColorStop(0, css(l.metal, 1.85));
+        rg.addColorStop(0.65, css(l.metal, 1.1));
+        rg.addColorStop(1, css(l.metal, 0.4));
+        x.fillStyle = rg;
+        x.beginPath(); x.arc(cx, y, 2.8, 0, TAU); x.fill();
+      }
+    }
+    const rim = x.createLinearGradient(0, 0, 0, 26);
+    rim.addColorStop(0, 'rgba(0,0,0,0.58)');
+    rim.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = rim;
+    x.fillRect(0, 0, W, 26);
+    paintMicroGrain(x, W, H, 0.65, 0.035);
+  });
+
+  const bump = makeTex(W, H, x => {
+    x.fillStyle = '#707070'; x.fillRect(0, 0, W, H);
+    for (let i = 0; i < n; i++) {
+      const x0 = i * gw;
+      const g = x.createLinearGradient(x0, 0, x0 + gw, 0);
+      g.addColorStop(0, '#303030'); g.addColorStop(0.5, '#c4c4c4'); g.addColorStop(1, '#303030');
+      x.fillStyle = g; x.fillRect(x0, 0, gw, H);
+      x.fillStyle = '#f0f0f0'; x.fillRect(x0 - 1.2, 0, 2.4, H);
+      for (let y = 18; y < H - 16; y += 22) {
+        const cx = x0 + gw * 0.5;
+        const rg = x.createRadialGradient(cx, y, 0.4, cx, y, 3.4);
+        rg.addColorStop(0, '#ffffff'); rg.addColorStop(0.7, '#d8d8d8'); rg.addColorStop(1, '#404040');
+        x.fillStyle = rg; x.beginPath(); x.arc(cx, y, 3.4, 0, TAU); x.fill();
+      }
+    }
+    paintMicroGrain(x, W, H, 0.7, 0.04);
+  }, false);
+
+  const rough = makeTex(W, H, x => {
+    x.fillStyle = '#484848'; x.fillRect(0, 0, W, H);
+    for (let i = 0; i < n; i++) {
+      const x0 = i * gw;
+      x.fillStyle = '#222222';
+      x.fillRect(x0 - 1.2, 0, 2.4, H);
+      for (let y = 18; y < H - 16; y += 22) {
+        x.beginPath(); x.arc(x0 + gw * 0.5, y, 3.0, 0, TAU); x.fill();
+      }
+    }
+    paintMicroGrain(x, W, H, 0.65, 0.04);
+  }, false);
+
+  return { map, bump, rough };
+}
+
+/** Embossed Ronin chest clan crest (mon): gilded mitsudomoe or swirling wind-vortex for manto-tengu */
+export function roninMonTex(l: NonNullable<Armor['look']>, armorId?: string) {
+  return makeTex(256, 256, (x, w, h) => {
+    const cx = w / 2, cy = h / 2;
+    const bg = x.createRadialGradient(cx - 24, cy - 24, 10, cx, cy, 124);
+    bg.addColorStop(0, css(l.lame, 1.35));
+    bg.addColorStop(0.7, css(l.lame, 0.72));
+    bg.addColorStop(1, css(l.lame, 0.32));
+    x.fillStyle = bg;
+    x.beginPath(); x.arc(cx, cy, 124, 0, TAU); x.fill();
+
+    // Outer gilded rim + pearl beads
+    x.strokeStyle = css(l.metal, 1.35);
+    x.lineWidth = 10;
+    x.beginPath(); x.arc(cx, cy, 114, 0, TAU); x.stroke();
+    x.strokeStyle = css(l.lace, 0.95);
+    x.lineWidth = 4;
+    x.beginPath(); x.arc(cx, cy, 98, 0, TAU); x.stroke();
+    x.fillStyle = css(l.metal, 1.75);
+    for (let i = 0; i < 16; i++) {
+      const a = i * TAU / 16;
+      x.beginPath(); x.arc(cx + Math.cos(a) * 106, cy + Math.sin(a) * 106, 3.8, 0, TAU); x.fill();
+    }
+
+    // Center motif: 5-petal swirling wind-tomoe for Armadura de los Cinco Vientos, mitsudomoe for all other Ronin sets
+    const blades = armorId === 'manto-tengu' ? 5 : 3;
+    const r = 74;
+    x.save();
+    x.translate(cx, cy);
+    for (let i = 0; i < blades; i++) {
+      x.save();
+      x.rotate(i * TAU / blades);
+      const tg = x.createRadialGradient(0, -r * 0.36, 3, 0, -r * 0.36, r * 0.34);
+      tg.addColorStop(0, css(l.metal, 1.85));
+      tg.addColorStop(0.65, css(l.metal, 1.12));
+      tg.addColorStop(1, css(l.metal, 0.58));
+      x.fillStyle = tg;
+      x.beginPath();
+      x.arc(0, -r * 0.38, r * (blades === 5 ? 0.19 : 0.25), 0, TAU);
+      x.fill();
+      x.beginPath();
+      const bw = r * (blades === 5 ? 0.19 : 0.25);
+      x.moveTo(bw, -r * 0.38);
+      x.quadraticCurveTo(r * 0.38, r * 0.18, -r * 0.12, r * 0.58);
+      x.quadraticCurveTo(r * 0.12, r * 0.12, -bw, -r * 0.38);
+      x.fill();
+      x.restore();
+    }
+    x.restore();
+
+    // Specular sheen highlight
+    const sheen = x.createRadialGradient(cx - 28, cy - 28, 4, cx - 18, cy - 18, 68);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.45)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = sheen;
+    x.beginPath(); x.arc(cx, cy, 88, 0, TAU); x.fill();
+  }, true, false);
+}
 
 /** TRON-style dark obsidian carbon armor plates bordered by razor-sharp glowing white neon circuits */
 export function tronPlateMaps(neonColor = 0xffffff): PBRMaps {
@@ -204,7 +588,7 @@ function soheiLamellarMaps(l: NonNullable<Armor['look']>): PBRMaps {
         }
       }
       if (r === rows - 1) {
-        x.strokeStyle = css(l.lace, 1.2);
+        x.strokeStyle = css(l.lace, 1.25);
         x.lineWidth = 3.5;
         for (let cx = 16; cx < S; cx += 32) {
           const cy = y0 + rh * 0.68;
@@ -215,6 +599,7 @@ function soheiLamellarMaps(l: NonNullable<Armor['look']>): PBRMaps {
         }
       }
     }
+    paintMicroGrain(x, S, S, 0.65, 0.032);
   });
 
   const bump = makeTex(S, S, x => {
@@ -222,33 +607,37 @@ function soheiLamellarMaps(l: NonNullable<Armor['look']>): PBRMaps {
     for (let r = 0; r < rows; r++) {
       const y0 = r * rh;
       const g = x.createLinearGradient(0, y0, 0, y0 + rh);
-      g.addColorStop(0, '#c8c8c8'); g.addColorStop(0.82, '#888888'); g.addColorStop(1, '#242424');
+      g.addColorStop(0, '#d2d2d2'); g.addColorStop(0.82, '#888888'); g.addColorStop(1, '#1e1e1e');
       x.fillStyle = g; x.fillRect(0, y0, S, rh);
       for (let s = 0; s < scales; s++) {
-        x.fillStyle = '#383838'; x.fillRect(s * sw, y0, 2, rh);
-        x.fillStyle = '#dcdcdc'; x.fillRect(s * sw + 4, y0 + 5, sw - 9, 4);
+        x.fillStyle = '#303030'; x.fillRect(s * sw, y0, 2, rh);
+        x.fillStyle = '#e4e4e4'; x.fillRect(s * sw + 4, y0 + 5, sw - 9, 4);
       }
       for (let cx = 32; cx < S; cx += 64) {
         for (const dx of [-10, 4]) {
-          x.fillStyle = '#e8e8e8'; x.fillRect(cx + dx, y0 + 1, 9, rh - 5);
-          x.fillStyle = '#909090';
+          x.fillStyle = '#efefef'; x.fillRect(cx + dx, y0 + 1, 9, rh - 5);
+          x.fillStyle = '#8a8a8a';
           for (let yy = y0 + 4; yy < y0 + rh - 6; yy += 7) x.fillRect(cx + dx, yy, 9, 2);
         }
       }
     }
+    paintMicroGrain(x, S, S, 0.85, 0.045);
   }, false);
 
   const rough = makeTex(S, S, x => {
-    x.fillStyle = '#555555'; x.fillRect(0, 0, S, S); // glossy lacquer base
+    x.fillStyle = '#444444'; x.fillRect(0, 0, S, S); // glossy lacquer base
     for (let r = 0; r < rows; r++) {
       const y0 = r * rh;
-      x.fillStyle = '#c8c8c8'; // matte silk cords
+      x.fillStyle = '#d4d4d4'; // matte silk cords
       x.fillRect(0, y0, S, 5);
       for (let cx = 32; cx < S; cx += 64) {
         x.fillRect(cx - 10, y0, 9, rh);
         x.fillRect(cx + 4, y0, 9, rh);
       }
+      x.fillStyle = '#242424';
+      x.fillRect(0, y0 + 5, S, 2);
     }
+    paintMicroGrain(x, S, S, 0.7, 0.04);
   }, false);
 
   return { map, bump, rough };
@@ -341,18 +730,22 @@ function xiaShanwenMaps(l: NonNullable<Armor['look']>): PBRMaps {
     for (const bandY of [0, S * 0.5]) {
       if (mode === 'diffuse') {
         x.fillStyle = css(l.lace, 0.85);
-        x.fillRect(0, bandY, S, 10);
-        x.fillStyle = css(l.metal, 1.3);
+        x.fillRect(0, bandY, S, 12);
+        x.fillStyle = css(l.metal, 1.35);
         x.fillRect(0, bandY, S, 2.5);
-        x.fillRect(0, bandY + 8, S, 2.5);
+        x.fillRect(0, bandY + 9.5, S, 2.5);
+        // subtle cloud-fret dashes along the band
+        x.fillStyle = css(l.metal, 1.5, 0.7);
+        for (let xx = 8; xx < S; xx += 24) x.fillRect(xx, bandY + 5, 10, 2);
       } else if (mode === 'bump') {
         x.fillStyle = '#dcdcdc';
-        x.fillRect(0, bandY, S, 10);
+        x.fillRect(0, bandY, S, 12);
       } else {
         x.fillStyle = '#a8a8a8';
-        x.fillRect(0, bandY, S, 10);
+        x.fillRect(0, bandY, S, 12);
       }
     }
+    paintMicroGrain(x, S, S, mode === 'bump' ? 0.85 : 0.65, 0.038);
   }, mode === 'diffuse');
 
   return { map: renderPass('diffuse'), bump: renderPass('bump'), rough: renderPass('rough') };
@@ -430,6 +823,7 @@ function hwarangBrigandineMaps(l: NonNullable<Armor['look']>): PBRMaps {
     for (let xx = 16; xx < S; xx += 32) {
       x.beginPath(); x.arc(xx, by + 12, 3.5, 0, TAU); x.fill();
     }
+    paintMicroGrain(x, S, S, 0.55, 0.03);
   });
 
   const bump = makeTex(S, S, x => {
@@ -620,7 +1014,7 @@ function hwarangCrestTex(l: NonNullable<Armor['look']>) {
 
 // ------------------------------------------------------------ anatomical sculpted geometry builders
 
-interface TorsoSpec {
+export interface TorsoSpec {
   /** width multiplier at chest / shoulders */
   chestW: number;
   /** width multiplier at waist (smaller = stronger V-taper) */
@@ -640,7 +1034,7 @@ interface TorsoSpec {
  * Replaces a plain squashed cylinder with sculpted pectorals, waist taper, lumbar back hollow,
  * collarbone slope, and overlapping front hem so armor fits the figure cleanly with zero gaps.
  */
-function buildContouredTorso(spec: TorsoSpec, radialSegs = 48): THREE.BufferGeometry {
+export function buildContouredTorso(spec: TorsoSpec, radialSegs = 48): THREE.BufferGeometry {
   // 13 vertical rings from waist overlap (-0.268) to neck/collar (+0.256)
   const rings: [number, number, number, number][] = [
     // [y, rx, rz, pecWeight]
@@ -718,7 +1112,7 @@ function buildContouredTorso(spec: TorsoSpec, radialSegs = 48): THREE.BufferGeom
 }
 
 /** Curved tube along an elliptical arc in the xz plane */
-function ellipseArcTube(
+export function ellipseArcTube(
   rx: number, rz: number, y: number, th0: number, len: number, tube: number, mat: THREE.Material, segs = 28
 ) {
   const pts: THREE.Vector3[] = [];
@@ -824,7 +1218,7 @@ function buildSculptedPauldron(
 /**
  * Fitted forearm vambrace (kote / hubi / tohsu) oriented along the forearm bone from elbow to wrist.
  */
-function buildForearmVambrace(
+export function buildForearmVambrace(
   len: number,
   armorMat: THREE.Material,
   lacquerMat: THREE.Material,
@@ -860,7 +1254,7 @@ function buildForearmVambrace(
 /**
  * Contoured shin greave with sculpted domed kneecap (tateage / knee-cop) and ankle guard.
  */
-function buildContouredGreave(
+export function buildContouredGreave(
   len: number,
   armorMat: THREE.Material,
   lacquerMat: THREE.Material,
@@ -897,7 +1291,7 @@ function buildContouredGreave(
 /**
  * Custom sculpted curved tasset panel (waist armor skirt piece) with optional pointed/scalloped hem.
  */
-function buildTassetPanel(
+export function buildTassetPanel(
   rTop: number, rBot: number, h: number, th0: number, span: number,
   pointDrop: number, mat: THREE.Material
 ): THREE.Mesh {
@@ -958,18 +1352,26 @@ function makeClassMaterials(cls: NewClassId, a: Armor) {
       side: THREE.DoubleSide
     });
   };
+  const lacMaps = lacquerSurfaceMaps();
+  const metMaps = metalSurfaceMaps();
   const lacquer = new THREE.MeshStandardMaterial({
     color: l.lame,
-    roughness: isNeon ? 0.22 : 0.24,
-    metalness: isNeon ? 0.55 : cls === 'xia' ? 0.42 : 0.28,
+    bumpMap: lacMaps.bump,
+    bumpScale: 0.008,
+    roughnessMap: lacMaps.rough,
+    roughness: isNeon ? 0.24 : 0.30,
+    metalness: isNeon ? 0.55 : cls === 'xia' ? 0.44 : 0.30,
     emissive: l.lame,
     emissiveIntensity: isNeon ? 0.04 : glow,
     side: THREE.DoubleSide
   });
   const metal = new THREE.MeshStandardMaterial({
     color: isNeon ? l.neon! : l.metal,
-    roughness: isNeon ? 0.12 : 0.24,
-    metalness: isNeon ? 0.18 : 0.88,
+    bumpMap: isNeon ? null : metMaps.bump,
+    bumpScale: 0.007,
+    roughnessMap: isNeon ? null : metMaps.rough,
+    roughness: isNeon ? 0.12 : 0.28,
+    metalness: isNeon ? 0.18 : 0.90,
     emissive: isNeon ? l.neon! : l.metal,
     emissiveIntensity: isNeon ? 2.4 : Math.max(0.18, glow * 1.45),
     side: THREE.DoubleSide
