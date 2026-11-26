@@ -9,6 +9,8 @@
 // Every set is built once on the skeleton when the game loads and only the one you wear is shown.
 import * as THREE from 'three';
 import { sam } from './avatar';
+import { samuraiArmorGltf } from './assets';
+import { mountSamuraiGlb } from './samurai-glb';
 import { ACTOR_LAYER } from './ascii';
 import { CLS, tagMat, tagTree } from './materials';
 import { applyLook, opt } from './look';
@@ -54,9 +56,16 @@ const sets = new Map<string, THREE.Object3D[]>();
 const auras = new Map<string, THREE.Group>();
 
 const baseLayers: THREE.Object3D[] = [];
-root.traverse(o => { if (o.userData.equipmentLayer) baseLayers.push(o); });
+const baseSkinnedMeshes: THREE.SkinnedMesh[] = [];
+const baseHeadChildren: THREE.Object3D[] = [];
+root.traverse(o => {
+  if (o.userData.equipmentLayer) baseLayers.push(o);
+  if ((o as THREE.SkinnedMesh).isSkinnedMesh) baseSkinnedMeshes.push(o as THREE.SkinnedMesh);
+});
+if (bones.Head) for (const c of bones.Head.children) if (!(c as THREE.Bone).isBone) baseHeadChildren.push(c);
 const rigChest = baseLayers.find(o => o.userData.equipmentLayer === 'chest');
 const rigWaist = baseLayers.find(o => o.userData.equipmentLayer === 'waist');
+const samuraiGlb = samuraiArmorGltf ? mountSamuraiGlb(samuraiArmorGltf, root, bones) : null;
 // the straw kasa (rig.ts), already fitted on the scanned head: the jingasa is built in its frame
 let kasaMesh: THREE.Mesh | undefined;
 root.traverse(o => { const m = o as THREE.Mesh; if (!kasaMesh && m.isMesh && m.userData.part === 'hat' && (m.geometry as THREE.ConeGeometry).type === 'ConeGeometry' && (m.geometry as THREE.ConeGeometry).parameters.radius > 0.2) kasaMesh = m; });
@@ -755,7 +764,16 @@ export function dressUp(cur = armor()) {
   if (own && cur.look) worn = ensureClassArmor(state.cls as NewClassId, cur);
   else if (own && !sets.has(cur.id)) worn = own;
   else worn = cur.id;
-  for (const [id, list] of sets) for (const o of list) o.visible = id === worn;
+  // When wearing plated armor as Ronin and the real CC0 Samurai GLB is loaded, use the sculpted
+  // 41k-triangle rigged Samurai model instead of procedural plates!
+  const useSamuraiGlb = !!samuraiGlb && !own && !!cur.look;
+  if (samuraiGlb) {
+    if (useSamuraiGlb) samuraiGlb.setArmor(cur);
+    samuraiGlb.setVisible(useSamuraiGlb);
+  }
+  for (const m of baseSkinnedMeshes) m.visible = !useSamuraiGlb;
+  for (const c of baseHeadChildren) c.visible = !useSamuraiGlb;
+  for (const [id, list] of sets) for (const o of list) o.visible = !useSamuraiGlb && id === worn;
   for (const [id, g] of auras) g.visible = id === cur.id;
   activeAura = auras.get(cur.id);
   const helmet = !!cur.look?.helmet && !own;
@@ -768,7 +786,8 @@ export function dressUp(cur = armor()) {
     const layer = o.userData.equipmentLayer;
     // The long flowing hakama robe shows for kimono & monk habits; plated armors reveal the tailored
     // dark hakama trousers tucked cleanly into the shin greaves (suneate) with zero cloth clipping.
-    o.visible = layer === 'robe' ? (!dressed || monk) : layer === 'sleeves' ? (!dressed || monk)
+    o.visible = useSamuraiGlb ? false
+      : layer === 'robe' ? (!dressed || monk) : layer === 'sleeves' ? (!dressed || monk)
       : layer === 'scarf' || layer === 'wrapping' ? !monk && !own : !dressed;
   }
   if (dressed && robeMat) {
@@ -784,17 +803,21 @@ export function dressUp(cur = armor()) {
   }
   root.traverse(o => {
     const part = o.userData.part;
-    if (part === 'hat') o.visible = !helmet && !monk && !own && !opt('hat').hidden;
-    if ((monk || own) && part === 'mask') o.visible = false;
-    if (part === 'topknot') o.visible = !helmet && !sohei;   // the helmet covers the knot; the monk is shaven
-    if (part === 'hood' || part === 'douli' || part === 'gat') o.visible = part === headwear;
-    if (o.userData.helmet) o.visible = !own && o.visible;
+    if (part === 'hat') o.visible = !useSamuraiGlb && !helmet && !monk && !own && !opt('hat').hidden;
+    if (useSamuraiGlb && (part === 'mask' || part === 'topknot' || o.name === 'real-head')) o.visible = false;
+    else {
+      if ((monk || own) && part === 'mask') o.visible = false;
+      if (part === 'topknot') o.visible = !helmet && !sohei;   // the helmet covers the knot; the monk is shaven
+    }
+    if (part === 'hood' || part === 'douli' || part === 'gat') o.visible = !useSamuraiGlb && part === headwear;
+    if (o.userData.helmet) o.visible = !useSamuraiGlb && !own && o.visible;
   });
 }
 dressUp();
 
-/** every frame: the auras move */
+/** every frame: sync real Samurai GLB skeleton and animate the auras */
 export function updateOutfit() {
+  samuraiGlb?.sync();
   const g = activeAura;
   if (!g) return;
   const t = state.time;
