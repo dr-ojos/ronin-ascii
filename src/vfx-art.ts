@@ -302,6 +302,16 @@ float vnoise(vec2 p) {
   float c = hash21(i + vec2(0.0, 1.0)), d = hash21(i + vec2(1.0, 1.0));
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
+float pnoise(vec2 p, float per) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float i0 = mod(i.x, per), i1 = mod(i.x + 1.0, per);
+  float a = hash21(vec2(i0, i.y));
+  float b = hash21(vec2(i1, i.y));
+  float c = hash21(vec2(i0, i.y + 1.0));
+  float d = hash21(vec2(i1, i.y + 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 `;
 
 /** Volumetric Fresnel shell (domes, energy spheres, crystal prisons, buddha palm aura):
@@ -598,6 +608,205 @@ export function makeFireBladeMat(coreColor: THREE.ColorRepresentation, midColor:
         col = mix(col, uCore, smoothstep(0.62, 0.96, heat));
         float a = smoothstep(0.08, 0.55, flame) * uOpacity;
         gl_FragColor = vec4(col * 1.45 * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Seamless 360-degree volumetric wall-of-fire shader for Anillo de Brasas:
+ *  3-octave periodic domain-warped FBM carving licking flame tongues, detached embers & blackbody heat ramp. */
+export function makeFireRingWallMat(opts: { opacity?: number; seed?: number; coreBoost?: number; speed?: number } = {}) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opts.opacity ?? 0.96 },
+      uSeed: { value: opts.seed ?? 0 },
+      uCoreBoost: { value: opts.coreBoost ?? 1.0 },
+      uSpeed: { value: opts.speed ?? 1.0 },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform float uSeed;
+      uniform float uCoreBoost;
+      uniform float uSpeed;
+      varying vec2 vUv;
+      void main() {
+        float t = uTime * uSpeed;
+        float y = vUv.y;
+        // Domain-warped periodic FBM so flames visibly curl & lick upward with zero 360-deg seam
+        float w1 = pnoise(vec2(vUv.x * 16.0 + t * 0.55 + uSeed, y * 2.6 - t * 4.8), 16.0);
+        float uWarp = vUv.x + (w1 - 0.5) * 0.042 * (0.3 + y * 1.1);
+        float n1 = pnoise(vec2(uWarp * 18.0 + t * 0.42 + uSeed, y * 2.9 - t * 6.2), 18.0);
+        float n2 = pnoise(vec2(uWarp * 36.0 - t * 0.95 + uSeed * 1.7, y * 5.8 - t * 10.4), 36.0);
+        float n3 = pnoise(vec2(uWarp * 72.0 + t * 1.55 + uSeed * 2.3, y * 10.5 - t * 15.2), 72.0);
+        float fbm = n1 * 0.52 + n2 * 0.32 + n3 * 0.16;
+
+        // Tapered licking flame silhouette: solid molten base, ragged dancing tongues near the top
+        float shape = (1.0 - y) * 1.12 + (fbm - 0.43) * (0.62 + y * 0.88);
+        float body = smoothstep(0.16, 0.46, shape);
+
+        // Detached flickering flame wisps & embers breaking off above the main crown
+        float wispNoise = n2 * 0.52 + n3 * 0.48;
+        float wisp = smoothstep(0.70, 0.90, wispNoise) * smoothstep(0.22, 0.62, y) * smoothstep(1.0, 0.72, y) * 0.85;
+
+        float baseFade = smoothstep(0.0, 0.065, y);
+        float topFade = smoothstep(1.0, 0.88, y);
+        float mask = clamp((body + wisp) * baseFade * topFade, 0.0, 1.0);
+        if (mask < 0.01) discard;
+
+        // Incandescent ignition ridge where the fire wall meets the ground
+        float baseHot = exp(-pow((y - 0.085) / 0.065, 2.0)) * (0.75 + 0.35 * n2);
+
+        // Physical blackbody fire color ramp: deep crimson -> blazing orange -> solar gold -> white-hot core
+        float heat = clamp(shape * 0.82 + (1.0 - y) * 0.34 + baseHot * 0.48 + n3 * 0.16 - 0.14, 0.0, 1.0);
+        heat = clamp(heat * uCoreBoost, 0.0, 1.0);
+        vec3 col = mix(vec3(0.78, 0.06, 0.01), vec3(1.62, 0.34, 0.04), smoothstep(0.05, 0.38, heat));
+        col = mix(col, vec3(2.15, 1.02, 0.18), smoothstep(0.36, 0.72, heat));
+        col = mix(col, vec3(2.65, 2.38, 1.65), smoothstep(0.70, 0.98, heat));
+
+        // Subtle high-frequency combustion flicker
+        float flicker = 0.90 + 0.16 * sin(t * 26.0 + vUv.x * 25.1327 + uSeed * 3.1);
+        float a = clamp(mask * uOpacity, 0.0, 1.0);
+        gl_FragColor = vec4(col * flicker * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Seamless terrain-hugging molten ember trail & blazing ignition rim under Anillo de Brasas */
+export function makeFireRingGroundMat(opacity = 0.92) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        // vUv.x = 0..1 around ring, vUv.y = 0 (inner trailing edge) .. 1 (outer leading heat halo)
+        float n1 = pnoise(vec2(vUv.x * 24.0 + uTime * 0.5, vUv.y * 5.0 - uTime * 4.5), 24.0);
+        float n2 = pnoise(vec2(vUv.x * 48.0 - uTime * 0.9, vUv.y * 10.0 - uTime * 7.8), 48.0);
+        float coals = n1 * 0.58 + n2 * 0.42;
+
+        // Cracked magma / live ember veins trailing behind the fire wall
+        float veins = smoothstep(0.40, 0.78, coals);
+        float trailEnv = smoothstep(0.0, 0.48, vUv.y) * smoothstep(1.0, 0.80, vUv.y);
+        float embers = (0.32 + 0.95 * veins) * trailEnv;
+
+        // Blazing incandescent leading ignition rim right beneath the flame curtain
+        float leadRim = exp(-pow((vUv.y - 0.83) / 0.068, 2.0)) * (0.85 + 0.35 * n2);
+        // Soft forward heat-glow bleeding slightly ahead of the flames
+        float aheadGlow = smoothstep(0.75, 0.86, vUv.y) * smoothstep(1.0, 0.86, vUv.y) * 0.55;
+
+        float intensity = clamp(embers * 0.75 + leadRim * 1.45 + aheadGlow, 0.0, 1.5);
+        float heat = clamp(leadRim * 0.95 + veins * 0.55 * vUv.y, 0.0, 1.0);
+
+        vec3 col = mix(vec3(0.72, 0.07, 0.01), vec3(1.55, 0.36, 0.04), smoothstep(0.08, 0.42, heat));
+        col = mix(col, vec3(2.1, 1.05, 0.2), smoothstep(0.40, 0.76, heat));
+        col = mix(col, vec3(2.6, 2.35, 1.65), smoothstep(0.76, 1.0, heat));
+
+        float a = clamp(intensity * uOpacity, 0.0, 1.0);
+        gl_FragColor = vec4(col * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Instanced 3D sculpted flame tongue shader (per-instance aPhase drives independent licking, sway & erosion) */
+export function makeFireTongueMat(opacity = 0.92) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+    },
+    vertexShader: /* glsl */`
+      attribute float aPhase;
+      uniform float uTime;
+      varying vec2 vUv;
+      varying float vPhase;
+      void main() {
+        vUv = uv;
+        vPhase = aPhase;
+        vec3 p = position;
+        float h = clamp(uv.y, 0.0, 1.0);
+        float t = uTime * 9.5 + aPhase;
+        // Organic whip & dance stronger towards the flame tip
+        float sway = h * h;
+        p.x += sin(t * 1.25 + h * 4.5) * 0.24 * sway;
+        p.z += cos(t * 1.05 + h * 3.8) * 0.18 * sway - sway * 0.28; // lean back slightly against radial wind
+        p.y *= 0.86 + 0.24 * sin(t * 1.6 + aPhase * 0.7);
+        vec4 mvPos = modelViewMatrix * instanceMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      varying float vPhase;
+      void main() {
+        // Teardrop flame silhouette inside UV space
+        float cx = abs(vUv.x - 0.5) * 2.0;
+        float y = vUv.y;
+        float n1 = vnoise(vec2(vUv.x * 4.2 + vPhase, y * 4.8 - uTime * 8.5));
+        float n2 = vnoise(vec2(vUv.x * 8.5 - vPhase * 1.3, y * 9.5 - uTime * 13.5));
+        float fbm = n1 * 0.62 + n2 * 0.38;
+
+        // Taper width as height rises, eroded by upward turbulence
+        float width = mix(0.92, 0.06, pow(y, 0.78)) * (0.72 + 0.55 * fbm);
+        float edge = 1.0 - smoothstep(width * 0.45, width, cx);
+        float tip = smoothstep(1.0, 0.62, y + (0.48 - fbm) * 0.55);
+        float base = smoothstep(0.0, 0.12, y);
+        float mask = edge * tip * base;
+        if (mask < 0.02) discard;
+
+        // Hot white-gold inner heart transitioning to orange & crimson outer licks
+        float core = (1.0 - smoothstep(0.0, width * 0.65, cx)) * (1.0 - y * 0.85);
+        float heat = clamp(core * 0.95 + (1.0 - y) * 0.35 + fbm * 0.22 - 0.12, 0.0, 1.0);
+        vec3 col = mix(vec3(0.85, 0.08, 0.01), vec3(1.7, 0.40, 0.05), smoothstep(0.08, 0.42, heat));
+        col = mix(col, vec3(2.2, 1.15, 0.22), smoothstep(0.42, 0.76, heat));
+        col = mix(col, vec3(2.7, 2.45, 1.75), smoothstep(0.76, 1.0, heat));
+
+        float a = clamp(mask * uOpacity, 0.0, 1.0);
+        gl_FragColor = vec4(col * a, a);
       }
     `,
     transparent: true,
@@ -1066,9 +1275,89 @@ export function spawnStormCanopy(center: THREE.Vector3, duration = 1.4, color = 
   });
 }
 
+// Persistent fire light for Anillo de Brasas (always in the scene so zero shader recompiles)
+const fireRingLight = new THREE.PointLight(0xff741e, 0, 42, 1.45);
+scene.add(fireRingLight);
+let fireLightT = 0, fireLightMax = 0.85, fireLightPeak = 0;
+
+/** Cinematic ignition spectacle for Anillo de Brasas:
+ *  - Expanding incandescent fireball Fresnel dome
+ *  - Charred scorch decal at the epicenter that lingers and fades
+ *  - Dual blazing heat-shockwave rings racing along the ground
+ *  - Flickering warm PointLight illuminating the surrounding terrain & combatants */
+export function spawnFireRingIgnition(origin: THREE.Vector3, maxRadius = 10) {
+  const gy = surfaceY(origin.x, origin.z);
+
+  // 1. Dynamic flickering firelight at the epicenter
+  fireRingLight.position.set(origin.x, gy + 2.4, origin.z);
+  fireRingLight.color.set(0xff7a22);
+  fireLightPeak = 135;
+  fireLightT = fireLightMax = 0.92;
+
+  // 2. Charred ground scorch decal at the epicenter
+  const sMat = tagMat(new THREE.MeshBasicMaterial({
+    map: scorchTex, transparent: true, opacity: 0.78, depthWrite: false,
+  }), CLS.ground);
+  const scorch = new THREE.Mesh(PLANE, sMat);
+  scorch.rotation.x = -Math.PI / 2;
+  scorch.rotation.z = rnd(0, Math.PI * 2);
+  scorch.position.set(origin.x, gy + 0.05, origin.z);
+  scorch.scale.setScalar(1.2);
+  addVfxProp(scorch, [sMat], 3.2, p => {
+    const grow = Math.min(1, p.t / 0.28);
+    scorch.scale.setScalar(1.4 + 6.4 * (1 - (1 - grow) ** 3));
+    const fade = Math.min(1, (p.life - p.t) / 1.1);
+    sMat.opacity = 0.76 * fade;
+  });
+
+  // 3. Expanding molten Fresnel fireball dome that erupts at cast & dissolves into the fire ring
+  const domeMat = makeFresnelShellMat(0xfff5c8, 0xff4500, 0.85, 1.9);
+  const dome = new THREE.Mesh(DOME_GEO, domeMat);
+  dome.position.set(origin.x, gy + 0.02, origin.z);
+  addVfxProp(dome, [domeMat], 0.36, p => {
+    const u = p.t / p.life;
+    const e = 1 - (1 - u) ** 2.6;
+    const r = 0.5 + 4.4 * e;
+    dome.scale.set(r, r * (0.95 - 0.52 * u), r);
+    domeMat.uniforms.uOpacity.value = 0.85 * (1 - u) ** 1.45;
+  });
+
+  // 4. Razor-bright white-gold primary heat shockwave racing ahead of the flames
+  const ringMat1 = makeShockRingMat(0xfff6cf, 0xff6b1a, 0.96);
+  const ring1 = new THREE.Mesh(PLANE, ringMat1);
+  ring1.rotation.x = -Math.PI / 2;
+  ring1.position.set(origin.x, gy + 0.11, origin.z);
+  addVfxProp(ring1, [ringMat1], 0.52, p => {
+    const u = p.t / p.life;
+    const s = 1.2 + (maxRadius * 2.18) * (1 - (1 - u) ** 2.2);
+    ring1.scale.setScalar(s);
+    ringMat1.uniforms.uOpacity.value = 0.96 * (1 - u) ** 1.35;
+  });
+
+  // 5. Secondary deep ember-red heat wash trailing behind
+  const ringMat2 = makeShockRingMat(0xff9b38, 0xc81c00, 0.72);
+  const ring2 = new THREE.Mesh(PLANE, ringMat2);
+  ring2.rotation.x = -Math.PI / 2;
+  ring2.position.set(origin.x, gy + 0.08, origin.z);
+  addVfxProp(ring2, [ringMat2], 0.74, p => {
+    const u = p.t / p.life;
+    const s = 0.8 + (maxRadius * 1.98) * (1 - (1 - u) ** 1.85);
+    ring2.scale.setScalar(s);
+    ringMat2.uniforms.uOpacity.value = 0.72 * (1 - u) ** 1.5;
+  });
+}
+
 // ------------------------------------------------------------ per-frame update & cleanup
 export function updateVfxArt(dt: number) {
   vfxTime.value += dt;
+  if (fireLightT > 0) {
+    fireLightT = Math.max(0, fireLightT - dt);
+    const k = fireLightT / fireLightMax;
+    const flick = 0.82 + 0.18 * Math.sin(vfxTime.value * 44.0);
+    fireRingLight.intensity = fireLightPeak * k * k * flick;
+  } else if (fireRingLight.intensity !== 0) {
+    fireRingLight.intensity = 0;
+  }
   for (let i = vfxProps.length - 1; i >= 0; i--) {
     const p = vfxProps[i];
     p.t += dt;
@@ -1081,6 +1370,8 @@ export function updateVfxArt(dt: number) {
 }
 
 export function clearVfxArt() {
+  fireLightT = 0;
+  fireRingLight.intensity = 0;
   for (const p of vfxProps) disposeVfxProp(p);
   vfxProps.length = 0;
 }
