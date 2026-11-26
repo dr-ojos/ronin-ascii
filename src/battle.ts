@@ -155,6 +155,12 @@ export function updateBattle(dt: number) {
   summaryT = SUMMARY_DELAY;
 }
 
+/** structured combat status for the Modo T HUD */
+export function battleStatus() {
+  if (!battle.active) return null;
+  return { combo: battle.combo, spirit: spirit(), kills: battle.kills, left: engagedNow().length, finishers: battle.finishers };
+}
+
 /** a line for the HUD while fighting */
 export function battleLine() {
   if (!battle.active) return '';

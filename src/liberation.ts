@@ -140,6 +140,13 @@ export function activeTownMission(): TownMission | null {
   return best;
 }
 
+/** structured status for the active town liberation mission (used by Modo T HUD) */
+export function liberationStatus() {
+  const m = activeTownMission();
+  if (!m) return null;
+  return { name: m.name, ...progressOf(m) };
+}
+
 /** HUD block for the active town liberation mission */
 export function liberationHud(): string {
   const m = activeTownMission();
