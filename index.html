@@ -277,6 +277,12 @@
     background:#0a0d15;color:#ffd27a;border:1px solid #59617a;box-shadow:0 0 12px #000;font:italic 700 18px Georgia,serif;cursor:pointer}
   #info-btn:is(:hover,:focus-visible){border-color:#ffd27a;background:#141c2c;outline:none}
   #info-btn[hidden],body[data-menu] #info-btn{display:none}
+  #teleport-btn{position:fixed;left:70px;bottom:64px;z-index:4;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;
+    background:#0a0d15;color:#87efbd;border:1px solid #3c6b5c;box-shadow:0 0 12px #000;font:700 13px "Courier New",monospace;cursor:pointer}
+  #teleport-btn kbd{padding:1px 5px;border:1px solid #3c6b5c;color:#cfd6e6;font:inherit}
+  #teleport-btn:is(:hover,:focus-visible){border-color:#87efbd;background:#10211c;outline:none}
+  #teleport-btn.cd{color:#7c889e;border-color:#2a3348;opacity:.78}
+  #teleport-btn[hidden],body[data-menu] #teleport-btn{display:none}
   #minimap{position:fixed;right:16px;top:12px;width:231px;height:171px;border:1px solid #1c2233;background:#05060a;pointer-events:none;box-shadow:0 0 12px #000}
   #zone{position:fixed;right:16px;top:188px;width:233px;text-align:center;font-size:12px;color:#ffd27a;pointer-events:none;text-shadow:0 0 6px #000;letter-spacing:.08em}
   #bigmap{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:none;border:1px solid #2a3348;background:#05060a;box-shadow:0 0 40px #000;pointer-events:none}
@@ -331,6 +337,12 @@
   #menu .mr.on .mn{color:#9aa3b5}
   #menu .ma{color:#ffd27a;padding:0 4px}
   #menu .mi{background:#05060a;border:1px solid #2a3348;color:#ffd27a;font:inherit;width:150px;padding:1px 4px}
+  #menu .mpinned{flex:none;margin-top:8px;padding-top:8px;border-top:1px solid #1c2233}
+  #menu .mpin-btn{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:38px;padding:6px 10px;box-sizing:border-box;
+    background:#0e1320;color:#ffd27a;border:1px solid #4a556e;font:700 13px "Courier New",monospace;letter-spacing:.06em;cursor:pointer}
+  #menu .mpin-btn kbd{padding:1px 6px;border:1px solid #4a556e;color:#9aa3b5;font:inherit;font-size:11px}
+  #menu .mpin-btn:is(:hover,:focus-visible){background:#162034;border-color:#ffd27a;color:#fff2c6;outline:none}
+  #menu .mpin-btn:is(:hover,:focus-visible) kbd{border-color:#ffd27a;color:#ffd27a}
   #menu .mst{min-height:1.3em;margin-top:8px;color:#ffd27a;text-align:center;font-size:13px}
   #menu .mf{color:#5c6478;font-size:11px;text-align:center}
   #menu .y{color:#ffd27a}#menu .r{color:#ff5a4a}#menu .b{color:#8fb4ff}#menu .d{color:#6c7488}
@@ -370,7 +382,7 @@
 <canvas id="bigmap"></canvas>
 <div id="menu"></div>
 <button type="button" id="inventory-btn" aria-controls="menu" aria-expanded="false" aria-haspopup="dialog" aria-keyshortcuts="I" hidden><kbd aria-hidden="true">I</kbd> Inventario</button>
-<div id="hint">H / (i) movimientos y teclas · I inventario · U nivel · N mapa</div>
+<div id="hint">H / (i) movimientos y teclas · I inventario · U nivel · B tienda · N mapa</div>
 <div id="overlay" data-step="pick">
   <div class="tpanel">
     <h1 class="logo" aria-label="Ronin Warriors"><pre aria-hidden="true"> ____    ___   _   _  ___  _   _

@@ -16,6 +16,10 @@ const camTarget = new THREE.Vector3();
 const shopRight = new THREE.Vector3();
 const lookTarget = new THREE.Vector3();
 const camRay = new THREE.Raycaster();
+/** snap the camera target immediately to the player (used after teleports so the camera never whips across the map) */
+export function snapCamera() {
+  camTarget.set(player.pos.x, player.pos.y + 1.5, player.pos.z);
+}
 export function updateCamera(dt: number) {
   // the look menu (custom.ts) and the title screen frame the samurai close up, like the photo mode
   const dress = state.menu === 'custom' || (state.showcase && !state.menu);

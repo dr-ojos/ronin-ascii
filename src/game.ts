@@ -18,6 +18,8 @@ import { updateArmor } from './armor';
 import { updateMenu } from './menu';
 import { updateProgression } from './progression';
 import { updateLevelFx } from './level-fx';
+import { applyWeapon, weapon } from './weapons';
+import { updateWeaponMastery } from './weapon-upgrades';
 import { state } from './state';
 
 export function update(dt: number) {
@@ -52,4 +54,5 @@ export function update(dt: number) {
   updateFx(dt);
   updateProgression(dt);
   updateLevelFx(dt);
+  updateWeaponMastery(dt, weapon(), () => applyWeapon());
 }

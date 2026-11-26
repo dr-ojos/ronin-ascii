@@ -25,6 +25,7 @@ const SECTIONS: [string, [string, string][]][] = [
   ]],
   ['MUNDO', [
     ['Hablar · abrir cofres', 'E'],
+    ['Teletransporte a la tienda de Masa', 'B'],
     ['Mapa grande', 'N'],
     ['Zoom del mapa', '+ / −']
   ]],
@@ -46,7 +47,9 @@ const SECTIONS: [string, [string, string][]][] = [
 const TIPS = [
   'Los cofres dan mon y sellos de jade.',
   'Con los sellos aprendes técnicas en los templos ◆ del mapa.',
-  'Masa, el armero del santuario, vende armas y armaduras.',
+  'Masa, el armero del santuario, vende y templa armas y armaduras.',
+  'Las armas mejoran hasta +10 al combatir con ellas o en la forja de Masa.',
+  'Pulsa B para teletransportarte a las afueras de la tienda de Masa.',
   'Cada baja da experiencia: sube hasta el nivel 100.'
 ];
 

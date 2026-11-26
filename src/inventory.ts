@@ -6,6 +6,7 @@ import { state } from './state';
 import { equipTechnique, SLOT_KEY, slotOf, TECHNIQUES, type Slot } from './techniques';
 import { UPGRADES, lvl, roman, type UpgradeId } from './upgrades';
 import { WEAPONS, equip, owns, weaponStats } from './weapons';
+import { weaponDisplayName, weaponMasteryText } from './weapon-upgrades';
 import { techniqueRows, toggleLevelMenu } from './level-menu';
 import { freePoints, level, rank, ROMAN } from './progression';
 
@@ -37,14 +38,14 @@ function inventoryRows(): MenuRow[] {
   for (const w of ownedWeapons()) {
     const equipped = state.weapon === w.id;
     rows.push({
-      label: (w.bossDrop ? '✦ ' : '') + w.name, value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
+      label: (w.bossDrop ? '✦ ' : '') + weaponDisplayName(w), value: equipped ? 'equipada' : 'equipar', cls: equipped ? 'y' : 'b',
       image: itemImage('armas', w.id),
-      note: `${w.desc} · ${weaponStats(w)}`,
+      note: `${w.desc} · ${weaponStats(w)} · ${weaponMasteryText(w.id)}`,
       act() {
         if (equipped) return menuStatus('Ya llevas esta arma.');
         equip(w.id);
         sfx.swing({ power: 0.8, pan: 0 });
-        menuStatus(`Arma equipada · ${w.name}`);
+        menuStatus(`Arma equipada · ${weaponDisplayName(w)}`);
       }
     });
   }

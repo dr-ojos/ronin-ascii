@@ -8,6 +8,7 @@ import { camps, discovered, placeCount, chestsLeft } from './encounters';
 import { upgradeList } from './upgrades';
 import { look } from './look';
 import { weapon } from './weapons';
+import { weaponDisplayName } from './weapon-upgrades';
 import { armor } from './armor';
 import { threatLabel } from './equipment-threat';
 import { enemies, KINDS } from './enemies';
@@ -154,7 +155,7 @@ function updateTHud() {
   r.lv.textContent = `NV. ${lv}`;
   r.pts.hidden = !free;
   if (free) r.pts.textContent = `+${free} U`;
-  r.weaponTxt.textContent = weapon().name;
+  r.weaponTxt.textContent = weaponDisplayName(weapon());
   r.armorTxt.textContent = armor().name;
 
   const hp = Math.max(0, Math.ceil(player.hp)), maxHp = Math.max(1, Math.round(player.maxHp));
@@ -346,7 +347,7 @@ export function updateHud(dt: number) {
     `VIDA  [<span class="${player.hp < 30 ? 'r' : 'y'}">${bar}</span>] ${Math.ceil(player.hp)}\n` +
     `${special}\n` +
     `PUNTOS <span class="y">${state.score}</span>${streak}   <span class="d">récord ${state.best}</span>\n` +
-    `MON <span class="y">${state.mon}</span>   <span class="b">${weapon().name}</span>${state.armor !== 'kimono' ? ` · <span class="b">${armor().name}</span>` : ''}\n` +
+    `MON <span class="y">${state.mon}</span>   <span class="b">${weaponDisplayName(weapon())}</span>${state.armor !== 'kimono' ? ` · <span class="b">${armor().name}</span>` : ''}\n` +
     `SELLOS DE JADE <span class="jade">${state.jade}</span>\n` +
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}   <span class="y">${threatLabel()}</span>\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}   ${towns}\n` +

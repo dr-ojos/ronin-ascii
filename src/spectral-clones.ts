@@ -19,6 +19,7 @@ import { surfaceY } from './structures';
 import { TECHNIQUES } from './techniques';
 import { dmgMult } from './upgrades';
 import { displayedWeapon, weapon } from './weapons';
+import { weaponDmg } from './weapon-upgrades';
 import { impactFlash } from './cinematic';
 import { angDiff, rnd } from './utils';
 import { makeCrescentSlashMat, mandalaTex, vfxTime } from './vfx-art';
@@ -250,7 +251,7 @@ function pickTarget(c: CloneSlot, claimed: Set<Enemy>): Enemy | null {
 function performCloneHit(c: CloneSlot) {
   const reach = 2.35;
   const fx = Math.sin(c.face), fz = Math.cos(c.face);
-  const dmg = HIT_DAMAGE * dmgMult() * (0.7 + 0.3 * weapon().dmg);
+  const dmg = HIT_DAMAGE * dmgMult() * (0.7 + 0.3 * weaponDmg(weapon()));
   spawnSpectralSlash(c.pos, c.face, c.combo);
   sfx.swing({ power: c.combo === 2 ? 1.15 : 0.85, pan: panOf(c.pos.x, c.pos.z) });
 

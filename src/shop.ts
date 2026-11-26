@@ -18,7 +18,11 @@ import { openCustom } from './custom';
 import { dressUp } from './outfit';
 import { createSmith } from './smith';
 import { SHOP_FLOOR as FY, shopRoninPos, shopStageActive, smithPos } from './shop-stage';
-import { forSale, weapon, owns, buy, equip, applyWeapon, weaponStats } from './weapons';
+import { WEAPONS, forSale, weapon, owns, buy, equip, applyWeapon, weaponStats } from './weapons';
+import {
+  MAX_WEAPON_LEVEL, forgeWeapon, weaponDisplayName, weaponLevel, weaponMasteryText,
+  weaponNextBonusText, weaponUpgradeCost
+} from './weapon-upgrades';
 import { cls } from './classes';
 import { armorsForSale, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
@@ -183,7 +187,7 @@ function shopRows(): MenuRow[] {
   for (const w of forSale()) {
     const mine = owns(w.id), on = state.weapon === w.id, shut = locked(w.id, mine);
     rows.push({
-      label: legend(w.id) + w.name, value: shut ? `nivel ${levelReq(w.id)}` : price(w.price, mine, on, 'equipada'),
+      label: legend(w.id) + (mine ? weaponDisplayName(w) : w.name), value: shut ? `nivel ${levelReq(w.id)}` : price(w.price, mine, on, 'equipada'),
       cls: on ? 'y' : mine ? 'b' : shut ? 'd' : state.mon >= w.price ? '' : 'r',
       sparkColors: w.fx.sparks,
       note: `${shut ? lockNote(w.id) + `${w.price} mon · ` : ''}${w.desc} · ${weaponStats(w)}`,
@@ -191,11 +195,35 @@ function shopRows(): MenuRow[] {
       act() {
         if (on) return menuStatus('ya la llevas en la mano');
         if (shut) return refuse(w.id);
-        if (mine) { equip(w.id); sfx.swing({ power: 0.8, pan: 0 }); return menuStatus(`${w.form === 'staff' ? 'empuñas' : 'desenvainas'} ${w.name}`); }
+        if (mine) { equip(w.id); sfx.swing({ power: 0.8, pan: 0 }); return menuStatus(`${w.form === 'staff' ? 'empuñas' : 'desenvainas'} ${weaponDisplayName(w)}`); }
         if (buy(w) === 'poor') { sfx.warn(); return menuStatus(`te faltan ${w.price - state.mon} mon`); }
         sfx.chime(true); menuStatus(`«Que te sirva bien.» · ${w.name} es tuya`);
       }
     });
+  }
+  const ownedBlades = WEAPONS.filter(w => owns(w.id));
+  if (ownedBlades.length) {
+    rows.push({ label: 'FORJA · MEJORAR ARMAS', head: true });
+    for (const w of ownedBlades) {
+      const lv = weaponLevel(w.id), maxed = lv >= MAX_WEAPON_LEVEL, cost = weaponUpgradeCost(w);
+      rows.push({
+        label: `Templar ${weaponDisplayName(w)}`,
+        value: maxed ? 'MÁX' : `${cost} mon`,
+        cls: maxed ? 'y' : state.mon >= cost ? 'y' : 'r',
+        sparkColors: w.fx.sparks,
+        note: `${weaponMasteryText(w.id)} · ${weaponNextBonusText(w)}`,
+        preview() { applyWeapon(w); dressUp(); },
+        act() {
+          const res = forgeWeapon(w, () => { if (state.weapon === w.id) applyWeapon(); });
+          if (res === 'max') return menuStatus(`${w.name} ya alcanzó el temple máximo (+${MAX_WEAPON_LEVEL})`);
+          if (res === 'poor') { sfx.warn(); return menuStatus(`te faltan ${cost - state.mon} mon para templar ${w.name}`); }
+          sparkBurst(anvil, 18, 4.5);
+          sfx.anvil(0, 0.9);
+          sfx.chime(true);
+          menuStatus(`«Acero más puro.» · ${weaponDisplayName(w)} lista`);
+        }
+      });
+    }
   }
   rows.push({ label: 'ARMADURAS', head: true });
   for (const a of armorsForSale()) {
@@ -218,18 +246,18 @@ function shopRows(): MenuRow[] {
   rows.push({ label: 'OTROS', head: true });
   rows.push({
     label: 'Cambiar de aspecto', note: 'nombre, lacado, kimono, bufanda, sombrero y máscara', preview: restoreGear,
-    act() { restoreGear(); openCustom(() => openShop(rows.length - 2)); }
+    act() { restoreGear(); openCustom(() => openShop(rows.length - 1)); }
   });
-  rows.push({ label: 'Despedirse', preview: restoreGear, act: closeMenu });
   return rows;
 }
 export function openShop(at = 1) {
   showMsg('', 0.01);
   openMenu({
     id: 'shop', title: `— TIENDA DE ${SMITH_NAME.toUpperCase()} —`,
-    sub: () => `nivel <span class="y">${level()}</span> · bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weapon().name}</span> · <span class="b">${armor().name}</span> · <span class="y">${threatLabel()}</span>`,
+    sub: () => `nivel <span class="y">${level()}</span> · bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weaponDisplayName(weapon())}</span> · <span class="b">${armor().name}</span> · <span class="y">${threatLabel()}</span>`,
     rows: shopRows,
-    foot: '↑ ↓ previsualizar · E / ENTER comprar o equipar · ESC salir',
+    pinnedAction: { label: 'Despedirse', key: 'ESC', act: closeMenu },
+    foot: '↑ ↓ previsualizar · E / ENTER comprar, templar o equipar · ESC salir',
     onClose: restoreGear
   }, at);
 }

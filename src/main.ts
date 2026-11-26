@@ -14,6 +14,7 @@ import { updateHud } from './hud';
 import { updatePickupTags } from './loot';
 import { updateInventoryButton } from './inventory';
 import { updateInfoButton } from './info';
+import { updateTeleport } from './teleport';
 import { syncQuality } from './apply-quality';
 import { update } from './game';
 import { cineTimeScale, updateCinematic } from './cinematic';
@@ -53,6 +54,7 @@ function frame() {
   updatePickupTags();
   updateInventoryButton();
   updateInfoButton();
+  updateTeleport(dt);
   updateMinimap(dt);
   cellMat.uniforms.uMode.value = state.colorMode;
   cellMat.uniforms.uRain.value = state.rainAmt;

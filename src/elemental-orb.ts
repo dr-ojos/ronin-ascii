@@ -20,6 +20,7 @@ import { player, state } from './state';
 import { surfaceY } from './structures';
 import { dmgMult } from './upgrades';
 import { weapon } from './weapons';
+import { weaponDmg } from './weapon-upgrades';
 import { critMult, rollCrit } from './progression';
 import { showMsg } from './hud';
 import { impactFlash, rangedPulse, screenSlash } from './cinematic';
@@ -412,7 +413,7 @@ function dealOrbDamage(e: Enemy, baseDmg: number, knockDir: THREE.Vector3, knock
   if (e.hp <= 0) return 0;
   const crit = rollCrit();
   const w = weapon();
-  const dealt = baseDmg * (crit ? critMult() : 1) * dmgMult() * (0.7 + 0.3 * w.dmg) * spirit() * damageTaken(e);
+  const dealt = baseDmg * (crit ? critMult() : 1) * dmgMult() * (0.7 + 0.3 * weaponDmg(w)) * spirit() * damageTaken(e);
   e.hp -= dealt;
   onPlayerHit(e);
   bossHit(e, dealt, true);

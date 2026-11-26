@@ -8,7 +8,8 @@ import { enemies, KINDS } from './enemies';
 import { provoke, staggerEnemy } from './enemy-ai';
 import { showMsg } from './hud';
 import { dmgMult, dashCdMult, runMult } from './upgrades';
-import { weapon, type Weapon } from './weapons';
+import { applyWeapon, weapon, type Weapon } from './weapons';
+import { gainWeaponXp, weaponCharge, weaponDaze, weaponDmg, weaponHeal, weaponReach, weaponSpeed } from './weapon-upgrades';
 import { charge } from './special';
 import { chargeRanged } from './elemental-orb';
 import { critMult, rollCrit } from './progression';
@@ -142,15 +143,16 @@ export function tryAttack(heavy = false) {
   else player.combo = chained && player.combo < 2 ? player.combo + 1 : 0;
   player.attackT = 0; player.hitDone = false;
   const move = moves[w.form ?? 'katana'][player.combo];
-  player.attackDur = move.duration * w.speed;
+  player.attackDur = move.duration * weaponSpeed(w);
   if (move.air) player.invuln = Math.max(player.invuln, player.attackDur * 0.6);
   // brief air hang when striking mid-jump
   if (player.jumpY > 0.05) player.vy = Math.max(player.vy, 2.2);
   // auto-aim: turn towards the closest oni in reach, otherwise keep the current heading
-  let best = 4.5 + w.reach, aim = null;
+  const rch = weaponReach(w);
+  let best = 4.5 + rch, aim = null;
   for (const en of enemies) { const d = Math.hypot(en.g.position.x - player.pos.x, en.g.position.z - player.pos.z); if (d < best) { best = d; aim = en; } }
   if (aim) player.face = Math.atan2(aim.g.position.x - player.pos.x, aim.g.position.z - player.pos.z);
-  else { const c = chestInReach(player.pos.x, player.pos.z, 3.2 + w.reach); if (c) player.face = Math.atan2(c.x - player.pos.x, c.z - player.pos.z); }
+  else { const c = chestInReach(player.pos.x, player.pos.z, 3.2 + rch); if (c) player.face = Math.atan2(c.x - player.pos.x, c.z - player.pos.z); }
   sfx.swing({ power: heavy ? 1.6 : player.combo === 2 ? 1.35 : 1, pan: heavy ? 0 : player.combo === 1 ? 0.3 : -0.3 });
 }
 export function tryDash() {
@@ -252,7 +254,7 @@ export function updatePlayer(dt: number) {
     if (!player.hitDone) {
       for (const [i, strike] of move.strikes.entries()) if (previous <= strike.at && p > strike.at) {
         if (i) sfx.swing({ power: 0.7, pan: strike.offset ?? 0 });
-        strikeWith(w, strike, move.reach + w.reach, player.combo >= 2);
+        strikeWith(w, strike, move.reach + weaponReach(w), player.combo >= 2);
         if (strike.quake) quake(player.pos.clone().addScaledVector(tmp.set(Math.sin(player.face), 0, Math.cos(player.face)), 0.9));
         if (i === move.strikes.length - 1) player.hitDone = true;
       }
@@ -293,7 +295,7 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
     // a critical blow (progression.ts): more damage, a golden spray and a harder stop
     const crit = !blocked && rollCrit();
     if (crit) crits++;
-    const dealt = strike.power * (blocked ? 0.2 : 1) * (crit ? critMult() : 1) * dmgMult() * w.dmg * spirit() * damageTaken(en);
+    const dealt = strike.power * (blocked ? 0.2 : 1) * (crit ? critMult() : 1) * dmgMult() * weaponDmg(w) * spirit() * damageTaken(en);
     en.hp -= dealt;
     if (!blocked) { onPlayerHit(en); bossHit(en, dealt, heavy); }
     en.flash = blocked ? 0.35 : 1;
@@ -308,7 +310,7 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
       en.t = Math.min(en.t, 0.24);
     } else if (strike.daze && !blocked && en.state !== 'return') {
       // the staff rings the oni's head: big ones and bosses shake it off sooner
-      const daze = strike.daze * (w.daze ?? 1) * (en.big ? 0.35 : 1);
+      const daze = strike.daze * weaponDaze(w) * (en.big ? 0.35 : 1);
       staggerEnemy(en, daze);
       if (daze > 0.9) burst(new THREE.Vector3(en.g.position.x, en.g.position.y + 2 * en.scale, en.g.position.z), 0xffe27a, 10, 1.6, 0.1);
     } else if ((en.state === 'windup' || en.state === 'charge') && !en.big) staggerEnemy(en, 0.5);
@@ -322,8 +324,10 @@ function strikeWith(w: Weapon, strike: Strike, reach: number, heavy: boolean) {
   const struck = hitChests(player.pos.x, player.pos.z, heading, reach, strike.arc === Math.PI, strike.arc);
   if (struck && !hits) { state.hitStop = 0.05; state.shake = Math.max(state.shake, 0.15); sfx.hit({ heavy: false, pan: 0, count: 1 }); }
   if (!hits) return;
-  if (w.heal) player.hp = Math.min(player.maxHp, player.hp + w.heal * hits);
-  if (w.charge) charge(w.charge * hits);
+  const heal = weaponHeal(w), chg = weaponCharge(w);
+  if (heal) player.hp = Math.min(player.maxHp, player.hp + heal * hits);
+  if (chg) charge(chg * hits);
+  gainWeaponXp((heavy ? 6 : 4) * hits, w, () => applyWeapon());
   chargeRanged(0.035 * hits);
   state.hitStop = (heavy ? 0.09 : strike.power < 0.9 ? 0.035 : 0.06) + (crits ? 0.05 : 0);
   if (crits) { state.gain = '¡ CRÍTICO !'; state.gainT = 0.9; }

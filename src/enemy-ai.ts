@@ -20,6 +20,8 @@ import { affixLabel } from './boss-mechanics';
 import { onTownCampCleared, startTownMission } from './liberation';
 import { onWorldEventBossDefeat, onWorldEventBossEnrage } from './world-events';
 import { earnTechnique, TECHNIQUES } from './techniques';
+import { applyWeapon, weapon } from './weapons';
+import { gainWeaponXp } from './weapon-upgrades';
 import { CLS, tagMat } from './materials';
 import { player, state } from './state';
 import { angDiff, rnd } from './utils';
@@ -513,6 +515,7 @@ function kill(en: Enemy, i: number, gy: number) {
   if (def.beast) sfx.hit({ heavy: en.big, pan });
   else sfx.death({ big: en.big, pan });
   addPoints(Math.round(def.points * (1 + camp.tier * 0.5) * (1 + (camp.threat?.rank ?? 0) * 0.08) / 10) * 10, def.name, true);
+  gainWeaponXp(def.boss ? 120 : def.elite ? 55 : 22, weapon(), () => applyWeapon());
   chargeKill();
   if (lifesteal()) player.hp = Math.min(player.maxHp, player.hp + lifesteal());
   if (en.big) state.shake = 0.6;

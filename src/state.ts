@@ -28,6 +28,8 @@ export const state = {
   chests: 0, upgrades: {} as Record<string, number>, prompt: '',
   // the purse: every point earned is also mon to spend at the smith's (weapons.ts); buying never lowers the score
   mon: 0, weapon: 'katana' as string, owned: ['katana'] as string[], armor: 'kimono' as string, ownedArmor: ['kimono'] as string[],
+  // weapon tempering / mastery progression (weapon-upgrades.ts): level (+0..+10) and XP per weapon id
+  weaponLevels: {} as Record<string, number>, weaponXp: {} as Record<string, number>,
   // inside Masa's shop (the shrine at the start): its roof hides and the camera comes closer
   indoors: false,
   // An open menu pauses the fight. Two technique slots, each with its own charge (0..1): P (technique, special)

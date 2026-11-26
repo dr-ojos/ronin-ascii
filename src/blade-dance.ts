@@ -18,6 +18,7 @@ import { dmgMult } from './upgrades';
 import { specialDamage } from './special-damage';
 import { flare } from './flare';
 import { weapon } from './weapons';
+import { weaponDmg } from './weapon-upgrades';
 import { impactFlash } from './cinematic';
 import { spawnMiniArc } from './vfx-art';
 
@@ -102,7 +103,7 @@ function cutAlong(d: Dance) {
     new THREE.Vector3(bx, player.pos.y + 1.15, bz),
     0xffffff, COLOR, { steps: 6, spread: 0.18, radius: 0.042, life: 0.24 },
   );
-  const force = dmgMult() * weapon().dmg;
+  const force = dmgMult() * weaponDmg(weapon());
   let hits = 0, pan = 0;
   for (const e of enemies) {
     if (e.hp <= 0) continue;
@@ -130,7 +131,7 @@ function cutAlong(d: Dance) {
 /** the blade goes back into its sheath: everyone it cut takes one last blow at once. The weakest
  *  KILLS common foes fall; the rest are left badly hurt (bosses and guardians only lose their share). */
 function finishingBlow(d: Dance) {
-  const force = dmgMult() * weapon().dmg;
+  const force = dmgMult() * weaponDmg(weapon());
   const cut = [...d.hits].filter(alive);
   const strong = (e: Enemy) => !!(KINDS[e.kind].boss || KINDS[e.kind].elite);
   const doomed = new Set(cut.filter(e => !strong(e)).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp || a.hp - b.hp).slice(0, KILLS));

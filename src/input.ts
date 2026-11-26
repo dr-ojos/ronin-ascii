@@ -23,6 +23,8 @@ import { resetMinimap, zoomBigMap } from './minimap';
 import { toggleLevelMenu } from './level-menu';
 import { startRun } from './progression';
 import { toggleInfo } from './info';
+import { resetTeleport, tryTeleportToShop } from './teleport';
+import { weaponDisplayName } from './weapon-upgrades';
 
 /** camera heading when photo mode was switched on */
 let photoYaw = 0;
@@ -71,8 +73,9 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyE' && !tryTalk() && !tryTalkTemple()) tryOpen();
   if (!e.repeat && e.code === 'KeyQ' && state.playing && !state.dead) {
     const w = cycleWeapon();
-    showMsg(w ? `— ${w.name} —` : `solo tienes ${weapon().name} · Masa vende más en la casa del santuario`, w ? 1.2 : 2.2);
+    showMsg(w ? `— ${weaponDisplayName(w)} —` : `solo tienes ${weaponDisplayName(weapon())} · Masa vende más en la casa del santuario`, w ? 1.2 : 2.2);
   }
+  if (!e.repeat && e.code === 'KeyB' && state.playing && !state.dead) tryTeleportToShop();
   if (!e.repeat && e.code === 'KeyP') trySpecial(1);
   if (!e.repeat && e.code === 'KeyJ') trySpecial(2);
   // Ñ launches the elemental ranged orb (3 charges); SHIFT+Ñ cycles Fuego / Rayo / Agua / Viento
@@ -125,7 +128,7 @@ addEventListener('wheel', e => {
 export function startGame() {
   (document.activeElement as HTMLElement | null)?.blur?.();   // the keys go back to the game, not the hidden button
   sfx.init(); overlay.style.display = 'none';
-  if (state.dead || !state.playing) { reset(); resetMinimap(); resetWeapons(); resetArmor(); dressUp(); startRun(); }
+  if (state.dead || !state.playing) { reset(); resetMinimap(); resetWeapons(); resetArmor(); dressUp(); startRun(); resetTeleport(); }
   state.playing = true;
 }
 document.getElementById('go')!.addEventListener('click', startGame);

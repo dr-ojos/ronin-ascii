@@ -13,6 +13,7 @@ import type { ClassId } from './classes';
 import { CLASS_ARSENAL } from './arsenal';
 import { LEVEL_REQ } from './progression';
 import { readVault, saveVault, vaultReady } from './vault';
+import { weaponDmg, weaponLevel, weaponReach, weaponSpeed } from './weapon-upgrades';
 
 export interface Weapon {
   id: string; name: string; desc: string; price: number; tier: number;
@@ -187,15 +188,20 @@ export const owns = (id: string) => state.owned.includes(id);
 
 /** a line of numbers for the shop: compared with the plain katana */
 export function weaponStats(w: Weapon) {
+  const spd = weaponSpeed(w);
+  const rch = weaponReach(w);
+  const dmg = weaponDmg(w);
+  const lv = weaponLevel(w.id);
   const sp = w.form === 'cleaver' ? 'muy pesada'
     : w.form === 'broad' ? 'lenta'
     : w.form === 'odachi' ? 'gran arco'
     : w.form === 'rapier' ? 'estocada veloz'
     : w.form === 'dual' ? 'doble tajo'
-    : w.speed < 0.8 ? 'muy rápida' : w.speed < 0.97 ? 'rápida' : w.speed > 1.15 ? 'lenta' : 'normal';
-  const reach = w.reach ? `${w.reach > 0 ? '+' : '−'}${Math.abs(w.reach).toFixed(1)} m` : 'normal';
+    : spd < 0.8 ? 'muy rápida' : spd < 0.97 ? 'rápida' : spd > 1.15 ? 'lenta' : 'normal';
+  const reach = Math.abs(rch) > 0.005 ? `${rch > 0 ? '+' : '−'}${Math.abs(rch).toFixed(2).replace(/\.?0+$/, '')} m` : 'normal';
   const daze = (w.form === 'staff' || w.daze) ? ` · aturde${w.daze && w.daze > 1 ? ' mucho' : ''}` : '';
-  return `daño x${w.dmg.toFixed(2).replace(/\.?0+$/, '')} · alcance ${reach} · ${sp}${daze}`;
+  const forge = lv > 0 ? ` · temple +${lv}` : '';
+  return `daño x${dmg.toFixed(2).replace(/\.?0+$/, '')} · alcance ${reach} · ${sp}${daze}${forge}`;
 }
 
 export function buy(w: Weapon): 'ok' | 'poor' | 'owned' {
@@ -231,6 +237,8 @@ export function resetWeapons() {
   const id = cls().weapon, v = readVault();
   state.owned = [id, ...v.weapons.filter(w => w !== id && byId.has(w) && canWield(byId.get(w)!))];
   state.weapon = v.weapon && state.owned.includes(v.weapon) ? v.weapon : id;
+  state.weaponLevels = { ...(v.weaponLevels ?? {}) };
+  state.weaponXp = { ...(v.weaponXp ?? {}) };
   applyWeapon();
   vaultReady();
 }

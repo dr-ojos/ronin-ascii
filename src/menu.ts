@@ -29,6 +29,8 @@ export interface MenuDef {
   sub?(): string;
   rows(): MenuRow[];
   foot: string;
+  /** optional action pinned below the scrollable rows so it stays always visible */
+  pinnedAction?: { label: string; key?: string; act(): void };
   onClose?(): void;
 }
 
@@ -101,6 +103,9 @@ export function render(revealSelection = false) {
       return `<div class="${rowClass}" data-i="${i}">${value}<span class="ml">${i === sel ? '›' : ' '} ${esc(r.label)}${sparks}</span>` +
         (r.note ? `<div class="mn">${esc(r.note)}</div>` : '') + `</div>`;
     }).join('') + '</div>' +
+    (cur.pinnedAction
+      ? `<div class="mpinned"><button class="mpin-btn" type="button"><span>${esc(cur.pinnedAction.label)}</span>${cur.pinnedAction.key ? `<kbd>${esc(cur.pinnedAction.key)}</kbd>` : ''}</button></div>`
+      : '') +
     `<div class="mst">${esc(status)}</div><div class="mf">${esc(cur.foot)}</div>`;
   if (scrolls(cur.id)) {
     const list = el.querySelector<HTMLElement>('.mrows')!;
@@ -167,6 +172,7 @@ el.addEventListener('click', e => {
   e.stopPropagation();
   const t = e.target as HTMLElement;
   if (t.closest('.mclose')) return closeMenu();
+  if (t.closest('.mpin-btn')) { cur?.pinnedAction?.act(); return; }
   if (t.tagName === 'INPUT') return;
   const rowEl = t.closest<HTMLElement>('.mr[data-i]'); if (!rowEl) return;
   const i = Number(rowEl.dataset.i);
