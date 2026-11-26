@@ -37,7 +37,7 @@ export interface Weapon {
   fx: {
     glow: number; hot: number; cool: number; gravity: number; halo: number; trail: number;
     sparks?: readonly [number, number, number];
-    extra?: 'bolts' | 'blood' | 'feathers' | 'stars';
+    extra?: 'bolts' | 'blood' | 'feathers' | 'stars' | 'flames';
   };
 }
 export const WEAPONS: Weapon[] = [
@@ -116,6 +116,15 @@ export const WEAPONS: Weapon[] = [
     fx: { glow: 0xb4c8ff, hot: 0xffffff, cool: 0x5c6eff, gravity: 2.5, halo: 2.0, trail: 2.4, sparks: [0xc8dcff, 0xffffff, 0x8c7aff], extra: 'stars' } },
   { id: 'alas-eclipse', name: 'Espadón del Serafín Solar', desc: 'gran espada alada de doble filo y gema solar: cura 2 por golpe, carga la técnica y brilla como el sol', form: 'broad', mangaModel: 'winged', price: 19800, tier: 3, lv: 50, dmg: 2.95, reach: 1.1, speed: 1.08, len: 1.46, width: 1.15, glow: 0xffaa28, steel: 0xfff0c2, heal: 2, charge: 0.025,
     fx: { glow: 0xffbe40, hot: 0xffffff, cool: 0xe05810, gravity: 1.5, halo: 2.15, trail: 2.5, sparks: [0xffd44a, 0xff7a1a, 0xffffff], extra: 'feathers' } },
+  // ---- four elemental fire blades (katana-fx.ts 'flames' sheath & rising embers)
+  { id: 'espada-fuego', name: 'Espada de Fuego', desc: 'hoja envuelta en llamas vivas: tajos ardientes de gran potencia que dejan brasas en el aire', price: 5200, tier: 2.1, dmg: 1.65, reach: 0.35, speed: 0.92, len: 1.16, glow: 0xff5a14, steel: 0x4a1a0c,
+    fx: { glow: 0xff6218, hot: 0xfff0a8, cool: 0xd81808, gravity: -3.2, halo: 1.85, trail: 2.25, sparks: [0xff6a1a, 0xffc83c, 0xff2810], extra: 'flames' } },
+  { id: 'espada-fuego-verde', name: 'Espada de Fuego Verde', desc: 'hoja de llamas esmeralda espectrales: fuego jade que consume al oni y te cura 2 por golpe', price: 6800, tier: 2.3, dmg: 1.8, reach: 0.4, speed: 0.9, len: 1.2, glow: 0x28ff78, steel: 0x103824, heal: 2,
+    fx: { glow: 0x38ff82, hot: 0xe2ffec, cool: 0x0ca848, gravity: -3.4, halo: 1.9, trail: 2.3, sparks: [0x38ff82, 0xa8ff52, 0x18d898], extra: 'flames' } },
+  { id: 'espada-fuego-purpura', name: 'Espada de Fuego Púrpura', desc: 'hoja de llamas violetas arcanas: arde con fuego maldito y carga la técnica al cortar', price: 7800, tier: 2.45, dmg: 1.9, reach: 0.45, speed: 0.88, len: 1.22, glow: 0xb438ff, steel: 0x28103c, charge: 0.025,
+    fx: { glow: 0xc248ff, hot: 0xf8d8ff, cool: 0x6210c8, gravity: -3.4, halo: 1.95, trail: 2.35, sparks: [0xc850ff, 0xff7ae8, 0x7630ff], extra: 'flames' } },
+  { id: 'espada-fuego-blanco', name: 'Espada de Fuego Blanco', desc: 'hoja de fuego blanco incandescente: la llama más pura, veloz, cura 1 y carga la técnica', price: 9400, tier: 2.65, dmg: 2.05, reach: 0.5, speed: 0.86, len: 1.24, glow: 0xffffff, steel: 0xf4f8ff, heal: 1, charge: 0.02,
+    fx: { glow: 0xf0f6ff, hot: 0xffffff, cool: 0x9ed4ff, gravity: -3.6, halo: 2.0, trail: 2.4, sparks: [0xffffff, 0xdcf0ff, 0xfff6d6], extra: 'flames' } },
   // ---- the xiákè's arms: the straight jian he starts with, a tiger dao, butterfly swords and a guandao
   { id: 'jian', name: 'Jian de jade', desc: 'espada recta de doble filo con borla roja: rápida y precisa', look: 'jian', cls: 'xia', price: 0, tier: 0, dmg: 1, reach: 0.05, speed: 0.92, len: 1, glow: 0x7dffc0, steel: 0xe6fff3,
     fx: { glow: 0x8affc8, hot: 0xeafff4, cool: 0x2fd08a, gravity: 4, halo: 1.1, trail: 1.25 } },

@@ -89,6 +89,89 @@ sam.katana.add(halo);
 const offhandHalo = halo.clone();
 offhandHalo.visible = false;
 sam.offhand.add(offhandHalo);
+
+// ---------------------------------------------------------------- blade flames
+// Volumetric animated flame sheath wrapping fire blades (extra: 'flames'): two crossed ribbons
+// running from guard to past the tip with 2-octave turbulent fire noise & flickering tongues.
+const flameUniforms = {
+  uTime: { value: 0 },
+  uIntensity: { value: 1 },
+  uCore: { value: new THREE.Color(0xfff0a8) },
+  uMid: { value: new THREE.Color(0xff6218) },
+  uEdge: { value: new THREE.Color(0xd81808) }
+};
+const flameMat = new THREE.ShaderMaterial({
+  uniforms: flameUniforms,
+  transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, toneMapped: false,
+  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+  blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.ZeroFactor,
+  vertexShader: /* glsl */`
+    uniform float uTime;
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      vec3 p = position;
+      // subtle licking whip along the upper half of the flame sheath
+      float whip = smoothstep(0.15, 1.0, uv.y);
+      p.x += sin(uv.y * 11.0 - uTime * 13.0) * 0.014 * whip;
+      p.y += cos(uv.y * 9.0 - uTime * 11.5) * 0.012 * whip;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: /* glsl */`
+    uniform float uTime, uIntensity;
+    uniform vec3 uCore, uMid, uEdge;
+    varying vec2 vUv;
+    float fhash(vec2 p) {
+      p = fract(p * vec2(123.34, 456.21));
+      p += dot(p, p + 45.32);
+      return fract(p.x * p.y);
+    }
+    float fnoise(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(fhash(i), fhash(i + vec2(1.0, 0.0)), f.x),
+                 mix(fhash(i + vec2(0.0, 1.0)), fhash(i + vec2(1.0, 1.0)), f.x), f.y);
+    }
+    void main() {
+      float across = abs(vUv.x - 0.5) * 2.0;
+      float along = vUv.y;
+      float n1 = fnoise(vec2(vUv.x * 3.4, along * 5.2 - uTime * 6.2));
+      float n2 = fnoise(vec2(vUv.x * 7.2 + uTime * 1.4, along * 10.5 - uTime * 10.8));
+      float n = n1 * 0.65 + n2 * 0.35;
+      float rootFade = smoothstep(0.0, 0.10, along);
+      float tipFade = 1.0 - smoothstep(0.68, 1.0, along);
+      float envelope = rootFade * tipFade;
+      float tongue = (1.0 - across) * (0.68 + 0.42 * envelope) + (n - 0.46) * (0.58 + 0.35 * along);
+      float alpha = smoothstep(0.24, 0.78, tongue) * rootFade * (1.0 - smoothstep(0.86, 1.0, along));
+      if (alpha < 0.045) discard;
+      float heat = clamp((1.0 - across) * 0.72 + n * 0.55 - along * 0.18, 0.0, 1.0);
+      vec3 col = mix(uEdge, uMid, smoothstep(0.18, 0.56, heat));
+      col = mix(col, uCore, smoothstep(0.56, 0.90, heat));
+      float bright = alpha * uIntensity * (0.95 + 0.35 * n);
+      gl_FragColor = vec4(col * bright, ${CLS.light.toFixed(2)});
+      #include <colorspace_fragment>
+    }`
+});
+flameMat.userData.cls = CLS.light;
+const bladeFlames = new THREE.Group();
+bladeFlames.name = 'blade-flames';
+{
+  // PlaneGeometry(width, length) oriented along +z (vUv.y: 0 at guard -> 1 at tip)
+  const gA = new THREE.PlaneGeometry(1, 1, 2, 16).rotateX(Math.PI / 2);
+  const gB = new THREE.PlaneGeometry(1, 1, 2, 16).rotateX(Math.PI / 2).rotateZ(Math.PI / 2);
+  const gC = new THREE.PlaneGeometry(1, 1, 2, 16).rotateX(Math.PI / 2).rotateZ(Math.PI / 4);
+  for (const g of [gA, gB, gC]) {
+    const m = new THREE.Mesh(g, flameMat);
+    m.frustumCulled = false;
+    m.renderOrder = 4;
+    bladeFlames.add(m);
+  }
+}
+bladeFlames.visible = false;
+sam.katana.add(bladeFlames);
+const offhandFlames = bladeFlames.clone();
+offhandFlames.visible = false;
+sam.offhand.add(offhandFlames);
 const C1 = new THREE.Color(), C2 = new THREE.Color(), CG = new THREE.Color();
 let fxWeapon: Weapon | undefined;
 /** resolved blade metrics for the currently displayed weapon (handles manga models, looks & forms) */
@@ -117,6 +200,15 @@ function setWeaponFx(w: Weapon) {
     outer.scale.set(r, r * 0.55 * width, len / 3); inner.scale.set(r * 0.35, r * 0.2 * width, len / 3);
     glow.position.set(0, 0.004 * width + rise / 2, base + len / 2);
     glow.rotation.x = -Math.atan2(rise, len);
+  }
+  flameUniforms.uCore.value.copy(C1);
+  flameUniforms.uMid.value.copy(CG);
+  flameUniforms.uEdge.value.copy(C2);
+  const flameLen = len * 1.14, flameW = Math.max(0.11, 0.085 * width * w.fx.halo * 0.65);
+  for (const fl of [bladeFlames, offhandFlames]) {
+    fl.scale.set(flameW, flameW, flameLen);
+    fl.position.set(0, 0.004 * width + rise / 2, base + flameLen * 0.46);
+    fl.rotation.x = -Math.atan2(rise, len);
   }
   bladeSheen.uBladeCurve.value = (w.form === 'spear' || w.form === 'rapier') ? 0 : profile.curve;
   bladeSheen.uBladeWidth.value = profile.width;
@@ -215,10 +307,11 @@ function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
   const time = state.time;
   const glints = bladeSheen.uBladeGlints.value;
   const blood = w.fx.extra === 'blood';
-  if (blood) {
+  const flames = w.fx.extra === 'flames';
+  if (blood || flames) {
     sam.katana.getWorldQuaternion(katanaWorldQ);
     katanaInvQ.copy(katanaWorldQ).invert();
-    localDown.set(0, -1, 0).applyQuaternion(katanaInvQ);
+    localDown.set(0, blood ? -1 : 1, 0).applyQuaternion(katanaInvQ);
   }
   for (let i = 0; i < BLADE_GLINTS; i++) {
     const cycle = (time * (0.72 + i * 0.09) + i * 0.34) % 1;
@@ -233,21 +326,22 @@ function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
   const count = EDGE_SPARKS - BLADE_GLINTS;
   for (let i = 0; i < count; i++) {
     const idx = i + BLADE_GLINTS;
-    if (blood && i % 2 === 0) {
-      // Blood-dripping sparks: form along the full blade, swell, then fall straight down like heavy drops of blood
-      const speed = 0.68 + (i % 5) * 0.14;
+    if ((blood || flames) && i % 2 === 0) {
+      // Blood-dripping sparks fall straight down; flame sparks dance & rise upward off the blazing blade
+      const speed = (flames ? 1.05 : 0.68) + (i % 5) * (flames ? 0.2 : 0.14);
       const dropT = (time * speed + i * 0.371) % 1;
       const along = 0.05 + ((i * 0.618 + Math.floor(time * speed + i * 0.371) * 0.29) % 0.90);
       const sec = bladeSection(profile, along);
-      const edgeY = (sec.center - sec.width * 0.5) * scale;
-      const fallPhase = Math.max(0, (dropT - 0.18) / 0.82);
-      const dropDist = 0.42 * fallPhase * fallPhase;
-      const px = Math.sin(i * 3.1) * 0.008 + localDown.x * dropDist;
-      const py = edgeY - 0.005 + localDown.y * dropDist;
+      const edgeY = (sec.center - sec.width * (flames ? 0.1 : 0.5)) * scale;
+      const fallPhase = Math.max(0, (dropT - (flames ? 0.08 : 0.18)) / (flames ? 0.92 : 0.82));
+      const dropDist = (flames ? 0.34 : 0.42) * fallPhase * (flames ? (0.4 + 0.6 * fallPhase) : fallPhase);
+      const sway = flames ? Math.sin(time * 14 + i * 2.1) * 0.028 * fallPhase : 0;
+      const px = Math.sin(i * 3.1) * 0.01 + sway + localDown.x * dropDist;
+      const py = edgeY - (flames ? 0 : 0.005) + localDown.y * dropDist;
       const pz = base + along * length + localDown.z * dropDist;
       edgePositions.setXYZ(idx, px, py, pz);
       const pulse = THREE.MathUtils.smoothstep(dropT, 0, 0.16) * (1 - THREE.MathUtils.smoothstep(dropT, 0.72, 1));
-      edgePulses.setX(idx, pulse * (displaying ? 1.15 : 0.95 + 0.2 * heat));
+      edgePulses.setX(idx, pulse * (displaying ? 1.2 : 1.0 + 0.25 * heat));
     } else {
       // Travelling sparks racing along the entire length of the blade (edge, face and spine)
       const cycle = time * (0.85 + (i % 5) * 0.22) + i * 0.618;
@@ -291,7 +385,7 @@ sparkMat.onBeforeCompile = sh => {
 };
 const sparkPts = new THREE.Points(spGeo, sparkMat);
 sparkPts.frustumCulled = false; scene.add(sparkPts);
-let spNext = 0, sparkAcc = 0, moteAcc = 0, bloodAcc = 0, bladeHeat = 0, swingS = 0;
+let spNext = 0, sparkAcc = 0, moteAcc = 0, bloodAcc = 0, flameAcc = 0, bladeHeat = 0, swingS = 0;
 // 0..1: how much the ronin is fighting right now. Running swings the blade too, but only a cut
 // (player.attackT >= 0) may draw the white trail, flare the halo or shower sparks.
 let fight = 0;
@@ -473,6 +567,20 @@ export function updateSparks(dt: number, emit: boolean) {
           rnd(0.45, 0.85), 1.45);
       }
     }
+    // continuous rising fire embers off flame blades (even at rest or walking, roaring in a cut!)
+    if (w.fx.extra === 'flames') {
+      flameAcc += dt * (26 + bladeHeat * 65 + swing * fight * 40);
+      while (flameAcc >= 1) {
+        flameAcc -= 1;
+        const s = 0.04 + Math.random() * 0.96;
+        spTmp.lerpVectors(bladeBase, bladeTip, s);
+        spawnSpark(spTmp,
+          tipVel.x * s * 0.16 + rnd(-0.42, 0.42),
+          rnd(0.55, 1.55) + bladeHeat * 0.8,
+          tipVel.z * s * 0.16 + rnd(-0.42, 0.42),
+          rnd(0.35, 0.78), 0.45);
+      }
+    }
     // motes: a few soft grains of light rising off the body and left behind as it runs
     moteAcc += dt * 7 * running;
     const p = sam.root.position;
@@ -519,6 +627,13 @@ export function updateSparks(dt: number, emit: boolean) {
   halo.visible = sam.root.visible && (w.fx.sparks ? !state.dead : !displaying && (calm > 0.03 || hk > 0.01));
   offhandHalo.scale.copy(halo.scale);
   offhandHalo.visible = dual && halo.visible;
+  const hasFlames = w.fx.extra === 'flames' && sam.root.visible && !state.dead;
+  bladeFlames.visible = hasFlames;
+  offhandFlames.visible = dual && hasFlames;
+  if (hasFlames) {
+    flameUniforms.uTime.value = state.time;
+    flameUniforms.uIntensity.value = (displaying ? 1.15 : 0.82 + 0.25 * calm + hk * 0.85) * (0.94 + Math.random() * 0.12);
+  }
   updateEdgeSparks(w, hk, displaying);
   // each blade's own flourish
   if (emit && cutting && w.fx.extra) flourish(w.fx.extra, dt, hk);
@@ -538,8 +653,8 @@ export function updateSparks(dt: number, emit: boolean) {
 const boltMat = tagMat(new THREE.LineBasicMaterial({ color: 0xbfe0ff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), CLS.light);
 const bolts: { l: THREE.Line; life: number }[] = [];
 let flAcc = 0;
-function flourish(kind: 'bolts' | 'blood' | 'feathers' | 'stars', dt: number, hk: number) {
-  flAcc += dt * (kind === 'bolts' ? 4 + hk * 30 : kind === 'blood' ? 2 + hk * 40 : kind === 'feathers' ? 1 + hk * 25 : 1.5 + hk * 35);
+function flourish(kind: 'bolts' | 'blood' | 'feathers' | 'stars' | 'flames', dt: number, hk: number) {
+  flAcc += dt * (kind === 'bolts' ? 4 + hk * 30 : kind === 'blood' ? 2 + hk * 40 : kind === 'flames' ? 5 + hk * 45 : kind === 'feathers' ? 1 + hk * 25 : 1.5 + hk * 35);
   while (flAcc >= 1) {
     flAcc -= 1;
     const s = 0.2 + Math.random() * 0.8;
@@ -552,6 +667,7 @@ function flourish(kind: 'bolts' | 'blood' | 'feathers' | 'stars', dt: number, hk
       scene.add(l); bolts.push({ l, life: 0.09 });
       if (Math.random() < 0.3) spawnSpark(spTmp, rnd(-1, 1), rnd(0, 1.5), rnd(-1, 1), 0.2);
     } else if (kind === 'blood') spawnSpark(spTmp, rnd(-0.3, 0.3) + tipVel.x * 0.1, rnd(-0.5, 0.2), rnd(-0.3, 0.3) + tipVel.z * 0.1, rnd(0.5, 0.9));
+    else if (kind === 'flames') spawnSpark(spTmp, rnd(-0.9, 0.9) + tipVel.x * 0.18, rnd(0.7, 2.2), rnd(-0.9, 0.9) + tipVel.z * 0.18, rnd(0.45, 0.95), 0.45);
     else if (kind === 'feathers') spawnSpark(spTmp, rnd(-0.8, 0.8), rnd(0.2, 1.2), rnd(-0.8, 0.8), rnd(0.8, 1.3));
     else spawnSpark(spTmp, rnd(-0.3, 0.3), rnd(0.3, 0.9), rnd(-0.3, 0.3), rnd(0.9, 1.5));
   }
