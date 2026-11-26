@@ -19,7 +19,9 @@ const SECTIONS: [string, [string, string][]][] = [
     ['Cambiar de arma', 'Q'],
     ['Usar la técnica principal', 'P'],
     ['Usar la técnica secundaria', 'J'],
-    ['Cambiar técnica de P / de J', 'O / ⇧O']
+    ['Cambiar técnica de P / de J', 'O / ⇧O'],
+    ['Orbe elemental a distancia (3 cargas)', 'Ñ'],
+    ['Cambiar elemento (fuego/rayo/agua/viento)', '⇧Ñ']
   ]],
   ['MUNDO', [
     ['Hablar · abrir cofres', 'E'],

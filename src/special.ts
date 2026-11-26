@@ -22,6 +22,7 @@ import { rnd } from './utils';
 import { clearFlares, flare, updateFlares } from './flare';
 import { clearSutras, startSutras, updateSutras } from './sutra-shield';
 import { clearFlyingSwords, startFlyingSwords, updateFlyingSwords } from './flying-swords';
+import { chargeRanged, clearElementalOrbs, MAX_RANGED_CHARGES, updateElementalOrbs } from './elemental-orb';
 import { cls } from './classes';
 import { chargeMult } from './progression';
 import { readVault } from './vault';
@@ -41,7 +42,7 @@ export function charge(amount: number) {
     if (state[key] >= 1) { sfx.chime(false); showMsg(`— ${TECHNIQUES[slotTechnique(slot)].name.toUpperCase()} —\nCarga lista · pulsa ${SLOT_KEY[slot]}`, 1.6); }
   }
 }
-export const chargeKill = () => charge(KILL_BONUS);
+export const chargeKill = () => { charge(KILL_BONUS); chargeRanged(0.3); };
 
 // ------------------------------------------------------------ bolts
 const SEG = new THREE.CylinderGeometry(1, 1, 1, 5);
@@ -166,6 +167,7 @@ export function updateSpecial(dt: number) {
   updateFlares(dt);
   updateSutras(dt);
   updateFlyingSwords(dt);
+  updateElementalOrbs(dt);
   updateArts(dt);
   for (let i = pending.length - 1; i >= 0; i--) { const p = pending[i]; if ((p.t -= dt) <= 0) { pending.splice(i, 1); p.fn(); } }
   for (let i = bolts.length - 1; i >= 0; i--) {
@@ -188,8 +190,9 @@ export function resetSpecial() {
   const technique = v.technique && learned.includes(v.technique) ? v.technique : start;
   let technique2 = v.technique2 && learned.includes(v.technique2) ? v.technique2 : start2;
   if (technique2 === technique) technique2 = technique === start2 ? start : start2;
-  Object.assign(state, { special: 0, special2: 0, jade: 0, technique, technique2, casting: technique, learnedTechniques: learned });
+  Object.assign(state, { special: 0, special2: 0, rangedCharges: MAX_RANGED_CHARGES, rangedCharge: 0, jade: 0, technique, technique2, casting: technique, learnedTechniques: learned });
   clearArts();
+  clearElementalOrbs();
   clearCinematic();
   clearSutras();
   clearFlyingSwords();

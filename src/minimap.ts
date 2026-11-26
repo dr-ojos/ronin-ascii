@@ -10,6 +10,7 @@ import { groundY } from './terrain';
 import { enemies, KINDS } from './enemies';
 import { showMsg } from './hud';
 import { discovered, camps } from './encounters';
+import { isTownLiberated, isTownMissionStarted, townCampsOf, type TownId } from './liberation';
 import { POIS } from './landmarks';
 import { chests } from './loot';
 import { smithPos } from './shop';
@@ -378,11 +379,13 @@ function renderBig(V: BigView) {
     if (!placeKnown(p)) continue;
     const [px, py] = proj(p.x, p.z), temple = p.glyph === TEMPLE_GLYPH, been = discovered.has(p.id);
     if (px < -200 || py < -20 || px > S + 200 || py > S + 20) continue;
-    ctx.fillStyle = temple ? COL.temple : COL.place;
+    const isTown = p.id === 'aldea' || p.id === 'pueblo';
+    const townFree = isTown && isTownLiberated(p.id as TownId);
+    ctx.fillStyle = temple || townFree ? COL.temple : COL.place;
     ctx.font = `bold ${Math.round(fs * 1.25)}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.globalAlpha = been ? 1 : 0.6;
     ctx.strokeText(p.glyph, px, py); ctx.fillText(p.glyph, px, py);
-    const left = temple && p.x < 100, label = been ? p.name.toLowerCase() : '?';
+    const left = temple && p.x < 100, label = been ? p.name.toLowerCase() + (townFree ? ' ✓' : '') : '?';
     ctx.font = `bold ${fs}px ${FONT}`; ctx.textAlign = left ? 'right' : 'left';
     const lx = px + fs * (left ? -0.9 : 0.9), ly = py + (temple && !left ? fs * 0.55 : 0);
     ctx.strokeText(label, lx, ly); ctx.fillText(label, lx, ly);
@@ -472,14 +475,25 @@ export function updateMinimap(dt: number) {
   let here: Place | null = null;
   for (const p of PLACES) if (Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < p.r && (!here || p.r < here.r)) here = p;
   if (here !== lastPlace) {
+    const isTown = !!here && (here.id === 'aldea' || here.id === 'pueblo');
+    const townFree = isTown && isTownLiberated(here!.id as TownId);
     if (here && state.playing && !state.dead && !discovered.has(here.id)) {
       discovered.add(here.id); addPoints(POINTS.place, 'lugar descubierto');
-      showMsg(`— ${here.name} —\n+${POINTS.place} lugar descubierto`, 2.6);
-    } else if (here && placeT <= 0 && state.playing) showMsg(`— ${here.name} —`, 2.4);
+      const note = isTown && !townFree ? '\nmisión: libera el pueblo de los oni' : '';
+      showMsg(`— ${here.name} —\n+${POINTS.place} lugar descubierto${note}`, 3.0);
+    } else if (here && placeT <= 0 && state.playing) {
+      if (!(isTown && !townFree && !isTownMissionStarted(here.id as TownId))) {
+        showMsg(`— ${here.name}${townFree ? ' (LIBERADO)' : ''} —`, 2.4);
+      }
+    }
     lastPlace = here; placeT = 0;
   }
-  zone.textContent = here ? here.name.toLowerCase() : 'tierras salvajes';
+  const hereFree = here && (here.id === 'aldea' || here.id === 'pueblo') && isTownLiberated(here.id as TownId);
+  zone.textContent = here ? `${here.name.toLowerCase()}${hereFree ? ' · liberado' : ''}` : 'tierras salvajes';
   if (!state.playing) seen.clear();
+  for (const tid of ['aldea', 'pueblo'] as TownId[]) {
+    if (isTownMissionStarted(tid)) for (const c of townCampsOf(tid)) seen.add(c);
+  }
   
   // the corners of the wilds count as discovered when you walk up to them
   POIS.forEach((p, i) => {

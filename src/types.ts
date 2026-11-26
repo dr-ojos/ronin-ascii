@@ -65,6 +65,7 @@ export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 
   | 'guadanero' | 'piromante' | 'duelista' | 'tambor' | 'sombra' | 'coloso'
   | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'escorpion' | 'espectro'
   | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianRayo' | 'shuten' | 'enma' | 'senorBosque' | 'yukiOnna'
+  | 'kagutsuchi' | 'daimyoHueso' | 'taikoDemonio'
   | 'kensei' | 'tengu' | 'raijin';
 export type Affix = 'acorazado' | 'regenerador' | 'furioso' | 'gelido' | 'invocador' | 'errante' | 'espinoso';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
@@ -149,6 +150,8 @@ export interface Camp {
   chest?: Chest;
   /** a temple guardian: beating it teaches this technique, and it does not come back this run */
   technique?: TechniqueId;
+  /** town liberation mission this occupation camp belongs to (liberation.ts) */
+  town?: 'aldea' | 'pueblo';
 }
 /** a chest in the world (loot.ts) */
 export interface Chest {

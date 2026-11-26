@@ -17,6 +17,7 @@ import { lifesteal } from './upgrades';
 import { chargeKill, bolt, skyFlash } from './special';
 import { circle, onEnrage, onKill, takeTurn } from './battle';
 import { affixLabel } from './boss-mechanics';
+import { onTownCampCleared, startTownMission } from './liberation';
 import { earnTechnique, TECHNIQUES } from './techniques';
 import { CLS, tagMat } from './materials';
 import { player, state } from './state';
@@ -37,6 +38,7 @@ export function alertCamp(camp: Camp) {
     alert ??= o;
   }
   if (!alert) return;
+  if (camp.town) startTownMission(camp.town, false);
   const pan = panOf(alert.g.position.x, alert.g.position.z);
   if (camp.wildlife) {
     if (camp.wildlife === 'lobos') sfx.howl(pan);
@@ -547,10 +549,12 @@ function campCleared(camp: Camp, last: Enemy['kind'], relicName: string | null =
   const chest = camp.chest && camp.chest.state === 'sealed' ? '\nel cofre se ha abierto' : '';
   const drop = relicName ? `\n✦ Ha soltado: ${relicName}` : '';
   if (camp.chest) unseal(camp.chest);
+  const townStatus = onTownCampCleared(camp);
   if (camp.technique && earnTechnique(camp.technique)) {
     sfx.chime(true); skyFlash(0.6);
     showMsg(`${title}\n— HAS GANADO ${TECHNIQUES[camp.technique].name.toUpperCase()} —${drop}\nequipada · P para usarla · O para cambiar`, 3.8);
     return;
   }
-  showMsg(`${title}\n+${bonus}  ·  +20 vida${drop}${chest}`, relicName ? 3.2 : 2.2);
+  if (townStatus.liberated) return;
+  showMsg(`${title}\n+${bonus}  ·  +20 vida${drop}${chest}${townStatus.note}`, relicName || townStatus.note ? 3.2 : 2.2);
 }

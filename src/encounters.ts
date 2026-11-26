@@ -22,6 +22,7 @@ import { equipmentThreat } from './equipment-threat';
 import { showMsg } from './hud';
 import { sfx } from './sfx';
 import { resetSpecial } from './special';
+import { isTownLiberated, registerTownCamp, resetLiberation, type TownId } from './liberation';
 import { player, state } from './state';
 import { rnd } from './utils';
 import type { Camp, EnemyKind } from './types';
@@ -141,7 +142,6 @@ function buildCamps() {
     ['cementerio', ['jefe', 'hechicero', 'espectro', 'oni', 'acechador']],
     ['pagoda', ['tenguMayor', 'arquero', 'acechador', 'ashigaru'], [0, 13]],
     ['inari', ['raijinMayor', 'bruto', 'ashigaru'], [-2, -10]],
-    ['aldea', ['oni', 'guadanero', 'ashigaru', 'escudero']],
     ['campamento', ['shuten', 'ashigaru', 'acechador', 'escudero', 'arquero', 'bruto']],
     ['torii', ['yukiOnna', 'acechador', 'piromante', 'ashigaru']]
   ];
@@ -150,6 +150,27 @@ function buildCamps() {
     const [cx, cz, ry] = chestSpot(c.x, c.z, 4, r * 0.8);
     c.chest = makeChest(cx, cz, ry, c.boss ? 'jefe' : 'guarida', c.tier, true);
     camps.push(c);
+  }
+  // Occupied towns: multiple squads + new bosses for the town liberation mini-missions (liberation.ts).
+  const townSquads: [TownId, EnemyKind[], P2, number][] = [
+    // Aldea de Kiri: 3 squads (16 foes), led by the new Daimyō de los Huesos in the central square
+    ['aldea', ['daimyoHueso', 'escudero', 'ashigaru', 'arquero', 'guadanero', 'duelista'], [0, 5], 15],
+    ['aldea', ['escudero', 'oni', 'ashigaru', 'arquero', 'acechador'], [-24, 15], 12],
+    ['aldea', ['kensei', 'oni', 'guadanero', 'hechicero', 'ashigaru'], [26, -14], 12],
+    // Pueblo de Asagiri: 5 squads (31 foes) across the market square, gates and shrine, led by 2 new bosses
+    ['pueblo', ['kagutsuchi', 'piromante', 'escudero', 'guadanero', 'duelista', 'arquero', 'oni'], [0, 6], 16],
+    ['pueblo', ['escudero', 'ashigaru', 'arquero', 'acechador', 'oni', 'bruto'], [-76, 0], 12],
+    ['pueblo', ['taikoDemonio', 'tambor', 'bruto', 'escudero', 'ashigaru', 'arquero'], [76, 0], 12],
+    ['pueblo', ['tengu', 'acechador', 'sombra', 'arquero', 'oni', 'hechicero'], [0, 74], 12],
+    ['pueblo', ['raijin', 'coloso', 'piromante', 'escudero', 'espectro', 'duelista'], [0, -74], 12]
+  ];
+  for (const [townId, kinds, [dx, dz], r] of townSquads) {
+    const p = place(townId);
+    const c = makeCamp(p.x + dx, p.z + dz, kinds, r, { name: p.name, town: townId });
+    const [cx, cz, ry] = chestSpot(c.x, c.z, 3.5, Math.min(9, r * 0.65));
+    c.chest = makeChest(cx, cz, ry, c.boss ? 'jefe' : c.elite ? 'guardian' : 'guarida', c.tier, true);
+    camps.push(c);
+    registerTownCamp(c);
   }
   // the camps of the wilds, with their chest by the fire
   // (a third of the ones further out also have a guardian by the chest)
@@ -240,6 +261,7 @@ export function reset() {
   resetSpecial();
   resetBattle();
   resetScore();
+  resetLiberation();
   discovered.clear(); discovered.add('claro');
   ambushT = rnd(20, 35);
 }
@@ -286,7 +308,7 @@ export function updateEncounters(dt: number) {
       if (!c.roster.length) {
         if (c.active) c.active = false;
         if (c.temp) { camps.splice(i, 1); continue; }
-        const won = c.technique && state.learnedTechniques.includes(c.technique);   // a beaten temple guardian stays beaten
+        const won = (c.technique && state.learnedTechniques.includes(c.technique)) || (c.town && isTownLiberated(c.town));
         if (c.clearedAt >= 0 && state.time - c.clearedAt > RESPAWN && d > DESPAWN_R && !won) {
           c.roster = c.kinds.slice(); c.threat = undefined; c.clearedAt = -1;
         }

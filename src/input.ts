@@ -7,6 +7,7 @@ import { tryAttack, tryDash, tryJump } from './player';
 import { reset } from './encounters';
 import { tryOpen } from './loot';
 import { trySpecial } from './special';
+import { cycleRangedElement, tryElementalOrb } from './elemental-orb';
 import { cycleTechnique } from './techniques';
 import { tryTalkTemple } from './temples';
 import { tryTalk } from './shop';
@@ -75,6 +76,12 @@ addEventListener('keydown', e => {
   }
   if (!e.repeat && e.code === 'KeyP') trySpecial(1);
   if (!e.repeat && e.code === 'KeyJ') trySpecial(2);
+  // Ñ launches the elemental ranged orb (3 charges); SHIFT+Ñ cycles Fuego / Rayo / Agua / Viento
+  if (!e.repeat && (e.code === 'Semicolon' || e.key === 'ñ' || e.key === 'Ñ')) {
+    e.preventDefault();
+    if (e.shiftKey) { if (state.playing && !state.dead && !state.photo) cycleRangedElement(); }
+    else tryElementalOrb();
+  }
   // O changes the technique on P, SHIFT+O the one on J (never the one already in the other slot)
   if (!e.repeat && e.code === 'KeyO' && state.playing && !state.dead && !state.photo) {
     const slot = e.shiftKey ? 2 : 1;

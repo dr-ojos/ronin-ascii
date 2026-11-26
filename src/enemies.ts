@@ -115,6 +115,19 @@ export const KINDS: Record<EnemyKind, KindDef> = {
   yukiOnna: { name: 'Yuki, dama de la nieve', scale: 1.42, hp: 26, speed: [3.6, 3.9], dmg: 22, reach: 12, windup: 0.85, heavy: false, points: 1100, glyph: 'I', ranged: true,
               look: { tint: 0x8aa7c4, mask: 0xf1f6ff, eye: 0x6ad8ff, weapon: 'staff', crest: 'flames', thirdEye: true }, robe: 0xb9d4ea, maskC: 0xf1f6ff,
               moves: ['crescent', 'curse', 'gust'], boss: { aura: 0x7fe0ff, enraged: ['crescent', 'gust', 'crescent', 'curse'] } },
+  // --- the new warlords occupying the towns (and roaming the wilds) ---
+  // the ash lord of Asagiri: charred armour, crown of embers and a great scythe; drags you in and burns the square
+  kagutsuchi: { name: 'Kagutsuchi, señor de la ceniza', scale: 1.62, hp: 28, speed: [3.1, 3.4], dmg: 25, reach: 3.6, windup: 0.74, heavy: true, points: 1150, glyph: 'F',
+                look: { tint: 0x2e120e, mask: 0xf05020, eye: 0xffd966, weapon: 'scythe', crest: 'flames', plated: true, spikes: true }, robe: 0x4a1912, maskC: 0xf05020,
+                moves: ['hook', 'fire', 'slam'], boss: { aura: 0xff5522, enraged: ['fire', 'whirlwind', 'hook', 'quake'] } },
+  // the bone warlord of Aldea de Kiri: pale lacquered mask, ox horns and a long spear; dashes, counters and cuts from afar
+  daimyoHueso: { name: 'Daimyō de los Huesos', scale: 1.48, hp: 22, speed: [3.5, 3.8], dmg: 21, reach: 3.5, windup: 0.66, heavy: true, points: 950, glyph: 'M',
+                 look: { tint: 0x26262e, mask: 0xe6dec8, eye: 0x7effb2, weapon: 'spear', crest: 'horns', plated: true, spikes: true, thirdEye: true }, robe: 0x353542, maskC: 0xe6dec8,
+                 moves: ['bladeRush', 'riposte', 'crescent'], boss: { aura: 0x8ff5c8, enraged: ['bladeRush', 'shockwave', 'crescent', 'riposte'] } },
+  // the crimson war-drum overlord: rallies its oni, shakes the earth with shockwaves and calls thunder
+  taikoDemonio: { name: 'Oni del Tambor Carmesí', scale: 1.68, hp: 30, speed: [2.8, 3.1], dmg: 24, reach: 3.7, windup: 0.78, heavy: true, points: 1200, glyph: 'G',
+                  look: { tint: 0x3b1520, mask: 0xd9a036, eye: 0xff5a36, weapon: 'drum', crest: 'halo', plated: true, spikes: true }, robe: 0x5c1a24, maskC: 0xd9a036,
+                  moves: ['rally', 'shockwave', 'slam'], boss: { aura: 0xffb840, enraged: ['rally', 'quake', 'storm', 'shockwave'] } },
   // --- the sub-bosses that guard chests (encounters.ts) ---
   // a spear master: three lunges in a row, barely a breath between them, then a long pause (your turn)
   kensei:   { name: 'kensei de la lanza', scale: 1.14, hp: 9, speed: [4.6, 4.6], dmg: 13, reach: 2.5, windup: 0.42, heavy: false, points: 450, glyph: 'K',
@@ -128,7 +141,10 @@ export const KINDS: Record<EnemyKind, KindDef> = {
 };
 export const ELITES: EnemyKind[] = ['kensei', 'tengu', 'raijin'];
 /** the bosses that can lead a camp or a patrol of the wilds, and how far out (tier) they start to appear */
-export const WILD_BOSSES: [EnemyKind, number][] = [['jefe', 0], ['senorBosque', 0.3], ['yukiOnna', 0.35], ['enma', 0.45], ['shuten', 0.5]];
+export const WILD_BOSSES: [EnemyKind, number][] = [
+  ['jefe', 0], ['daimyoHueso', 0.25], ['senorBosque', 0.3], ['yukiOnna', 0.35],
+  ['taikoDemonio', 0.4], ['enma', 0.45], ['shuten', 0.5], ['kagutsuchi', 0.55]
+];
 export const isElite = (k: EnemyKind) => !!KINDS[k].elite;
 export const isBoss = (k: EnemyKind) => !!KINDS[k].boss;
 

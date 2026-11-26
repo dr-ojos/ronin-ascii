@@ -160,7 +160,11 @@ export const WEAPONS: Weapon[] = [
   { id: 'hoja-enma', name: 'Sentencia de Enma', desc: 'reliquia del juez del infierno: filo llameante que cura 2 por golpe y carga la técnica', form: 'broad', mangaModel: 'winged', bossDrop: true, price: 0, tier: 3, dmg: 2.9, reach: 1.15, speed: 1.05, len: 1.48, width: 1.18, glow: 0xff6a1a, steel: 0x2a0c12, heal: 2, charge: 0.025,
     fx: { glow: 0xff7824, hot: 0xfff0a8, cool: 0xb81810, gravity: -1.5, halo: 2.2, trail: 2.6, sparks: [0xff6a1a, 0xffd24a, 0xff2a20], extra: 'feathers' } },
   { id: 'lanza-bosque', name: 'Guadaña del Bosque Sombrío', desc: 'reliquia del Bosque Sombrío: alcance inmenso, aturde y absorbe 2 de vida por golpe', form: 'spear', bossDrop: true, price: 0, tier: 2.9, dmg: 2.35, reach: 2.3, speed: 0.92, len: 0.72, glow: 0x8cff52, steel: 0x1e4428, heal: 2, daze: 1.25,
-    fx: { glow: 0x9cff5a, hot: 0xeaffc0, cool: 0x228836, gravity: 2, halo: 2.0, trail: 2.4, sparks: [0x9cff5a, 0x52d878, 0xd8ff7a], extra: 'stars' } }
+    fx: { glow: 0x9cff5a, hot: 0xeaffc0, cool: 0x228836, gravity: 2, halo: 2.0, trail: 2.4, sparks: [0x9cff5a, 0x52d878, 0xd8ff7a], extra: 'stars' } },
+  { id: 'lanza-hueso', name: 'Lanza del Daimyō de Hueso', desc: 'reliquia del Daimyō de los Huesos: estocada espectral de gran alcance que aturde y sana 1 de vida', form: 'spear', bossDrop: true, price: 0, tier: 2.6, dmg: 2.0, reach: 2.15, speed: 0.9, len: 0.68, glow: 0x8ff5c8, steel: 0xe6dec8, heal: 1, daze: 1.3,
+    fx: { glow: 0x8ff5c8, hot: 0xeafff4, cool: 0x2ca87a, gravity: 2, halo: 1.85, trail: 2.2, sparks: [0x8ff5c8, 0xe6dec8, 0x58e0ff], extra: 'stars' } },
+  { id: 'hoz-ceniza', name: 'Filo de Ceniza de Kagutsuchi', desc: 'reliquia de Kagutsuchi: gran sable abrasador que carga la técnica y deja brasas al cortar', form: 'odachi', bossDrop: true, price: 0, tier: 2.95, dmg: 2.65, reach: 1.5, speed: 0.98, len: 1.72, width: 1.14, glow: 0xff5522, steel: 0x2a1412, charge: 0.03, daze: 1.2,
+    fx: { glow: 0xff622a, hot: 0xffe49c, cool: 0xa81c0e, gravity: -1, halo: 2.1, trail: 2.5, sparks: [0xff5522, 0xffb838, 0xff2820], extra: 'feathers' } }
 ];
 // the rest of the sōhei's, the xiákè's and the hwarang's stock: 21 weapons to buy for every class (arsenal.ts)
 WEAPONS.push(...CLASS_ARSENAL);

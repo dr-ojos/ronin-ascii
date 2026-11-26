@@ -27,7 +27,9 @@ const REINFORCE: Partial<Record<EnemyKind, EnemyKind[]>> = {
   jefe: ['oni', 'bruto', 'oni'], kuro: ['escudero', 'duelista', 'ashigaru'], tenguMayor: ['arquero', 'acechador', 'acechador'],
   raijinMayor: ['bruto', 'tambor', 'oni'], guardianRayo: ['espectro', 'duelista', 'ashigaru'],
   shuten: ['bruto', 'oni', 'coloso'], enma: ['piromante', 'acechador', 'sombra'],
-  senorBosque: ['guadanero', 'arana', 'acechador'], yukiOnna: ['espectro', 'hechicero', 'sombra']
+  senorBosque: ['guadanero', 'arana', 'acechador'], yukiOnna: ['espectro', 'hechicero', 'sombra'],
+  kagutsuchi: ['piromante', 'guadanero', 'escudero'], daimyoHueso: ['ashigaru', 'escudero', 'duelista'],
+  taikoDemonio: ['tambor', 'bruto', 'oni']
 };
 
 export const battle = {

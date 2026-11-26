@@ -370,6 +370,70 @@ export function createAudio() {
     const g2 = ctx.createGain(); env(g2, t + 0.05, 0.08, 0.6, 3); r.connect(lp).connect(g2); out(g2, { wet: 0.7 });
   }
 
+  // ------------------------------------------------------------ elemental orb (Ñ)
+  function orbCharge(el: 'fuego' | 'rayo' | 'agua' | 'viento') {
+    if (!ok()) return; const t = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    const cfg = {
+      fuego:  { type: 'sawtooth' as OscillatorType, f0: 110, f1: 360, lp: 900,  gain: 0.14 },
+      rayo:   { type: 'square'   as OscillatorType, f0: 320, f1: 1180, lp: 2400, gain: 0.1 },
+      agua:   { type: 'sine'     as OscillatorType, f0: 180, f1: 520, lp: 1200, gain: 0.18 },
+      viento: { type: 'triangle' as OscillatorType, f0: 260, f1: 780, lp: 1900, gain: 0.14 },
+    }[el];
+    o.type = cfg.type;
+    o.frequency.setValueAtTime(cfg.f0, t); o.frequency.exponentialRampToValueAtTime(cfg.f1, t + 0.3);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(cfg.lp, t);
+    env(g, t, 0.08, cfg.gain, 0.26);
+    o.connect(lp).connect(g); out(g, { wet: 0.45 });
+    o.start(t); o.stop(t + 0.38);
+    // airy / crackling shimmer layered under the gather
+    const n = noiseSrc(t, 0.34), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3.5;
+    bp.frequency.setValueAtTime(el === 'fuego' ? 500 : el === 'rayo' ? 2200 : el === 'agua' ? 900 : 1600, t);
+    bp.frequency.exponentialRampToValueAtTime(el === 'fuego' ? 1400 : el === 'rayo' ? 4200 : el === 'agua' ? 1800 : 3200, t + 0.32);
+    const ng = ctx.createGain(); env(ng, t, 0.06, 0.12, 0.28);
+    n.connect(bp).connect(ng); out(ng, { wet: 0.4 });
+  }
+  function orbCast(el: 'fuego' | 'rayo' | 'agua' | 'viento') {
+    if (!ok()) return; const t = ctx.currentTime;
+    // punchy sub-bass release thump
+    const sub = ctx.createOscillator(), sg = ctx.createGain();
+    sub.type = 'sine'; sub.frequency.setValueAtTime(el === 'rayo' ? 180 : 135, t); sub.frequency.exponentialRampToValueAtTime(42, t + 0.24);
+    env(sg, t, 0.004, 0.32, 0.24); sub.connect(sg); out(sg, { wet: 0.35 }); sub.start(t); sub.stop(t + 0.28);
+    // element signature sweep
+    const n = noiseSrc(t, 0.48), f = ctx.createBiquadFilter(), ng = ctx.createGain();
+    if (el === 'fuego') {
+      f.type = 'lowpass'; f.frequency.setValueAtTime(1600, t); f.frequency.exponentialRampToValueAtTime(240, t + 0.45);
+      env(ng, t, 0.01, 0.34, 0.42);
+    } else if (el === 'rayo') {
+      f.type = 'highpass'; f.frequency.setValueAtTime(1500, t);
+      env(ng, t, 0.002, 0.36, 0.22);
+    } else if (el === 'agua') {
+      f.type = 'bandpass'; f.Q.value = 1.6; f.frequency.setValueAtTime(1100, t); f.frequency.exponentialRampToValueAtTime(360, t + 0.45);
+      env(ng, t, 0.015, 0.3, 0.42);
+    } else {
+      f.type = 'bandpass'; f.Q.value = 4.2; f.frequency.setValueAtTime(2400, t); f.frequency.exponentialRampToValueAtTime(680, t + 0.42);
+      env(ng, t, 0.008, 0.28, 0.38);
+    }
+    n.connect(f).connect(ng); out(ng, { wet: 0.45 });
+  }
+  function orbHit(el: 'fuego' | 'rayo' | 'agua' | 'viento', pan = 0) {
+    if (!ok()) return; const t = ctx.currentTime;
+    if (el === 'rayo') { thunder(pan, false); return; }
+    if (el === 'agua') { splash({ power: 1.3, pan }); }
+    const sub = ctx.createOscillator(), sg = ctx.createGain();
+    sub.type = 'sine'; sub.frequency.setValueAtTime(el === 'fuego' ? 110 : el === 'agua' ? 95 : 170, t);
+    sub.frequency.exponentialRampToValueAtTime(32, t + 0.36);
+    env(sg, t, 0.004, el === 'viento' ? 0.2 : 0.42, 0.36);
+    sub.connect(sg); out(sg, { wet: 0.45, pan }); sub.start(t); sub.stop(t + 0.42);
+    const n = noiseSrc(t, 0.55), f = ctx.createBiquadFilter(), ng = ctx.createGain();
+    f.type = el === 'viento' ? 'bandpass' : 'lowpass';
+    f.frequency.setValueAtTime(el === 'fuego' ? 1200 : el === 'agua' ? 1400 : 2200, t);
+    f.frequency.exponentialRampToValueAtTime(el === 'viento' ? 600 : 180, t + 0.5);
+    if (el === 'viento') f.Q.value = 3;
+    env(ng, t, 0.005, el === 'fuego' ? 0.42 : 0.28, 0.5);
+    n.connect(f).connect(ng); out(ng, { wet: 0.5, pan });
+  }
+
   // ------------------------------------------------------------ ambience bed
   function startAmbience() {
     const t = ctx.currentTime;
@@ -412,7 +476,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, jump, land, splash, warn, chime, levelUp, templeBell, rings, coin, anvil, arrow, thunder, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, jump, land, splash, warn, chime, levelUp, templeBell, rings, coin, anvil, arrow, thunder, orbCharge, orbCast, orbHit, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

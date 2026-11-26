@@ -1,6 +1,7 @@
 // HUD text, centre-screen messages and the title / death overlay.
 import { battleLine } from './battle';
 import { bossHud } from './boss-mechanics';
+import { liberationHud, liberatedCount } from './liberation';
 import { player, state } from './state';
 import { camps, discovered, placeCount, chestsLeft } from './encounters';
 import { upgradeList } from './upgrades';
@@ -11,6 +12,7 @@ import { threatLabel } from './equipment-threat';
 import { enemies, KINDS } from './enemies';
 import { sfx } from './sfx';
 import { TECHNIQUES } from './techniques';
+import { MAX_RANGED_CHARGES, ORB_INFO } from './elemental-orb';
 import { cls } from './classes';
 import { freePoints, level, MAX_LEVEL, xpFrac } from './progression';
 
@@ -43,7 +45,17 @@ export function updateHud(dt: number) {
       ? `[<span class="y">${'#'.repeat(12)}</span>] <span class="y">lista</span>`
       : `[<span class="b">${'#'.repeat(rf)}</span>${'-'.repeat(12 - rf)}] <span class="d">${Math.floor(charge * 100)} %</span>`);
   };
-  const special = `${slotLine(state.technique, state.special, 'P')}\n${slotLine(state.technique2, state.special2, 'J')}`;
+  const orb = ORB_INFO[state.rangedElement];
+  const orbHex = '#' + orb.color.toString(16).padStart(6, '0');
+  const orbLabel = `${orb.kanji} ${orb.short.toUpperCase()}`.padEnd(13);
+  const orbsStr = Array.from({ length: MAX_RANGED_CHARGES }, (_, i) => i < state.rangedCharges
+    ? `<span style="color:${orbHex}">●</span>`
+    : '<span class="d">○</span>').join(' ');
+  const orbBar = state.rangedCharges >= MAX_RANGED_CHARGES
+    ? '<span class="y">lista</span>'
+    : `[<span style="color:${orbHex}">${'#'.repeat(Math.floor(state.rangedCharge * 6))}</span>${'-'.repeat(6 - Math.floor(state.rangedCharge * 6))}] <span class="d">${Math.floor(state.rangedCharge * 100)} %</span>`;
+  const rangedLine = `<span class="d">Ñ</span> <span style="color:${orbHex}">${orbLabel}</span>${orbsStr} ${orbBar} <span class="d">· ⇧Ñ</span>`;
+  const special = `${slotLine(state.technique, state.special, 'P')}\n${slotLine(state.technique2, state.special2, 'J')}\n${rangedLine}`;
   // Major boss health takes priority when a nearby guardian is also fighting.
   let foe: (typeof enemies)[number] | null = null, fd = 40;
   for (const e of enemies) {
@@ -63,6 +75,8 @@ export function updateHud(dt: number) {
     ? `[<span class="lv">${'#'.repeat(14)}</span>] <span class="lv">LEYENDA</span>`
     : `[<span class="xp">${'#'.repeat(xf)}</span>${'-'.repeat(14 - xf)}] <span class="d">${Math.floor(xpFrac() * 100)} %</span>`;
   const pts = free ? ` <span class="pts">+${free} U</span>` : '';
+  const lib = liberatedCount();
+  const towns = `PUEBLOS <span class="${lib.done ? 'jade' : 'd'}">${lib.done}/${lib.total}</span>`;
   hud.innerHTML =
     `<span class="r">${cls().kanji}</span> ${esc(look.name.toUpperCase() || cls().name.toUpperCase())}\n` +
     `<span class="lv">NIVEL ${lv}</span> ${xpBar}${pts}\n` +
@@ -72,9 +86,9 @@ export function updateHud(dt: number) {
     `MON <span class="y">${state.mon}</span>   <span class="b">${weapon().name}</span>${state.armor !== 'kimono' ? ` · <span class="b">${armor().name}</span>` : ''}\n` +
     `SELLOS DE JADE <span class="jade">${state.jade}</span>\n` +
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}   <span class="y">${threatLabel()}</span>\n` +
-    `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}\n` +
+    `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}   ${towns}\n` +
     (ups ? `<span class="y">${ups}</span>\n` : '') +
-    battleLine() + foeBar +
+    liberationHud() + battleLine() + foeBar +
     `${gain}\n` +
     `<span class="d">esquiva ${player.dashCd > 0 ? '·'.repeat(Math.ceil(player.dashCd * 8)) : 'lista'}${sfx.muted ? '  ·  sin sonido' : ''}</span>${player.snareT > 0 ? ' <span class="r">· telaraña</span>' : ''}`;
 }
@@ -84,7 +98,9 @@ export function showDeathScreen() {
   overlay.querySelector('.k')!.textContent = '散';
   const record = state.score > 0 && state.score >= state.best ? ' · ¡ nuevo récord !' : ` · récord ${state.best}`;
   dispatchEvent(new Event('ronin:overlay'));   // class-select.ts refreshes the level under the class
-  overlay.querySelector('.sub')!.textContent = `nivel ${level()} · ${state.score} puntos · ${state.kills} bajas · ${state.campsCleared} guaridas · ${state.chests} cofres · ${discovered.size} lugares${record}`;
+  const lib = liberatedCount();
+  const libTxt = lib.done ? ` · ${lib.done}/${lib.total} pueblos liberados` : '';
+  overlay.querySelector('.sub')!.textContent = `nivel ${level()} · ${state.score} puntos · ${state.kills} bajas · ${state.campsCleared} guaridas · ${state.chests} cofres · ${discovered.size} lugares${libTxt}${record}`;
   document.getElementById('go')!.textContent = '▶ VOLVER A EMPEZAR';
   overlay.style.display = 'flex';
 }

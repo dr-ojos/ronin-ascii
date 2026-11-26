@@ -52,7 +52,9 @@ export const ARMORS: Armor[] = [
   { id: 'yoroi-shuten', name: 'O-yoroi del Rey Oni', desc: 'reliquia de Shuten: coraza infernal de gran resistencia que regenera vida sin cesar', bossDrop: true, price: 0, tier: 3, hp: 135, guard: 0.44, regen: 1.2, run: 0.96,
     look: { lame: 0x4c0c0e, lace: 0xff3b24, metal: 0xffe066, sode: 2, helmet: 'sun', shins: true, aura: 'gold', glow: 0.28 } },
   { id: 'coraza-escarcha', name: 'Coraza de Escarcha Eterna', desc: 'reliquia de Yuki: placas de hielo luminoso, ágil y fría como la ventisca', bossDrop: true, price: 0, tier: 2.85, hp: 85, guard: 0.32, dash: 0.7, run: 1.1, regen: 0.9,
-    look: { lame: 0x12263a, lace: 0x9ce8ff, metal: 0xe6f8ff, sode: 1.35, helmet: 'crescent', shins: true, aura: 'neon', glow: 0.12, neon: 0x7fe6ff } }
+    look: { lame: 0x12263a, lace: 0x9ce8ff, metal: 0xe6f8ff, sode: 1.35, helmet: 'crescent', shins: true, aura: 'neon', glow: 0.12, neon: 0x7fe6ff } },
+  { id: 'coraza-tambor', name: 'Coraza del Tambor Carmesí', desc: 'reliquia del Oni del Tambor: placas doradas y carmesíes que templan el pulso en batalla', bossDrop: true, price: 0, tier: 2.9, hp: 110, guard: 0.36, regen: 0.85, run: 1.02,
+    look: { lame: 0x4a1420, lace: 0xd9a036, metal: 0xffd26a, sode: 1.85, helmet: 'sun', shins: true, aura: 'gold', glow: 0.22 } }
 ];
 const byId = new Map(ARMORS.map(a => [a.id, a]));
 export const armorById = (id: string) => byId.get(id);

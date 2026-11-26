@@ -257,7 +257,10 @@ export const BOSS_RELICS: Partial<Record<EnemyKind, BossRelic>> = {
   jefe:         { kind: 'armor',  id: 'coraza-sepulcral', color: 0xffb353 },
   tenguMayor:   { kind: 'armor',  id: 'manto-tengu',      color: 0x62d4b4 },
   shuten:       { kind: 'armor',  id: 'yoroi-shuten',     color: 0xff3b24 },
-  yukiOnna:     { kind: 'armor',  id: 'coraza-escarcha',  color: 0x7fe6ff }
+  yukiOnna:     { kind: 'armor',  id: 'coraza-escarcha',  color: 0x7fe6ff },
+  daimyoHueso:  { kind: 'weapon', id: 'lanza-hueso',      color: 0x8ff5c8 },
+  kagutsuchi:   { kind: 'weapon', id: 'hoz-ceniza',       color: 0xff5522 },
+  taikoDemonio: { kind: 'armor',  id: 'coraza-tambor',    color: 0xffb840 }
 };
 
 interface Pickup {

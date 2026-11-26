@@ -75,6 +75,14 @@ export function release(color: number, flash = 0.45) {
   slowT = 0;
   impactFlash(color, flash);
 }
+/** brief cinematic pulse for the ranged elemental attack (Ñ): tinted vignette, slight focus and micro slow-mo */
+export function rangedPulse(color: number, hold = 0.42) {
+  if (root.classList.contains('gather')) return;   // never override a full P/J technique cinematic
+  root.style.setProperty('--c', hex(color));
+  root.classList.add('on');
+  frameT = Math.max(frameT, hold);
+  slowMo(0.68, 0.16);
+}
 /** time runs at `s` for `seconds` (real), then eases back */
 export function slowMo(s: number, seconds: number) { scale = Math.min(scale, s); slowT = Math.max(slowT, seconds); }
 /** the whole screen flashes in a colour */
