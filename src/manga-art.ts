@@ -250,10 +250,10 @@ const RIM = /* glsl */`
     float sunRim = smoothstep(-0.35, 0.75, dot(normal, sunV));
     float broadRim = pow(rimRaw, 1.9);
     float crispRim = smoothstep(0.42, 0.90, rimRaw);
-    vec3 rimCol = mix(vec3(0.88, 0.62, 0.44), vec3(1.0, 0.80, 0.42), sunRim);
-    // Warm contour glow + gentle albedo lift so characters stay readable even inside deep shadows
-    totalEmissiveRadiance += mix(diffuseColor.rgb, rimCol, 0.62) * (broadRim * 0.72 + crispRim * 0.42 * (0.45 + 0.55 * sunRim));
-    totalEmissiveRadiance += diffuseColor.rgb * 0.22 + vec3(0.028, 0.020, 0.014);
+    vec3 rimCol = mix(vec3(0.72, 0.82, 0.96), vec3(1.0, 0.93, 0.76), sunRim);
+    // Mid-afternoon contour glow + gentle albedo lift so characters stay readable inside shadows
+    totalEmissiveRadiance += mix(diffuseColor.rgb, rimCol, 0.58) * (broadRim * 0.60 + crispRim * 0.36 * (0.45 + 0.55 * sunRim));
+    totalEmissiveRadiance += diffuseColor.rgb * 0.14 + vec3(0.018, 0.020, 0.024);
   } else {
     float rimF = rimRaw * rimRaw * rimRaw;
     totalEmissiveRadiance += mix(diffuseColor.rgb, vec3(0.55, 0.72, 1.0), 0.55) * rimF * 0.3;
@@ -274,8 +274,8 @@ const FORM = /* glsl */`
     float core = 1.0 - 0.14 * exp(-pow((ndl + 0.02) / 0.16, 2.0));       // gentle volume turn
     float form = mix(0.76, 1.52, lit) * core;
     vec3 litPart = (outgoingLight - totalEmissiveRadiance) * form;
-    // Golden sunset sheen on the side facing the key light
-    litPart += mix(diffuseColor.rgb, vec3(1.0, 0.78, 0.45), 0.55) * pow(max(ndl, 0.0), 4.5) * 0.36;
+    // Warm afternoon sunlight sheen on the side facing the key light
+    litPart += mix(diffuseColor.rgb, vec3(1.0, 0.93, 0.78), 0.50) * pow(max(ndl, 0.0), 4.5) * 0.28;
     outgoingLight = litPart + totalEmissiveRadiance;
   } else {
     float core = 1.0 - 0.32 * exp(-pow((ndl + 0.02) / 0.14, 2.0));       // core shadow right at the turn

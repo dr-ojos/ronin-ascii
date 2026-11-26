@@ -4,8 +4,8 @@ import { seeded } from './map';
 import { DIRT, FINISH_HELPERS, MASONRY, PAVERS, PLASTER, SIDING, THATCH, TILES, ASCII_HELPERS, ASCII_TILES, ASCII_THATCH, ASCII_SIDING, ASCII_PLASTER, ASCII_MASONRY, ASCII_WOOD, ASCII_MOTTLE } from './architecture-finishes';
 
 export const detailedSurfaces = { value: 0 };
-/** Sunset sun direction shared by surface and foliage shaders in Mode T. */
-export const sunsetSunDir = { value: new THREE.Vector3(-0.78, 0.28, -0.56).normalize() };
+/** Mid-afternoon sun direction shared by surface and foliage shaders in Mode T. */
+export const sunsetSunDir = { value: new THREE.Vector3(-0.66, 0.60, -0.45).normalize() };
 interface SurfaceVariant {
   geometry: THREE.BufferGeometry;
   material: THREE.Mesh['material'];
@@ -282,15 +282,15 @@ ${ascii ? ASCII_HELPERS : ''}
       ${ascii}
     }` : ''}`);
     if (sunGlow > 0) {
-      // Shadow-aware golden sunset sheen & warm rim on sunlit building and tree surfaces in Mode T.
+      // Shadow-aware warm mid-afternoon sheen & sunlight rim on sunlit building and tree surfaces in Mode T.
       sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
       if (uDetailedSurfaces > 0.5) {
         float sunLit = smoothstep(0.02, 0.24, length(reflectedLight.directDiffuse));
         vec3 sunV = normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz);
         float sunSide = smoothstep(-0.15, 0.65, dot(geometryNormal, sunV));
         float fres = pow(1.0 - clamp(dot(geometryNormal, geometryViewDir), 0.0, 1.0), 2.3);
-        reflectedLight.directSpecular += vec3(1.0, 0.60, 0.22) * fres * sunSide * sunLit * ${sunGlow.toFixed(2)};
-        reflectedLight.directDiffuse += reflectedLight.directDiffuse * vec3(0.28, 0.13, 0.02) * sunSide * ${(sunGlow * 0.75).toFixed(2)};
+        reflectedLight.directSpecular += vec3(1.0, 0.90, 0.72) * fres * sunSide * sunLit * ${sunGlow.toFixed(2)};
+        reflectedLight.directDiffuse += reflectedLight.directDiffuse * vec3(0.18, 0.14, 0.06) * sunSide * ${(sunGlow * 0.75).toFixed(2)};
       }`);
     }
     if (ascii.includes('asciiLift')) {

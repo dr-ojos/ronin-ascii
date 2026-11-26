@@ -90,14 +90,14 @@ const [nightEnv, sunsetEnv] = (() => {
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
     fragmentShader: `varying vec3 vP; uniform vec3 uSunDir; void main(){
       vec3 d = normalize(vP); float h = d.y;
-      vec3 col = mix(vec3(0.05, 0.025, 0.025), vec3(0.32, 0.12, 0.06), smoothstep(-0.15, 0.08, h));
-      col = mix(col, vec3(0.14, 0.06, 0.14), smoothstep(0.08, 0.35, h));
-      col = mix(col, vec3(0.04, 0.045, 0.12), smoothstep(0.35, 0.8, h));
-      col += pow(max(dot(d, uSunDir), 0.0), 6.0) * vec3(0.45, 0.18, 0.05);
+      vec3 col = mix(vec3(0.14, 0.13, 0.10), vec3(0.62, 0.72, 0.80), smoothstep(-0.12, 0.08, h));
+      col = mix(col, vec3(0.24, 0.48, 0.82), smoothstep(0.08, 0.40, h));
+      col = mix(col, vec3(0.11, 0.28, 0.62), smoothstep(0.40, 0.85, h));
+      col += pow(max(dot(d, uSunDir), 0.0), 8.0) * vec3(0.55, 0.45, 0.28);
       gl_FragColor = vec4(col, 1.);
     }`
   })));
-  const sd = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(12, 5.8, 1.8) }));
+  const sd = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(12, 10.8, 8.2) }));
   sd.position.copy(SUNSET_DIR).multiplyScalar(8); sunsetScene.add(sd);
   const sunsetTex = pm.fromScene(sunsetScene, 0.04).texture;
   pm.dispose();
@@ -107,7 +107,7 @@ scene.environment = nightEnv;
 export const keyLight = new THREE.PointLight(0xdde6ff, 7, 12, 1.2);
 scene.add(keyLight);
 
-// moon/sun + halo + stars + sunset dome + far mountains: a sky dome that travels with the camera
+// moon/sun + halo + stars + afternoon sky dome + far mountains: a sky dome that travels with the camera
 const sky = new THREE.Group(); scene.add(sky);
 const sunsetDomeMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
@@ -115,17 +115,17 @@ const sunsetDomeMat = new THREE.ShaderMaterial({
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `varying vec3 vDir; uniform vec3 uSunDir; uniform float uRain; void main(){
     vec3 d = normalize(vDir); float h = d.y;
-    vec3 col = mix(vec3(0.16, 0.075, 0.085), vec3(0.95, 0.38, 0.14), smoothstep(-0.08, 0.03, h));
-    col = mix(col, vec3(0.58, 0.20, 0.26), smoothstep(0.03, 0.20, h));
-    col = mix(col, vec3(0.18, 0.12, 0.28), smoothstep(0.20, 0.46, h));
-    col = mix(col, vec3(0.06, 0.07, 0.18), smoothstep(0.46, 0.85, h));
+    vec3 col = mix(vec3(0.74, 0.80, 0.82), vec3(0.84, 0.86, 0.82), smoothstep(-0.08, 0.03, h));
+    col = mix(col, vec3(0.46, 0.68, 0.90), smoothstep(0.03, 0.24, h));
+    col = mix(col, vec3(0.22, 0.48, 0.84), smoothstep(0.24, 0.55, h));
+    col = mix(col, vec3(0.10, 0.28, 0.64), smoothstep(0.55, 0.92, h));
     float sun = max(dot(d, uSunDir), 0.0);
-    col += pow(sun, 3.0) * smoothstep(0.55, -0.05, abs(h - 0.12)) * vec3(0.52, 0.22, 0.06);
-    col += pow(sun, 28.0) * vec3(1.15, 0.62, 0.20);
-    // Rain overcast: mute the fiery sunset into moody storm slate-teal clouds
-    vec3 storm = mix(vec3(0.09, 0.14, 0.19), vec3(0.16, 0.23, 0.30), smoothstep(-0.08, 0.15, h));
-    storm = mix(storm, vec3(0.07, 0.11, 0.17), smoothstep(0.15, 0.7, h));
-    storm += pow(sun, 4.0) * vec3(0.10, 0.13, 0.16);
+    col += pow(sun, 3.0) * smoothstep(0.65, -0.05, abs(h - 0.30)) * vec3(0.32, 0.26, 0.12);
+    col += pow(sun, 32.0) * vec3(1.05, 0.92, 0.62);
+    // Rain overcast: mute the clear afternoon sky into cool storm grey-blue clouds
+    vec3 storm = mix(vec3(0.28, 0.36, 0.44), vec3(0.40, 0.48, 0.56), smoothstep(-0.08, 0.18, h));
+    storm = mix(storm, vec3(0.22, 0.30, 0.38), smoothstep(0.18, 0.72, h));
+    storm += pow(sun, 4.0) * vec3(0.14, 0.16, 0.18);
     col = mix(col, storm, uRain * 0.88);
     gl_FragColor = vec4(col, 1.0);
   }`
@@ -187,24 +187,24 @@ const ATMOS = {
     exposure: 1.14
   },
   sunsetDry: {
-    moon: new THREE.Color(0xff9e4e), moonI: 8.6,
-    hemi: new THREE.Color(0x624c7a), ground: new THREE.Color(0x1e110c), hemiI: 0.40,
-    rim: new THREE.Color(0xffb36b), rimI: 0.75,
-    key: new THREE.Color(0xffc280), keyI: 2.4,
-    bg: new THREE.Color(0x2a141c), fog: new THREE.Color(0x472322), fogD: 0.013,
-    skyline: new THREE.Color(0x251422),
-    disc: new THREE.Color(0xffd896), halo: new THREE.Color(0xff8c38),
-    exposure: 1.12
+    moon: new THREE.Color(0xfff0d4), moonI: 6.8,
+    hemi: new THREE.Color(0x7db2e8), ground: new THREE.Color(0x4a4232), hemiI: 1.15,
+    rim: new THREE.Color(0xffe5b8), rimI: 0.95,
+    key: new THREE.Color(0xfff1dc), keyI: 2.2,
+    bg: new THREE.Color(0x7aa8d8), fog: new THREE.Color(0xa8c4dc), fogD: 0.0085,
+    skyline: new THREE.Color(0x6480a2),
+    disc: new THREE.Color(0xfff8e2), halo: new THREE.Color(0xffe6a8),
+    exposure: 1.06
   },
   sunsetRain: {
-    moon: new THREE.Color(0x889fb8), moonI: 3.4,
-    hemi: new THREE.Color(0x48627a), ground: new THREE.Color(0x141c24), hemiI: 0.80,
-    rim: new THREE.Color(0x78a4c0), rimI: 0.90,
-    key: new THREE.Color(0x96b8d0), keyI: 2.2,
-    bg: new THREE.Color(0x121b26), fog: new THREE.Color(0x1e2e3d), fogD: 0.022,
-    skyline: new THREE.Color(0x14212e),
-    disc: new THREE.Color(0xaec0cc), halo: new THREE.Color(0x58768e),
-    exposure: 1.04
+    moon: new THREE.Color(0xa8becf), moonI: 3.4,
+    hemi: new THREE.Color(0x6c88a0), ground: new THREE.Color(0x26323a), hemiI: 1.15,
+    rim: new THREE.Color(0x9cc0d8), rimI: 0.90,
+    key: new THREE.Color(0xbcd4e6), keyI: 2.0,
+    bg: new THREE.Color(0x3b4e5e), fog: new THREE.Color(0x526778), fogD: 0.017,
+    skyline: new THREE.Color(0x3c5060),
+    disc: new THREE.Color(0xd0dce4), halo: new THREE.Color(0x8ca4b8),
+    exposure: 1.02
   }
 };
 let atmosRain = -1;
@@ -237,22 +237,22 @@ function applyAtmosphere(r: number) {
 }
 
 let sunsetMode = false;
-/** Switch between night moonlight (ASCII mode) and low-angle golden sunset with stark shadows (T mode). */
+/** Switch between night moonlight (ASCII mode) and warm mid-afternoon daylight (T mode). */
 export function setSunsetLighting(enabled: boolean) {
   if (sunsetMode === enabled) return;
   sunsetMode = enabled;
   moonDir.copy(enabled ? SUNSET_DIR : NIGHT_DIR);
   syncShadowAxes();
-  shadowDist = enabled ? 55 : 45;
-  moonLight.shadow.camera.far = enabled ? 135 : 110;
+  shadowDist = enabled ? 50 : 45;
+  moonLight.shadow.camera.far = enabled ? 125 : 110;
   moonLight.shadow.camera.updateProjectionMatrix();
 
   if (enabled) {
     keyLight.distance = 7;
     keyLight.decay = 1.8;
     scene.environment = sunsetEnv;
-    moon.scale.setScalar(1.45);
-    halo.scale.set(78, 78, 1);
+    moon.scale.setScalar(1.05);
+    halo.scale.set(58, 58, 1);
     sunsetDome.visible = true;
   } else {
     keyLight.distance = 12;

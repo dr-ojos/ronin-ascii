@@ -217,13 +217,13 @@ function sprayMaterial(kind: Parameters<typeof canopyTexture>[0], height: number
         float backlit = pow(clamp(dot(geometryViewDir, -sunV), 0.0, 1.0), 2.6);
         ${isBush ? `
         // Volumetric light & deep emerald shadow contrast on bushes
-        reflectedLight.indirectDiffuse *= mix(0.64, 1.08, facingSun);
-        reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.05, 0.16, 0.11) * (1.0 - sunMask * 0.6);
-        reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.85, 0.92, 0.24) * (0.42 * facingSun * sunMask + ${translucency.toFixed(2)} * backlit * (0.28 + 0.72 * sunMask));
-        reflectedLight.directSpecular += vec3(1.0, 0.76, 0.30) * rim * (0.48 * facingSun * sunMask + 0.30 * backlit * sunMask);
+        reflectedLight.indirectDiffuse *= mix(0.68, 1.08, facingSun);
+        reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.05, 0.14, 0.14) * (1.0 - sunMask * 0.6);
+        reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.68, 0.90, 0.30) * (0.40 * facingSun * sunMask + ${translucency.toFixed(2)} * backlit * (0.28 + 0.72 * sunMask));
+        reflectedLight.directSpecular += vec3(1.0, 0.92, 0.68) * rim * (0.42 * facingSun * sunMask + 0.26 * backlit * sunMask);
         ` : `
-        reflectedLight.directDiffuse += diffuseColor.rgb * vec3(1.15, 0.54, 0.15) * (0.34 * sunMask + ${translucency.toFixed(2)} * backlit * (0.28 + 0.72 * sunMask));
-        reflectedLight.directSpecular += vec3(1.0, 0.60, 0.22) * rim * (0.42 * facingSun * sunMask + 0.28 * backlit * sunMask);
+        reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.95, 0.82, 0.58) * (0.30 * sunMask + ${translucency.toFixed(2)} * backlit * (0.28 + 0.72 * sunMask));
+        reflectedLight.directSpecular += vec3(1.0, 0.90, 0.68) * rim * (0.36 * facingSun * sunMask + 0.24 * backlit * sunMask);
         `}
       }`);
   };
@@ -280,8 +280,8 @@ const MAT = (() => {
           // Deep shaded back/base vs bright warm sunlit crown
           reflectedLight.directDiffuse *= mix(0.32, 1.32, sunSide);
           reflectedLight.indirectDiffuse *= mix(0.55, 1.05, sunSide * 0.6 + vShrubH * 0.4);
-          reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.04, 0.11, 0.09) * (1.0 - sunSide * sunMask);
-          reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.95, 0.78, 0.24) * sunSide * sunMask * (0.28 + 0.36 * vShrubH);
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.04, 0.11, 0.12) * (1.0 - sunSide * sunMask);
+          reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.72, 0.84, 0.42) * sunSide * sunMask * (0.26 + 0.34 * vShrubH);
         }`);
     };
     lowShrub.customProgramCacheKey = () => key + '|lowshrub-t';
@@ -779,9 +779,9 @@ function buildGrass(scene: THREE.Scene) {
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         if (uDetailedSurfaces > 0.5) {
           float sunMask = smoothstep(0.02, 0.22, length(reflectedLight.directDiffuse));
-          // Sunlit green-gold translucency on blade tips + cool emerald shadow fill at the base
-          reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.32, 0.72, 0.10) * vTip * sunMask;
-          reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.05, 0.16, 0.10) * (1.0 - sunMask * 0.65);
+          // Sunlit afternoon meadow translucency on blade tips + cool shadow fill at the base
+          reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.38, 0.76, 0.24) * vTip * sunMask;
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.04, 0.14, 0.12) * (1.0 - sunMask * 0.65);
         }`);
   };
   mat.customProgramCacheKey = () => 'grass-tufts';
