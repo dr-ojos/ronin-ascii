@@ -193,15 +193,13 @@ if (uArmorElem > 0.5) {
     totalEmissiveRadiance += fCol * (flame * 1.35 + pow(rimE, 2.2) * 0.95);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.18, 0.03, 0.01), flame * 0.45);
   } else if (uArmorElem < 2.5) {
-    // 2: ELECTRICITY (Armadura de Raijin) — snapping plasma lightning veins coursing over the cloth & steel
-    float snap = floor(uElemTime * 15.0) * 1.37;
-    float b1 = 1.0 - abs(enoise(spE * vec2(2.6, 2.2) + vec2(snap, -uElemTime * 3.2)) * 2.0 - 1.0);
-    float b2 = 1.0 - abs(enoise(spE * vec2(5.4, 4.8) - vec2(snap * 0.73, uElemTime * 6.5)) * 2.0 - 1.0);
-    float bolt = pow(b1, 7.5) * 1.4 + pow(b2, 8.5) * 1.2;
-    float arcHalo = pow(b1, 2.6) * 0.45 + pow(b2, 3.0) * 0.35;
-    float pulse = 0.75 + 0.25 * sin(uElemTime * 22.0 + vElemPos.y * 8.0);
-    vec3 eCol = vec3(0.22, 0.75, 1.0) * arcHalo + vec3(0.88, 0.98, 1.0) * bolt * 1.85;
-    totalEmissiveRadiance += (eCol + vec3(0.35, 0.82, 1.0) * pow(rimE, 2.6) * 0.85) * pulse;
+    // 2: ELECTRICITY (Armadura de Raijin) — clean crisp white fabric/plates (NO blinking wash!),
+    // with only thin razor-sharp cyan-white static arcs tracing the surface while 3D bolts erupt outward
+    float snap = floor(uElemTime * 16.0) * 1.73;
+    float b1 = 1.0 - abs(enoise(spE * vec2(3.2, 2.8) + vec2(snap, -uElemTime * 2.4)) * 2.0 - 1.0);
+    float b2 = 1.0 - abs(enoise(spE * vec2(6.4, 5.6) - vec2(snap * 0.81, uElemTime * 4.2)) * 2.0 - 1.0);
+    float thinBolt = pow(b1, 14.0) * 1.15 + pow(b2, 16.0) * 0.95;
+    totalEmissiveRadiance += vec3(0.45, 0.86, 1.0) * thinBolt;
   } else if (uArmorElem < 3.5) {
     // 3: BLACK FIRE WITH FINE WHITE NEON CONTOURS (Armadura / Túnica del Fuego Negro)
     // Pitch-black rising abyssal flames across the cloth & plates, traced by razor-thin white neon edges

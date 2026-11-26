@@ -637,8 +637,30 @@ function makeWindBladeMesh(mat: THREE.Material) {
 
 function buildAura(kind: AuraKind) {
   const g = new THREE.Group(); g.name = kind;
-  if (kind === 'fire' || kind === 'whitefire' || kind === 'lightning' || kind === 'blackfire') {
-    // Elemental fire / electricity / blackfire run directly on the cloth & armor shaders (no floating orbs!)
+  if (kind === 'lightning') {
+    // Armadura de Raijin: NO orbs/balls — pure crackling 3D lightning bolts shooting & arcing
+    // directly out of the white armor and tunic (bright white core + electric cyan halo per bolt)
+    const bolts = new THREE.Group(); bolts.name = 'bolts'; g.add(bolts);
+    const coreMat = tagMat(new THREE.LineBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.96, blending: THREE.AdditiveBlending
+    }), CLS.light);
+    const glowMat = tagMat(new THREE.LineBasicMaterial({
+      color: 0x3cc4ff, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending
+    }), CLS.light);
+    for (let i = 0; i < 8; i++) {
+      const bGrp = new THREE.Group();
+      const geoCore = new THREE.BufferGeometry();
+      geoCore.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3));
+      const geoGlow = new THREE.BufferGeometry();
+      geoGlow.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3));
+      bGrp.add(new THREE.Line(geoCore, coreMat), new THREE.Line(geoGlow, glowMat));
+      bolts.add(bGrp);
+    }
+    g.visible = false; root.add(g);
+    return g;
+  }
+  if (kind === 'fire' || kind === 'whitefire' || kind === 'blackfire') {
+    // Elemental fire / blackfire run directly on the cloth & armor shaders (no floating orbs!)
     g.visible = false; root.add(g);
     return g;
   }
@@ -974,6 +996,7 @@ export function dressUp(cur = armor()) {
       if (habit !== undefined) robeMat.color.set(habit);
       else if (monk) robeMat.color.set(cur.robe!.linen);
       else if (cur.look!.neon !== undefined) robeMat.color.set(0x06070b);
+      else if (cur.id === 'raijin') robeMat.color.set(0xf0f6fc);
       else robeMat.color.set(cur.look!.lame).multiplyScalar(0.42).lerp(new THREE.Color(cur.look!.lace), 0.22);
       robeMat.map = robeMat.emissiveMap = null;
       robeMat.emissive.copy(robeMat.color);
@@ -1017,7 +1040,51 @@ export function updateOutfit() {
   const g = activeAura;
   if (!g) return;
   const t = state.time;
-  if (g.name === 'wind') {
+  if (g.name === 'lightning') {
+    // 8 jagged 3D lightning bolts erupting directly from shoulders, torso, and robe hem into the air
+    const bolts = g.getObjectByName('bolts');
+    if (bolts) {
+      const anchors: [number, number, number][] = [
+        [ 0.22, 1.38,  0.04], [-0.22, 1.38,  0.04], // shoulders
+        [ 0.18, 1.12,  0.14], [-0.18, 1.12, -0.14], // chest / back
+        [ 0.24, 0.84, -0.06], [-0.24, 0.84,  0.08], // waist / hips
+        [ 0.20, 0.48,  0.12], [-0.20, 0.46, -0.12], // lower robe hem
+      ];
+      bolts.children.forEach((bObj, i) => {
+        // Staggered rapid snapping per bolt so arcs crackle organically out of the white tunic & armor
+        const phase = t * (14 + (i % 3) * 4) + i * 3.17;
+        const tick = Math.floor(phase);
+        const active = Math.sin(tick * 12.9898 + i * 7.23) > -0.25;
+        bObj.visible = active;
+        if (!active) return;
+        const [ax, ay, az] = anchors[i];
+        const ang = (i / 8) * TAU + Math.sin(tick * 5.7 + i) * 0.9;
+        const reach = 0.34 + ((tick * 19 + i * 7) % 10) * 0.032;
+        const rise = Math.sin(tick * 8.3 + i * 2.1) * 0.36;
+        const bx = ax + Math.cos(ang) * reach;
+        const by = Math.max(0.08, ay + rise);
+        const bz = az + Math.sin(ang) * reach;
+        const lineCore = bObj.children[0] as THREE.Line;
+        const lineGlow = bObj.children[1] as THREE.Line;
+        const posC = lineCore.geometry.attributes.position as THREE.BufferAttribute;
+        const posG = lineGlow.geometry.attributes.position as THREE.BufferAttribute;
+        for (let s = 0; s < 8; s++) {
+          const u = s / 7;
+          const env = Math.sin(u * Math.PI);
+          const jx = env * Math.sin(tick * 17.1 + i * 5.3 + s * 6.7) * 0.11;
+          const jy = env * Math.cos(tick * 21.7 + i * 3.9 + s * 5.1) * 0.11;
+          const jz = env * Math.sin(tick * 13.3 + i * 8.1 + s * 4.3) * 0.11;
+          const px = ax + (bx - ax) * u + jx;
+          const py = ay + (by - ay) * u + jy;
+          const pz = az + (bz - az) * u + jz;
+          posC.setXYZ(s, px, py, pz);
+          posG.setXYZ(s, px + jx * 0.18, py + 0.012, pz + jz * 0.18);
+        }
+        posC.needsUpdate = true;
+        posG.needsUpdate = true;
+      });
+    }
+  } else if (g.name === 'wind') {
     const orbs = g.getObjectByName('orbs');
     orbs?.children.forEach((w, i) => {
       const a = t * 1.85 + i * (TAU / 3);
