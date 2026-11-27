@@ -125,6 +125,7 @@ interface ActiveCompanion {
   orbitAngle: number;
   altitude: number;
   hitDone: boolean;
+  comboStep: number;
 }
 
 const actives: [ActiveCompanion | null, ActiveCompanion | null] = [null, null];
@@ -443,6 +444,7 @@ function spawnSlot(slot: 0 | 1, d: CompanionDef) {
     orbitAngle: slot * Math.PI,
     altitude,
     hitDone: false,
+    comboStep: 0,
   };
 
   const fxPos = new THREE.Vector3(p.x, gy + 0.2, p.z);
@@ -538,19 +540,38 @@ function pickEnemy(c: ActiveCompanion): Enemy | null {
 
 function dealCompanionAttack(c: ActiveCompanion) {
   const d = c.def;
-  const baseDmg = d.dmg * dmgMult() * (0.65 + 0.35 * weaponDmg(weapon()));
-  const aoe = d.aoeRadius ?? 0;
+  const golemStyle = d.id === 'golem' ? c.comboStep % 3 : 0;
+  const isSeismicFinisher = d.id === 'golem' && golemStyle === 2;
+  const baseDmg = d.dmg * (isSeismicFinisher ? 1.38 : 1) * dmgMult() * (0.65 + 0.35 * weaponDmg(weapon()));
+  const aoe = d.id === 'golem'
+    ? (isSeismicFinisher ? (d.aoeRadius ?? 3.85) * 1.25 : 3.0)
+    : (d.aoeRadius ?? 0);
   const hitRange = aoe > 0 ? aoe : d.reach + 0.65;
   const fx = Math.sin(c.face), fz = Math.cos(c.face);
   const pan = panOf(c.pos.x, c.pos.z);
 
   if (d.id === 'golem') {
-    const slamPos = new THREE.Vector3(c.pos.x + fx * 1.1, surfaceY(c.pos.x, c.pos.z) + 0.15, c.pos.z + fz * 1.1);
-    impactRing(slamPos, d.color, aoe);
-    burst(slamPos, 0xb8b09c, 48, 7.2, 0.16);
-    burst(slamPos, d.color, 26, 5.5, 0.14);
-    sfx.taiko(0.75);
-    state.shake = Math.max(state.shake, 0.24);
+    const gy = surfaceY(c.pos.x, c.pos.z);
+    if (isSeismicFinisher) {
+      // Move 2: Twin-fist overhead seismic slam (360° shockwave + debris + flare)
+      const slamPos = new THREE.Vector3(c.pos.x + fx * 1.25, gy + 0.16, c.pos.z + fz * 1.25);
+      impactRing(slamPos, d.color, aoe);
+      impactRing(slamPos, 0xffe49c, aoe * 0.65);
+      burst(slamPos, 0x8e969c, 68, 9.2, 0.20);
+      burst(slamPos, d.color, 44, 7.6, 0.16);
+      flare(slamPos.clone().setY(gy + 0.9), d.color, { size: 1.15, life: 0.4 });
+      sfx.taiko(0.95);
+      state.shake = Math.max(state.shake, 0.38);
+    } else {
+      // Move 0 (right haymaker) & Move 1 (left uppercut): heavy directional fist smash
+      const fistPos = new THREE.Vector3(c.pos.x + fx * 1.55, gy + (golemStyle === 1 ? 1.55 : 1.15), c.pos.z + fz * 1.55);
+      impactRing(new THREE.Vector3(fistPos.x, gy + 0.14, fistPos.z), d.color, 2.5);
+      burst(fistPos, 0xb8c0c4, 34, 6.8, 0.16);
+      burst(fistPos, d.color, 22, 5.5, 0.13);
+      sfx.swing({ power: 1.25, pan });
+      sfx.taiko(0.55);
+      state.shake = Math.max(state.shake, 0.2);
+    }
   } else if (d.id === 'aguila') {
     burst(c.pos.clone(), d.color, 28, 6.0, 0.13);
     sfx.swing({ power: 1.0, pan });
@@ -683,7 +704,7 @@ function updateFlyingCompanion(c: ActiveCompanion, dt: number) {
   c.altitude = Math.max(0, c.pos.y - gy);
   c.model.ring.position.y = (gy - c.pos.y + 0.06) / d.scale;
   const turnRate = dt > 1e-4 ? angDiff(c.face, c.model.root.rotation.y) / dt : 0;
-  c.model.update(dt, { moving, speed: d.speed, state: animState, turnRate });
+  c.model.update(dt, { moving, speed: d.speed, state: animState, turnRate, attackStyle: c.comboStep });
 }
 
 function updateGroundCompanion(c: ActiveCompanion, dt: number) {
@@ -707,15 +728,20 @@ function updateGroundCompanion(c: ActiveCompanion, dt: number) {
     if (c.t <= 0) {
       dealCompanionAttack(c);
       c.state = 'strike';
-      c.t = 0.26;
-      c.attackCd = d.attackCd;
+      const isGolemFinisher = d.id === 'golem' && (c.comboStep % 3 === 2);
+      c.t = d.id === 'golem' ? (isGolemFinisher ? 0.42 : 0.30) : 0.26;
+      c.attackCd = d.id === 'golem' ? (isGolemFinisher ? d.attackCd * 1.15 : d.attackCd * 0.72) : d.attackCd;
     }
   } else if (c.state === 'strike') {
     animState = 'strike';
     c.t -= dt;
-    c.pos.x += Math.sin(c.face) * 2.6 * dt;
-    c.pos.z += Math.cos(c.face) * 2.6 * dt;
-    if (c.t <= 0) c.state = c.target ? 'chase' : 'follow';
+    const lunge = d.id === 'golem' ? (c.comboStep % 3 === 2 ? 1.6 : 3.4) : 2.6;
+    c.pos.x += Math.sin(c.face) * lunge * dt;
+    c.pos.z += Math.cos(c.face) * lunge * dt;
+    if (c.t <= 0) {
+      c.comboStep = (c.comboStep + 1) % 3;
+      c.state = c.target ? 'chase' : 'follow';
+    }
   } else if (isAliveEnemy(c.target)) {
     c.state = 'chase';
     const ex = c.target.g.position.x, ez = c.target.g.position.z;
@@ -727,7 +753,7 @@ function updateGroundCompanion(c: ActiveCompanion, dt: number) {
 
     if (dist <= reach && c.attackCd <= 0) {
       c.state = 'windup';
-      c.t = d.windup;
+      c.t = d.id === 'golem' ? (c.comboStep % 3 === 2 ? d.windup * 1.25 : d.windup * 0.78) : d.windup;
     } else if (dist > reach * 0.85) {
       moving = 1;
       const spd = d.speed * (1 - 0.35 * wadeDepth(c.pos.x, c.pos.z));
@@ -788,7 +814,7 @@ function updateGroundCompanion(c: ActiveCompanion, dt: number) {
   c.pos.y = surfaceY(c.pos.x, c.pos.z) - wd * WADE_SINK;
   c.altitude = 0;
   const turnRate = dt > 1e-4 ? angDiff(c.face, c.model.root.rotation.y) / dt : 0;
-  c.model.update(dt, { moving, speed: d.speed, state: animState, turnRate });
+  c.model.update(dt, { moving, speed: d.speed, state: animState, turnRate, attackStyle: c.comboStep });
 }
 
 export function updateCompanions(dt: number) {

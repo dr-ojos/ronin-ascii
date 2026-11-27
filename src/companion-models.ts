@@ -20,6 +20,8 @@ export interface CompanionAnimInput {
   speed: number;
   state: 'idle' | 'windup' | 'strike' | 'dive';
   turnRate?: number;
+  /** optional combo / attack variant index (e.g. Golem 0=right hook, 1=left uppercut, 2=two-hand seismic slam) */
+  attackStyle?: number;
 }
 
 export interface CompanionModel {
@@ -73,42 +75,107 @@ function makePair(key: string, size: number, draw: (ac: CanvasRenderingContext2D
 const h2 = (n: number) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
 function getStoneTex(): PbrPair {
-  return makePair('stone', 256, (ac, bc, s) => {
-    ac.fillStyle = '#6f777d'; ac.fillRect(0, 0, s, s);
-    bc.fillStyle = '#808080'; bc.fillRect(0, 0, s, s);
-    // Mineral speckles & chiselled granite mottling
-    for (let i = 0; i < 1600; i++) {
+  return makePair('stone-v2', 256, (ac, bc, s) => {
+    // Rich dark carved basalt base
+    ac.fillStyle = '#4e565e'; ac.fillRect(0, 0, s, s);
+    bc.fillStyle = '#7e7e7e'; bc.fillRect(0, 0, s, s);
+
+    // Stratified granite mineral grain & chiselled stone mottling
+    for (let i = 0; i < 2200; i++) {
       const x = h2(i * 3.1) * s, y = h2(i * 7.3) * s;
-      const r = 1 + h2(i * 11.7) * 5.5;
-      const v = Math.floor(82 + h2(i * 5.9) * 58);
-      ac.fillStyle = `rgba(${v},${v + 5},${v + 9},0.28)`;
-      ac.beginPath(); ac.arc(x, y, r, 0, Math.PI * 2); ac.fill();
-      const bv = Math.floor(96 + h2(i * 5.9) * 76);
-      bc.fillStyle = `rgba(${bv},${bv},${bv},0.35)`;
-      bc.beginPath(); bc.arc(x, y, r, 0, Math.PI * 2); bc.fill();
+      const rx = 1.2 + h2(i * 11.7) * 6.5, ry = 1.0 + h2(i * 13.9) * 3.8;
+      const v = Math.floor(58 + h2(i * 5.9) * 58);
+      ac.fillStyle = `rgba(${v},${v + 5},${v + 11},0.28)`;
+      ac.beginPath(); ac.ellipse(x, y, rx, ry, h2(i) * Math.PI, 0, Math.PI * 2); ac.fill();
+      const bv = Math.floor(86 + h2(i * 5.9) * 86);
+      bc.fillStyle = `rgba(${bv},${bv},${bv},0.34)`;
+      bc.beginPath(); bc.ellipse(x, y, rx, ry, h2(i) * Math.PI, 0, Math.PI * 2); bc.fill();
     }
-    // Weathered stone cracks & chiselled bevel veins
-    for (let c = 0; c < 18; c++) {
+
+    // Carved temple masonry seam lines & chiseled edge highlights
+    ac.lineWidth = 2; bc.lineWidth = 2.6;
+    for (let r = 0; r < 4; r++) {
+      const y = (r + 0.5) * (s / 4);
+      ac.strokeStyle = 'rgba(22,26,32,0.52)';
+      bc.strokeStyle = 'rgba(26,26,26,0.78)';
+      ac.beginPath(); ac.moveTo(0, y); ac.lineTo(s, y); ac.stroke();
+      bc.beginPath(); bc.moveTo(0, y); bc.lineTo(s, y); bc.stroke();
+      ac.strokeStyle = 'rgba(155,170,184,0.22)';
+      bc.strokeStyle = 'rgba(208,208,208,0.45)';
+      ac.beginPath(); ac.moveTo(0, y + 2); ac.lineTo(s, y + 2); ac.stroke();
+      bc.beginPath(); bc.moveTo(0, y + 2); bc.lineTo(s, y + 2); bc.stroke();
+    }
+
+    // Deep weathered geological fissures
+    for (let c = 0; c < 20; c++) {
       let x = h2(c * 19.1) * s, y = h2(c * 23.7) * s;
-      ac.strokeStyle = 'rgba(28,33,38,0.55)'; ac.lineWidth = 1.2 + h2(c * 4.3) * 1.6;
-      bc.strokeStyle = 'rgba(22,22,22,0.85)'; bc.lineWidth = ac.lineWidth + 0.6;
+      ac.strokeStyle = 'rgba(18,22,28,0.68)'; ac.lineWidth = 1.1 + h2(c * 4.3) * 1.8;
+      bc.strokeStyle = 'rgba(14,14,14,0.92)'; bc.lineWidth = ac.lineWidth + 0.7;
       ac.beginPath(); bc.beginPath(); ac.moveTo(x, y); bc.moveTo(x, y);
       for (let k = 0; k < 6; k++) {
-        x += (h2(c * 31 + k * 7) - 0.5) * 44;
-        y += (h2(c * 41 + k * 13) - 0.5) * 44;
+        x += (h2(c * 31 + k * 7) - 0.5) * 42;
+        y += (h2(c * 41 + k * 13) - 0.5) * 42;
         ac.lineTo(x, y); bc.lineTo(x, y);
       }
       ac.stroke(); bc.stroke();
     }
-    // Subtle ancient moss patches in crevices
-    for (let m = 0; m < 28; m++) {
-      const x = h2(m * 53.3) * s, y = h2(m * 61.1) * s, r = 6 + h2(m * 17.9) * 16;
+
+    // Ancient mossy lichen in recesses
+    for (let m = 0; m < 32; m++) {
+      const x = h2(m * 53.3) * s, y = h2(m * 61.1) * s, r = 6 + h2(m * 17.9) * 18;
       const g = ac.createRadialGradient(x, y, 1, x, y, r);
-      g.addColorStop(0, 'rgba(64,114,58,0.34)');
-      g.addColorStop(1, 'rgba(64,114,58,0)');
+      g.addColorStop(0, 'rgba(62,118,54,0.38)');
+      g.addColorStop(0.6, 'rgba(46,92,42,0.18)');
+      g.addColorStop(1, 'rgba(46,92,42,0)');
       ac.fillStyle = g; ac.beginPath(); ac.arc(x, y, r, 0, Math.PI * 2); ac.fill();
     }
   });
+}
+
+function getMossTex(): PbrPair {
+  return makePair('moss-v1', 256, (ac, bc, s) => {
+    ac.fillStyle = '#365f30'; ac.fillRect(0, 0, s, s);
+    bc.fillStyle = '#707070'; bc.fillRect(0, 0, s, s);
+    for (let i = 0; i < 1800; i++) {
+      const x = h2(i * 4.7) * s, y = h2(i * 9.3) * s, r = 1.4 + h2(i * 15.1) * 4.6;
+      const g = Math.floor(82 + h2(i * 6.3) * 66);
+      ac.fillStyle = `rgba(${Math.floor(g * 0.52)},${g},${Math.floor(g * 0.44)},0.45)`;
+      ac.beginPath(); ac.arc(x, y, r, 0, Math.PI * 2); ac.fill();
+      const bv = Math.floor(80 + h2(i * 6.3) * 120);
+      bc.fillStyle = `rgba(${bv},${bv},${bv},0.45)`;
+      bc.beginPath(); bc.arc(x, y, r, 0, Math.PI * 2); bc.fill();
+    }
+  });
+}
+
+function getRuneEmissiveTex(): THREE.CanvasTexture {
+  const key = 'golem-rune-emissive';
+  const hit = texCache.get(key);
+  if (hit) return hit.map;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, 256, 256);
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 10;
+  // Geometric ancient temple rune bands & glyphs
+  for (let row = 0; row < 2; row++) {
+    const y = 64 + row * 128;
+    ctx.beginPath();
+    ctx.moveTo(0, y); ctx.lineTo(256, y);
+    ctx.stroke();
+    for (let i = 0; i < 4; i++) {
+      const cx = 32 + i * 64;
+      ctx.beginPath();
+      ctx.moveTo(cx, y - 26); ctx.lineTo(cx + 18, y); ctx.lineTo(cx, y + 26); ctx.lineTo(cx - 18, y); ctx.closePath();
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, y - 12); ctx.lineTo(cx, y + 12); ctx.stroke();
+    }
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.needsUpdate = true;
+  texCache.set(key, { map, bump: map });
+  return map;
 }
 
 function getBoneTex(): PbrPair {
@@ -833,7 +900,23 @@ function buildSkeleton(color: number): CompanionModel {
   };
 }
 
-// ============================================================ 5. GÓLEM DE PIEDRA (TANK)
+// ============================================================ 5. GÓLEM DE PIEDRA (ANCIENT TEMPLE COLOSSUS)
+const golemGeo = {
+  // Sculpted broad V-tapered monolithic stone torso
+  chest: loftMesh([
+    { z: -0.44, y: 0.44, rx: 0.54, ryTop: 0.42, ryBot: 0.28, square: 0.34, shadeTop: 0.90, shadeSide: 0.96, shadeBot: 0.72 },
+    { z: -0.18, y: 0.50, rx: 0.80, ryTop: 0.52, ryBot: 0.34, square: 0.38, shadeTop: 0.94, shadeSide: 1.00, shadeBot: 0.74 },
+    { z:  0.14, y: 0.52, rx: 0.84, ryTop: 0.54, ryBot: 0.34, square: 0.40, shadeTop: 0.96, shadeSide: 1.00, shadeBot: 0.76 },
+    { z:  0.40, y: 0.48, rx: 0.62, ryTop: 0.44, ryBot: 0.30, square: 0.36, shadeTop: 0.92, shadeSide: 0.98, shadeBot: 0.78 },
+  ], 10),
+  gauntlet: loftMesh([
+    { z: -0.22, y: 0, rx: 0.24, ryTop: 0.24, ryBot: 0.24, square: 0.36 },
+    { z:  0.00, y: 0, rx: 0.32, ryTop: 0.32, ryBot: 0.32, square: 0.42 },
+    { z:  0.24, y: 0, rx: 0.29, ryTop: 0.29, ryBot: 0.29, square: 0.40 },
+  ], 8),
+  headCrown: taperTube([[0, 0, 0], [0, 0.14, -0.02], [0, 0.28, -0.08]], 0.09, 0.025, 6, 8),
+};
+
 function buildGolem(color: number): CompanionModel {
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -842,77 +925,150 @@ function buildGolem(color: number): CompanionModel {
   body.add(torso);
 
   const sTex = getStoneTex();
-  const stoneMat = M(0x747d84, { roughness: 0.90, flatShading: true, map: sTex.map, bumpMap: sTex.bump, bumpScale: 0.042 });
-  const darkStoneMat = M(0x4a5259, { roughness: 0.94, flatShading: true, map: sTex.map, bumpMap: sTex.bump, bumpScale: 0.045 });
-  const mossMat = M(0x3f703b, { roughness: 0.92, flatShading: true });
+  const mTex = getMossTex();
+  const rTex = getRuneEmissiveTex();
+  const runeCol = new THREE.Color(color);
+
+  const stoneMat = M(0x7c868e, {
+    roughness: 0.88, metalness: 0.08, flatShading: true, vertexColors: true,
+    map: sTex.map, bumpMap: sTex.bump, bumpScale: 0.052,
+  });
+  const darkStoneMat = M(0x424a52, {
+    roughness: 0.92, metalness: 0.10, flatShading: true,
+    map: sTex.map, bumpMap: sTex.bump, bumpScale: 0.056,
+  });
+  const runeStoneMat = M(0x525d66, {
+    roughness: 0.82, metalness: 0.14, flatShading: true,
+    map: sTex.map, bumpMap: sTex.bump, bumpScale: 0.048,
+    emissive: runeCol, emissiveMap: rTex, emissiveIntensity: 1.35,
+  });
+  const bronzeMat = M(0x8c6d3b, { roughness: 0.38, metalness: 0.78 });
+  const mossMat = M(0x44753d, {
+    roughness: 0.94, flatShading: true,
+    map: mTex.map, bumpMap: mTex.bump, bumpScale: 0.04,
+  });
   const runeMat = new THREE.MeshBasicMaterial({ color, toneMapped: false });
+  const coreHotMat = new THREE.MeshBasicMaterial({ color: 0xeafff2, toneMapped: false });
 
-  // Heavy pelvis & carved loin-stone
-  part(body, BOX, darkStoneMat, 0, 1.04, 0, 0.72, 0.34, 0.50);
-  part(body, BOX, stoneMat, 0, 0.88, 0.24, 0.32, 0.36, 0.14);
+  // ---- Pelvis, bronze belt & articulated stone tassets (kusazuri)
+  part(body, BOX, darkStoneMat, 0, 1.04, 0, 0.78, 0.34, 0.52);
+  part(body, BOX, bronzeMat, 0, 1.15, 0, 0.82, 0.075, 0.56);
+  const tassetF = part(body, BOX, runeStoneMat, 0, 0.86, 0.27, 0.34, 0.38, 0.11);
+  const tassetL = part(body, BOX, darkStoneMat, 0.41, 0.88, 0.02, 0.12, 0.36, 0.36);
+  const tassetR = part(body, BOX, darkStoneMat, -0.41, 0.88, 0.02, 0.12, 0.36, 0.36);
 
-  // Upper torso pivots at waist for crushing overhead slams
-  torso.position.set(0, 1.18, 0);
-  part(torso, DODECA, stoneMat, 0, 0.44, 0, 0.78, 0.66, 0.58);
-  part(torso, BOX, darkStoneMat, 0, 0.80, -0.06, 0.96, 0.24, 0.52); // broad stone collar
-  // Asymmetrical mossy boulder shoulders + protruding runic crystals
+  // ---- Sculpted monolithic upper torso
+  torso.position.set(0, 1.20, 0);
+  addMesh(torso, golemGeo.chest, stoneMat);
+  // Chiseled pectoral armor slabs & dorsal monolith ridge
   for (const s of [-1, 1]) {
-    part(torso, DODECA, stoneMat, s * 0.78, 0.78, 0, 0.40, 0.34, 0.40);
-    part(torso, DODECA, mossMat, s * 0.80, 0.98, -0.04, 0.27, 0.14, 0.26);
-    const shard = part(torso, OCTA, runeMat, s * 0.66, 1.04, -0.06, 0.09, 0.22, 0.09);
-    shard.rotation.z = -s * 0.35;
+    const pec = part(torso, BOX, darkStoneMat, s * 0.34, 0.54, 0.38, 0.38, 0.34, 0.18);
+    pec.rotation.y = -s * 0.26;
+    pec.rotation.z = s * 0.08;
+    part(torso, BOX, bronzeMat, s * 0.38, 0.70, 0.35, 0.28, 0.055, 0.14).rotation.y = -s * 0.24;
   }
-  // Recessed glowing runic heart core + stone frame
-  part(torso, BOX, darkStoneMat, 0, 0.46, 0.44, 0.34, 0.42, 0.14);
-  const core = part(torso, OCTA, runeMat, 0, 0.46, 0.50, 0.16, 0.24, 0.09);
+  part(torso, BOX, darkStoneMat, 0, 0.88, -0.06, 1.08, 0.24, 0.58); // massive trap collar
+  part(torso, DODECA, mossMat, 0, 0.99, -0.20, 0.42, 0.16, 0.28);   // mossy upper back hump
 
-  // Ancient monolith head with recessed glowing eye visor
+  // Recessed Ancient Runic Heart Core (spinning crystal + inner glow + obsidian ribs + bronze ring)
+  part(torso, BOX, darkStoneMat, 0, 0.48, 0.42, 0.38, 0.46, 0.14);
+  const coreRingGeo = new THREE.TorusGeometry(0.19, 0.032, 7, 18);
+  const coreRing = new THREE.Mesh(coreRingGeo, bronzeMat);
+  coreRing.position.set(0, 0.48, 0.50);
+  torso.add(coreRing);
+  const coreOuter = part(torso, OCTA, runeMat, 0, 0.48, 0.51, 0.16, 0.24, 0.10);
+  const coreInner = part(torso, OCTA, coreHotMat, 0, 0.48, 0.52, 0.085, 0.13, 0.06);
+
+  // Asymmetrical colossal boulder shoulders + mossy crowns + glowing crystal clusters
+  for (const s of [-1, 1]) {
+    const sh = new THREE.Group();
+    sh.position.set(s * 0.86, 0.84, 0);
+    torso.add(sh);
+    part(sh, DODECA, stoneMat, 0, 0, 0, 0.45, 0.38, 0.44);
+    part(sh, BOX, bronzeMat, 0, -0.18, 0, 0.50, 0.065, 0.48);
+    part(sh, DODECA, mossMat, s * 0.04, 0.24, -0.04, 0.32, 0.15, 0.30);
+    // Twin protruding runic crystal spires
+    const c1 = part(sh, OCTA, runeMat, -s * 0.12, 0.34, -0.04, 0.095, 0.28, 0.095);
+    c1.rotation.z = -s * 0.32;
+    const c2 = part(sh, OCTA, coreHotMat, s * 0.08, 0.28, 0.08, 0.055, 0.17, 0.055);
+    c2.rotation.z = -s * 0.52;
+  }
+
+  // Orbiting ancient rune shards floating behind the Golem's shoulders
+  const orbitGroup = new THREE.Group();
+  orbitGroup.position.set(0, 0.82, -0.34);
+  torso.add(orbitGroup);
+  const orbitShards: THREE.Mesh[] = [];
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const sh = part(orbitGroup, OCTA, runeMat, Math.cos(a) * 0.65, Math.sin(a) * 0.26, -0.18, 0.065, 0.14, 0.05);
+    orbitShards.push(sh);
+  }
+
+  // ---- Ancient Guardian Monolith Head (chiseled brow, recessed glowing visor, jaw plate & crest)
   const head = new THREE.Group();
-  head.position.set(0, 0.98, 0.12);
+  head.position.set(0, 1.04, 0.14);
   torso.add(head);
-  part(head, DODECA, darkStoneMat, 0, 0.12, 0, 0.32, 0.28, 0.30);
-  part(head, BOX, stoneMat, 0, 0.20, 0.16, 0.30, 0.10, 0.14); // heavy stone brow
-  part(head, DODECA, mossMat, 0, 0.30, -0.04, 0.28, 0.11, 0.24);
+  part(head, DODECA, darkStoneMat, 0, 0.14, 0, 0.34, 0.30, 0.32);
+  part(head, BOX, stoneMat, 0, 0.24, 0.16, 0.34, 0.11, 0.16);   // heavy brow ridge
+  part(head, BOX, stoneMat, 0, -0.02, 0.15, 0.26, 0.10, 0.15);  // carved chin/jaw slab
+  part(head, BOX, bronzeMat, 0, 0.29, 0.14, 0.26, 0.045, 0.10); // temple brow ornament
+  part(head, DODECA, mossMat, 0, 0.34, -0.05, 0.28, 0.12, 0.25);
   for (const s of [-1, 1]) {
-    part(head, BOX, runeMat, s * 0.095, 0.11, 0.25, 0.085, 0.042, 0.04);
+    const horn = addMesh(head, golemGeo.headCrown, stoneMat, s * 0.18, 0.24, 0.0, -0.2, 0, -s * 0.42);
+    horn.scale.setScalar(0.95);
+    part(head, BOX, runeMat, s * 0.10, 0.13, 0.26, 0.095, 0.045, 0.04);
+    part(head, BOX, coreHotMat, s * 0.10, 0.13, 0.275, 0.052, 0.022, 0.02);
   }
 
-  // Heavy 2-segment stone arms with oversized knuckle fists & glowing runic bands
+  // ---- Massive 3-joint articulated arms (upper arm + rune-etched forearm + colossal gauntlet fist)
   const makeArm = (sx: number) => {
     const upper = new THREE.Group();
-    upper.position.set(sx * 0.90, 0.66, 0);
+    upper.position.set(sx * 0.98, 0.68, 0);
     torso.add(upper);
-    part(upper, BOX, darkStoneMat, 0, -0.26, 0, 0.32, 0.52, 0.32);
+    part(upper, BOX, darkStoneMat, 0, -0.26, 0, 0.34, 0.52, 0.34);
+    part(upper, BOX, bronzeMat, 0, -0.44, 0, 0.38, 0.075, 0.38);
 
     const fore = new THREE.Group();
     fore.position.set(0, -0.52, 0);
     upper.add(fore);
-    part(fore, DODECA, stoneMat, 0, -0.28, 0.05, 0.37, 0.42, 0.38);
-    part(fore, BOX, runeMat, 0, -0.08, 0.18, 0.26, 0.055, 0.05);
-    part(fore, OCTA, runeMat, sx * 0.14, -0.28, 0.24, 0.085, 0.11, 0.065);
+    const gauntlet = addMesh(fore, golemGeo.gauntlet, runeStoneMat, 0, -0.32, 0.04, Math.PI / 2, 0, 0);
+    gauntlet.scale.set(1.22, 1.38, 1.22);
+    // Oversized armored knuckles & glowing wrist veins
+    part(fore, BOX, bronzeMat, 0, -0.10, 0, 0.42, 0.075, 0.42);
+    part(fore, DODECA, stoneMat, 0, -0.56, 0.08, 0.34, 0.26, 0.34);
+    for (let k = -1; k <= 1; k++) {
+      part(fore, BOX, darkStoneMat, k * 0.11, -0.66, 0.20, 0.085, 0.16, 0.12);
+    }
+    // Glowing rune spire on outer forearm
+    part(fore, OCTA, runeMat, sx * 0.24, -0.34, 0.10, 0.085, 0.18, 0.075);
     return { upper, fore };
   };
   const armL = makeArm(1);
   const armR = makeArm(-1);
 
-  // Thick articulated stone pillar legs
+  // ---- Thick articulated stone pillar legs with knee boulders & planted feet
   const makeLeg = (sx: number) => {
     const hip = new THREE.Group();
-    hip.position.set(sx * 0.34, 0.94, 0);
+    hip.position.set(sx * 0.36, 0.94, 0);
     body.add(hip);
-    part(hip, BOX, darkStoneMat, 0, -0.28, 0, 0.34, 0.54, 0.36);
+    part(hip, BOX, darkStoneMat, 0, -0.28, 0, 0.36, 0.54, 0.38);
+    part(hip, DODECA, stoneMat, 0, -0.48, 0.14, 0.22, 0.18, 0.18); // knee boulder
+
     const shin = new THREE.Group();
     shin.position.set(0, -0.52, 0);
     hip.add(shin);
-    part(shin, BOX, stoneMat, 0, -0.22, 0.05, 0.38, 0.42, 0.46);
-    part(shin, BOX, mossMat, 0, -0.04, 0.24, 0.26, 0.10, 0.08);
+    part(shin, BOX, runeStoneMat, 0, -0.22, 0.04, 0.40, 0.42, 0.44);
+    part(shin, BOX, bronzeMat, 0, -0.34, 0.05, 0.43, 0.065, 0.47);
+    part(shin, BOX, stoneMat, 0, -0.40, 0.16, 0.42, 0.16, 0.34); // wide planted stone foot
+    part(shin, BOX, mossMat, 0, -0.04, 0.23, 0.26, 0.11, 0.09);
     return { hip, shin };
   };
   const legL = makeLeg(1);
   const legR = makeLeg(-1);
 
   mangaFinish(root);
-  const ui = finalizeCompanionRoot(root, color, 2.95, 1.38);
+  const ui = finalizeCompanionRoot(root, color, 3.05, 1.48);
   let stompT = 0;
 
   return {
@@ -920,40 +1076,120 @@ function buildGolem(color: number): CompanionModel {
     ring: ui.ring,
     hpBarGroup: ui.hpBarGroup,
     hpFill: ui.hpFill,
-    hpBarY: 2.95,
+    hpBarY: 3.05,
     update(dt, o) {
-      stompT += dt * (o.moving > 0.1 ? 2.6 + o.speed * 0.85 : 1.5);
-      const sw = Math.sin(stompT) * o.moving * 0.50;
+      stompT += dt * (o.moving > 0.1 ? 2.7 + o.speed * 0.85 : 1.55);
+      const sw = Math.sin(stompT) * o.moving * 0.52;
       const windup = o.state === 'windup';
       const strike = o.state === 'strike';
+      const style = (o.attackStyle ?? 2) % 3; // 0 = right haymaker, 1 = left uppercut, 2 = two-hand seismic slam
 
-      legL.hip.rotation.x = damp(legL.hip.rotation.x, sw, 10, dt);
-      legR.hip.rotation.x = damp(legR.hip.rotation.x, -sw, 10, dt);
-      legL.shin.rotation.x = damp(legL.shin.rotation.x, Math.max(0, -Math.cos(stompT)) * o.moving * 0.45, 10, dt);
-      legR.shin.rotation.x = damp(legR.shin.rotation.x, Math.max(0, Math.cos(stompT)) * o.moving * 0.45, 10, dt);
+      // Heavy planted stride & combat stance legs
+      const legHipL = windup ? (style === 0 ? -0.28 : style === 1 ? 0.32 : -0.18) : strike ? (style === 0 ? 0.35 : style === 1 ? -0.28 : 0.22) : sw;
+      const legHipR = windup ? (style === 0 ? 0.32 : style === 1 ? -0.28 : -0.18) : strike ? (style === 0 ? -0.28 : style === 1 ? 0.35 : 0.22) : -sw;
+      legL.hip.rotation.x = damp(legL.hip.rotation.x, legHipL, 11, dt);
+      legR.hip.rotation.x = damp(legR.hip.rotation.x, legHipR, 11, dt);
+      legL.shin.rotation.x = damp(legL.shin.rotation.x, windup ? 0.25 : Math.max(0, -Math.cos(stompT)) * o.moving * 0.48, 11, dt);
+      legR.shin.rotation.x = damp(legR.shin.rotation.x, windup ? 0.25 : Math.max(0, Math.cos(stompT)) * o.moving * 0.48, 11, dt);
 
-      body.position.y = damp(body.position.y, Math.abs(Math.sin(stompT)) * o.moving * 0.09 + Math.sin(stompT) * 0.018, 10, dt);
-      body.rotation.z = damp(body.rotation.z, Math.sin(stompT) * o.moving * 0.075, 9, dt);
+      // Weighty body bounce, crouch on windup, slam drop on strike
+      const targetBodyY = windup
+        ? (style === 2 ? 0.12 : -0.12)
+        : strike
+          ? (style === 2 ? -0.18 : 0.04)
+          : Math.abs(Math.sin(stompT)) * o.moving * 0.095 + Math.sin(stompT) * 0.02;
+      const targetBodyRoll = windup
+        ? (style === 0 ? -0.14 : style === 1 ? 0.14 : 0)
+        : strike
+          ? (style === 0 ? 0.16 : style === 1 ? -0.16 : 0)
+          : Math.sin(stompT) * o.moving * 0.08;
+      body.position.y = damp(body.position.y, targetBodyY, 12, dt);
+      body.rotation.z = damp(body.rotation.z, targetBodyRoll, 10, dt);
 
-      torso.rotation.x = damp(torso.rotation.x, windup ? -0.28 : strike ? 0.36 : o.moving * 0.08, 11, dt);
-      torso.rotation.y = damp(torso.rotation.y, sw * 0.18, 9, dt);
+      // Torso twist & pitch choreography per move
+      let tPitch = o.moving * 0.10;
+      let tYaw = sw * 0.22;
+      let armLX = -sw * 0.62, armLZ = 0.08, foreLX = -0.30;
+      let armRX = sw * 0.62, armRZ = -0.08, foreRX = -0.30;
 
-      armL.upper.rotation.x = damp(armL.upper.rotation.x, windup ? -2.45 : strike ? 0.78 : -sw * 0.62, 12, dt);
-      armR.upper.rotation.x = damp(armR.upper.rotation.x, windup ? -2.45 : strike ? 0.78 : sw * 0.62, 12, dt);
-      armL.fore.rotation.x = damp(armL.fore.rotation.x, windup ? -0.35 : strike ? -0.15 : -0.25, 11, dt);
-      armR.fore.rotation.x = damp(armR.fore.rotation.x, windup ? -0.35 : strike ? -0.15 : -0.25, 11, dt);
+      if (windup) {
+        if (style === 0) {
+          // Move 0: Right Heavy Haymaker windup (coil far right)
+          tYaw = -0.78; tPitch = 0.16;
+          armRX = 0.55; armRZ = -0.85; foreRX = -0.85;
+          armLX = -0.95; armLZ = 0.35; foreLX = -0.55;
+        } else if (style === 1) {
+          // Move 1: Left Crushing Uppercut windup (drop low left)
+          tYaw = 0.72; tPitch = 0.28;
+          armLX = 0.65; armLZ = 0.72; foreLX = -0.95;
+          armRX = -1.05; armRZ = -0.35; foreRX = -0.45;
+        } else {
+          // Move 2: Two-Handed Overhead Seismic Slam windup (rear back high!)
+          tYaw = 0; tPitch = -0.34;
+          armLX = -2.72; armLZ = -0.22; foreLX = -0.42;
+          armRX = -2.72; armRZ = 0.22; foreRX = -0.42;
+        }
+      } else if (strike) {
+        if (style === 0) {
+          // Move 0: Explosive right hook sweep across front!
+          tYaw = 0.88; tPitch = 0.24;
+          armRX = -1.42; armRZ = 0.72; foreRX = -0.22;
+          armLX = 0.45; armLZ = 0.25; foreLX = -0.55;
+        } else if (style === 1) {
+          // Move 1: Rising left uppercut smash!
+          tYaw = -0.82; tPitch = -0.18;
+          armLX = -2.15; armLZ = -0.32; foreLX = -0.18;
+          armRX = 0.45; armRZ = -0.25; foreRX = -0.55;
+        } else {
+          // Move 2: Crushing twin-fist earth smash!
+          tYaw = 0; tPitch = 0.48;
+          armLX = 0.78; armLZ = -0.15; foreLX = -0.12;
+          armRX = 0.78; armRZ = 0.15; foreRX = -0.12;
+        }
+      }
 
-      head.rotation.y = damp(head.rotation.y, Math.sin(stompT * 0.4) * 0.10, 8, dt);
-      core.rotation.y += dt * 1.4;
-      const pulse = 1 + Math.sin(stompT * 2.2) * 0.08;
-      core.scale.set(0.16 * pulse, 0.24 * pulse, 0.09 * pulse);
+      const armSpeed = strike ? 20 : windup ? 12 : 10;
+      torso.rotation.x = damp(torso.rotation.x, tPitch, armSpeed * 0.85, dt);
+      torso.rotation.y = damp(torso.rotation.y, tYaw, armSpeed * 0.9, dt);
+
+      armL.upper.rotation.x = damp(armL.upper.rotation.x, armLX, armSpeed, dt);
+      armL.upper.rotation.z = damp(armL.upper.rotation.z, armLZ, armSpeed, dt);
+      armL.fore.rotation.x = damp(armL.fore.rotation.x, foreLX, armSpeed, dt);
+
+      armR.upper.rotation.x = damp(armR.upper.rotation.x, armRX, armSpeed, dt);
+      armR.upper.rotation.z = damp(armR.upper.rotation.z, armRZ, armSpeed, dt);
+      armR.fore.rotation.x = damp(armR.fore.rotation.x, foreRX, armSpeed, dt);
+
+      // Head tracks forward against torso twist so the Golem locks eyes on its victim!
+      head.rotation.y = damp(head.rotation.y, -torso.rotation.y * 0.65 + Math.sin(stompT * 0.4) * 0.08, 12, dt);
+      head.rotation.x = damp(head.rotation.x, -torso.rotation.x * 0.4, 10, dt);
+
+      // Stone tassets sway naturally
+      tassetF.rotation.x = damp(tassetF.rotation.x, -Math.abs(sw) * 0.35 - (strike ? 0.25 : 0), 10, dt);
+      tassetL.rotation.z = damp(tassetL.rotation.z, sw * 0.25, 10, dt);
+      tassetR.rotation.z = damp(tassetR.rotation.z, -sw * 0.25, 10, dt);
+
+      // Runic heart & orbiting stones flare brighter during attacks!
+      const flareK = windup || strike ? 1.35 : 1.0;
+      coreOuter.rotation.y += dt * (windup || strike ? 4.2 : 1.5);
+      coreInner.rotation.y -= dt * 2.6;
+      const pulse = (1 + Math.sin(stompT * 2.5) * 0.08) * flareK;
+      coreOuter.scale.set(0.16 * pulse, 0.24 * pulse, 0.10 * pulse);
+      runeStoneMat.emissiveIntensity = damp(runeStoneMat.emissiveIntensity, windup || strike ? 2.4 : 1.25, 10, dt);
+
+      orbitGroup.rotation.z += dt * (windup || strike ? 2.8 : 0.85);
+      for (let i = 0; i < orbitShards.length; i++) {
+        orbitShards[i].rotation.y += dt * 2.2;
+        orbitShards[i].position.z = -0.18 + Math.sin(stompT * 2 + i * 2) * 0.08;
+      }
     },
     setFlash(v) {
-      for (const m of [stoneMat, darkStoneMat, mossMat]) m.emissive.setScalar(v);
+      for (const m of [stoneMat, darkStoneMat, mossMat, bronzeMat]) m.emissive.setScalar(v);
     },
     setHpFrac: ui.setHpFrac,
     dispose() {
-      for (const m of [stoneMat, darkStoneMat, mossMat, runeMat]) m.dispose();
+      for (const m of [stoneMat, darkStoneMat, runeStoneMat, bronzeMat, mossMat, runeMat, coreHotMat]) m.dispose();
+      coreRingGeo.dispose();
       ui.disposeUi();
     },
   };
