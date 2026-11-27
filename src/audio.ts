@@ -247,6 +247,127 @@ export function createAudio() {
   function growl(pan = 0, big = true) {
     if (ok()) roarSynth(ctx.currentTime, big, pan);
   }
+  // ------------------------------------------------------------ Spider & Crystal Scorpion combat SFX
+  function spiderHiss(pan = 0) {
+    if (!ok()) return; const t = ctx.currentTime;
+    // Rapid chitinous mandible clicks (3 crisp micro-bursts)
+    for (let i = 0; i < 3; i++) {
+      const ti = t + i * 0.042;
+      const c = noiseSrc(ti, 0.03), bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 2800 + i * 420; bp.Q.value = 5.5;
+      const g = ctx.createGain(); env(g, ti, 0.002, 0.20, 0.024);
+      c.connect(bp).connect(g); out(g, { wet: 0.22, pan });
+    }
+    // Tight breathy arachnid hiss (filtered air, no harsh oscillator buzz)
+    const n = noiseSrc(t + 0.04, 0.26), bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 2.6;
+    bp.frequency.setValueAtTime(1900, t + 0.04);
+    bp.frequency.exponentialRampToValueAtTime(4200, t + 0.14);
+    bp.frequency.exponentialRampToValueAtTime(2100, t + 0.28);
+    const ng = ctx.createGain(); env(ng, t + 0.04, 0.035, 0.24, 0.22);
+    n.connect(bp).connect(ng); out(ng, { wet: 0.30, pan });
+  }
+  function spiderWeb(pan = 0) {
+    if (!ok()) return; const t = ctx.currentTime;
+    // Elastic silk-whip launch sweep
+    const n = noiseSrc(t, 0.16), bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 3.2;
+    bp.frequency.setValueAtTime(900, t);
+    bp.frequency.exponentialRampToValueAtTime(3800, t + 0.08);
+    bp.frequency.exponentialRampToValueAtTime(1400, t + 0.15);
+    const g = ctx.createGain(); env(g, t, 0.006, 0.34, 0.14);
+    n.connect(bp).connect(g); out(g, { wet: 0.28, pan });
+    // Soft sticky silk landing splat
+    const s = noiseSrc(t + 0.05, 0.14), lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 820; lp.Q.value = 1.4;
+    const sg = ctx.createGain(); env(sg, t + 0.05, 0.008, 0.26, 0.12);
+    s.connect(lp).connect(sg); out(sg, { wet: 0.22, pan });
+  }
+  function spiderBite(pan = 0) {
+    if (!ok()) return; const t = ctx.currentTime;
+    // Swift fang lunge whoosh
+    const w = noiseSrc(t, 0.13), bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 2.0;
+    bp.frequency.setValueAtTime(1700, t);
+    bp.frequency.exponentialRampToValueAtTime(520, t + 0.12);
+    const wg = ctx.createGain(); env(wg, t, 0.008, 0.32, 0.11);
+    w.connect(bp).connect(wg); out(wg, { wet: 0.20, pan });
+    // Crisp double-fang chitin snap
+    for (const [dt, f] of [[0.015, 2400], [0.042, 1650]] as const) {
+      const c = noiseSrc(t + dt, 0.04), cf = ctx.createBiquadFilter();
+      cf.type = 'bandpass'; cf.frequency.value = f; cf.Q.value = 4.2;
+      const cg = ctx.createGain(); env(cg, t + dt, 0.002, 0.30, 0.032);
+      c.connect(cf).connect(cg); out(cg, { wet: 0.24, pan });
+    }
+    body(t + 0.01, false, pan);
+  }
+  function scorpionChitter(pan = 0) {
+    if (!ok()) return; const t = ctx.currentTime;
+    // Sparkling crystalline pincer clacks (3 crisp glassy transients, zero sawtooth buzz)
+    const freqs = [2150, 3180, 2640];
+    for (let i = 0; i < 3; i++) {
+      const ti = t + i * 0.048;
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(freqs[i], ti);
+      o.frequency.exponentialRampToValueAtTime(freqs[i] * 0.78, ti + 0.055);
+      env(og, ti, 0.002, 0.12, 0.055);
+      o.connect(og); out(og, { wet: 0.38, pan });
+      o.start(ti); o.stop(ti + 0.065);
+      const n = noiseSrc(ti, 0.035), hp = ctx.createBiquadFilter();
+      hp.type = 'bandpass'; hp.frequency.value = freqs[i] * 1.4; hp.Q.value = 6;
+      const ng = ctx.createGain(); env(ng, ti, 0.001, 0.18, 0.03);
+      n.connect(hp).connect(ng); out(ng, { wet: 0.28, pan });
+    }
+  }
+  function scorpionSting(pan = 0) {
+    if (!ok()) return; const t = ctx.currentTime;
+    // Whipping tail slash
+    const w = noiseSrc(t, 0.16), bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 2.5;
+    bp.frequency.setValueAtTime(650, t);
+    bp.frequency.exponentialRampToValueAtTime(3600, t + 0.10);
+    const wg = ctx.createGain(); env(wg, t, 0.01, 0.34, 0.13);
+    w.connect(bp).connect(wg); out(wg, { wet: 0.26, pan });
+    // Sharp crystalline stinger ring
+    for (const [f, amp] of [[2620, 0.13], [3940, 0.08]] as const) {
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      env(og, t + 0.04, 0.002, amp, 0.20);
+      o.connect(og); out(og, { wet: 0.45, pan });
+      o.start(t + 0.04); o.stop(t + 0.26);
+    }
+    body(t + 0.03, false, pan);
+  }
+  function crystalShard(pan = 0) {
+    if (!ok()) return; const t = ctx.currentTime;
+    // Shimmering icy crystal wave launch
+    const n = noiseSrc(t, 0.28), bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 2.8;
+    bp.frequency.setValueAtTime(2800, t);
+    bp.frequency.exponentialRampToValueAtTime(6200, t + 0.10);
+    bp.frequency.exponentialRampToValueAtTime(1900, t + 0.26);
+    const ng = ctx.createGain(); env(ng, t, 0.008, 0.24, 0.25);
+    n.connect(bp).connect(ng); out(ng, { wet: 0.42, pan });
+    for (const [dt, f, amp] of [[0, 1980, 0.10], [0.025, 2970, 0.09], [0.055, 4180, 0.07]] as const) {
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      env(og, t + dt, 0.002, amp, 0.26);
+      o.connect(og); out(og, { wet: 0.52, pan });
+      o.start(t + dt); o.stop(t + dt + 0.30);
+    }
+  }
+  function crystalShatter(pan = 0) {
+    if (!ok()) return; const t = ctx.currentTime;
+    body(t, false, pan);
+    for (let i = 0; i < 4; i++) {
+      const ti = t + i * 0.028, f = 1750 + i * 680 + rnd(-120, 120);
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'triangle'; o.frequency.value = f;
+      env(og, ti, 0.002, 0.11, 0.16);
+      o.connect(og); out(og, { wet: 0.48, pan });
+      o.start(ti); o.stop(ti + 0.19);
+    }
+  }
   function death({ big = false, pan = 0 }: { big?: boolean; pan?: number } = {}) {
     if (!ok()) return;
     voice(big ? ['deathBig', ['death', { rate: 0.82, gain: 1.2 }]] : ['death'], { pan }, () => deathSynth(big, pan));
@@ -476,7 +597,7 @@ export function createAudio() {
   function setMuted(m: boolean) { muted = m; if (ctx) master.gain.setTargetAtTime(m ? 0 : 0.85, ctx.currentTime, 0.05); }
 
   return {
-    init, swing, hit, taiko, waveStart, roar, howl, growl, death, hurt, dash, jump, land, splash, warn, chime, levelUp, templeBell, rings, coin, anvil, arrow, thunder, orbCharge, orbCast, orbHit, setRain, setMuted,
+    init, swing, hit, taiko, waveStart, roar, howl, growl, spiderHiss, spiderWeb, spiderBite, scorpionChitter, scorpionSting, crystalShard, crystalShatter, death, hurt, dash, jump, land, splash, warn, chime, levelUp, templeBell, rings, coin, anvil, arrow, thunder, orbCharge, orbCast, orbHit, setRain, setMuted,
     get muted() { return muted; },
     // resolves to { slot: number of loaded files } once samples have decoded (after init)
     get ready() { return ready || Promise.resolve({}); },

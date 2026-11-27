@@ -15,6 +15,7 @@ import { wader, splash, WADE_SINK } from './water';
 import { addPoints, POINTS } from './score';
 import { dropBossRelic, dropLoot, unseal } from './loot';
 import { lifesteal } from './upgrades';
+import { foeRecovery, level } from './progression';
 import { chargeKill, bolt, skyFlash } from './special';
 import { circle, onEnrage, onKill, takeTurn } from './battle';
 import { affixLabel } from './boss-mechanics';
@@ -47,7 +48,9 @@ export function alertCamp(camp: Camp) {
   const pan = panOf(alert.g.position.x, alert.g.position.z);
   if (camp.wildlife) {
     if (camp.wildlife === 'lobos') sfx.howl(pan);
-    else if (camp.wildlife !== 'aranas' && camp.wildlife !== 'escorpiones') sfx.growl(pan, camp.wildlife === 'oso');
+    else if (camp.wildlife === 'aranas') sfx.spiderHiss(pan);
+    else if (camp.wildlife === 'escorpiones') sfx.scorpionChitter(pan);
+    else sfx.growl(pan, camp.wildlife === 'oso');
     showMsg(`¡ ${WILDLIFE_NAMES[camp.wildlife]} !`, 1.5);
     return;
   }
@@ -95,14 +98,16 @@ function shoot(en: Enemy, yaw = 0, target?: THREE.Vector3, dmg = en.dmg) {
 }
 const UP = new THREE.Vector3(0, 1, 0);
 const lastMove = new THREE.Vector3(), prevPos = new THREE.Vector3();
-function castCrescent(attack: EnemyAttack, width: number, dmg: number) {
+function castCrescent(attack: EnemyAttack, width: number, dmg: number, crystal = false) {
   if (attack.length <= 0) return;
   const v = new THREE.Vector3(Math.sin(attack.yaw), 0, Math.cos(attack.yaw)).multiplyScalar(10.5);
   const m = new THREE.Mesh(CRESCENT, crescentMat);
   m.position.copy(attack.origin); m.position.y += 0.55;
   m.rotation.y = attack.yaw; m.scale.x = width / 1.32; scene.add(markCombatFx(m));
   projectiles.push({ m, v, life: attack.length / v.length(), dmg, waveWidth: width });
-  sfx.swing({ power: 0.9, pan: panOf(m.position.x, m.position.z) });
+  const pan = panOf(m.position.x, m.position.z);
+  if (crystal) sfx.crystalShard(pan);
+  else sfx.swing({ power: 0.9, pan });
 }
 
 function updateProjectiles(dt: number) {
@@ -162,7 +167,7 @@ export function clearEnemyHazards() {
 const MARK = new THREE.RingGeometry(0.15, 1.8, 32).rotateX(-Math.PI / 2);
 const marks: { m: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>; t: number; max: number; dmg: number }[] = [];
 function callThunder(en: Enemy) {
-  const n = en.camp.tier > 0.6 ? 5 : 3;
+  const n = (en.camp.tier > 0.6 ? 5 : 3) + (level() >= 45 ? 1 : 0);
   for (let i = 0; i < n; i++) {
     // the first one right where you are, the others around it
     const a = Math.random() * Math.PI * 2, r = i === 0 ? 0 : rnd(2.2, 4.5);
@@ -283,7 +288,7 @@ function pullPlayer(dx: number, dz: number, distance: number, strength: number) 
 function finishMove(en: Enemy, attack: EnemyAttack) {
   clearEnemyAttack(en);
   en.state = 'recover';
-  en.t = attack.move.recovery * (en.phase === 3 ? 0.68 : en.enraged ? 0.82 : 1);
+  en.t = attack.move.recovery * (en.phase === 3 ? 0.68 : en.enraged ? 0.82 : 1) * foeRecovery();
 }
 
 function executeMove(en: Enemy, attack: EnemyAttack) {
@@ -297,7 +302,7 @@ function executeMove(en: Enemy, attack: EnemyAttack) {
     return;
   }
   if (move.shape === 'wave') {
-    castCrescent(attack, move.width, dmg);
+    castCrescent(attack, move.width, dmg, en.kind === 'escorpion');
   } else if (move.shape === 'volley') {
     for (let i = 0; i < move.arrows; i++) {
       shoot(en, move.angle * (2 * i / (move.arrows - 1) - 1), target, dmg);
@@ -327,7 +332,10 @@ function executeMove(en: Enemy, attack: EnemyAttack) {
     const edge = origin.clone().add(new THREE.Vector3(Math.sin(yaw), 0.24, Math.cos(yaw)).multiplyScalar(move.angle < Math.PI ? move.radius * 0.55 : 1));
     burst(edge, move.color, 80, 8, 0.16);
     state.shake = Math.max(state.shake, move.angle === Math.PI ? 0.6 : 0.3);
-    sfx.taiko(0.7);
+    const p = panOf(origin.x, origin.z);
+    if (en.kind === 'arana') sfx.spiderBite(p);
+    else if (en.kind === 'escorpion') sfx.scorpionSting(p);
+    else sfx.taiko(0.7);
   } else {
     const centers = zones.map(({ x, z }) => new THREE.Vector3(x, surfaceY(x, z) + 0.12, z));
     for (const p of centers) {
@@ -347,6 +355,7 @@ function executeMove(en: Enemy, attack: EnemyAttack) {
       en.attack = undefined;   // the fire keeps its own ground marker until it expires
     }
     if (move.effect === 'thunder') { skyFlash(0.35); sfx.thunder(panOf(target.x, target.z), en.enraged); }
+    else if (move.effect === 'web') sfx.spiderWeb(panOf(target.x, target.z));
     else sfx.taiko(0.45);
   }
   finishMove(en, attack);
@@ -503,7 +512,10 @@ export function updateEnemies(dt: number) {
           en.attack = prepareEnemyAttack(en, move, goal, Math.atan2(tmp.x, tmp.z));
           en.state = 'windup'; en.t = en.attack.windup; en.knock.set(0, 0, 0);
           if (def.beast) {
-            if (def.beast.species !== 'spider') sfx.growl(panOf(g.position.x, g.position.z), def.beast.species === 'bear');
+            const p = panOf(g.position.x, g.position.z);
+            if (def.beast.species === 'spider') sfx.spiderHiss(p);
+            else if (def.beast.species === 'scorpion') sfx.scorpionChitter(p);
+            else sfx.growl(p, def.beast.species === 'bear');
           } else sfx.warn(panOf(g.position.x, g.position.z));
         } else if (!turn && d < move.range + 4) {
           walk = circle(en, tmp.x, tmp.z, d, speed, dt);   // not its turn: circle and wait (battle.ts)
@@ -536,9 +548,9 @@ export function updateEnemies(dt: number) {
           // a fan of three arrows, and every third time a wide one of five
           const fan = en.swings % 3 === 0 ? [-0.36, -0.18, 0, 0.18, 0.36] : [-0.16, 0, 0.16];
           for (const y of fan) shoot(en, y, goal === player.pos ? undefined : goal);
-          en.state = 'recover'; en.t = rnd(1.0, 1.4);
-        } else if (ranged) { shoot(en, 0, goal === player.pos ? undefined : goal); en.state = 'recover'; en.t = rnd(1.1, 1.6); }
-        else if (thunder) { callThunder(en); en.state = 'recover'; en.t = 1.1; }
+          en.state = 'recover'; en.t = rnd(1.0, 1.4) * foeRecovery();
+        } else if (ranged) { shoot(en, 0, goal === player.pos ? undefined : goal); en.state = 'recover'; en.t = rnd(1.1, 1.6) * foeRecovery(); }
+        else if (thunder) { callThunder(en); en.state = 'recover'; en.t = 1.1 * foeRecovery(); }
         else {
           if (slamming) slam(en, 2.9 * en.scale);
           else {
@@ -553,7 +565,7 @@ export function updateEnemies(dt: number) {
           const lunge = en.kind === 'ashigaru' || en.kind === 'kensei';
           en.knock.copy(tmp).normalize().multiplyScalar(lunge ? (en.kind === 'kensei' ? 13 : 11) : slamming ? 0 : 5);
           // the kensei chains its lunges, then stands still for a long moment after the third
-          en.state = 'recover'; en.t = en.kind === 'kensei' ? (en.swings % 3 !== 0 ? 0.2 : 1.35) : en.kind === 'ashigaru' ? 0.55 : 0.7;
+          en.state = 'recover'; en.t = (en.kind === 'kensei' ? (en.swings % 3 !== 0 ? 0.2 : 1.35) : en.kind === 'ashigaru' ? 0.55 : 0.7) * foeRecovery();
         }
       }
     } else if (en.state === 'charge' && en.attack) {
@@ -613,7 +625,9 @@ function kill(en: Enemy, i: number, gy: number) {
   burst(c, 0xffe0c0, 30, 4, 0.1);
   despawn(en); enemies.splice(i, 1); state.kills++; onKill(en);
   const pan = panOf(g.position.x, g.position.z);
-  if (def.beast) sfx.hit({ heavy: en.big, pan });
+  if (def.beast?.species === 'scorpion') sfx.crystalShatter(pan);
+  else if (def.beast?.species === 'spider') { sfx.spiderHiss(pan); sfx.hit({ heavy: false, pan }); }
+  else if (def.beast) sfx.hit({ heavy: en.big, pan });
   else sfx.death({ big: en.big, pan });
   addPoints(Math.round(def.points * (1 + camp.tier * 0.5) * (1 + (camp.threat?.rank ?? 0) * 0.08) / 10) * 10, def.name, true);
   gainWeaponXp(def.boss ? 120 : def.elite ? 55 : 22, weapon(), () => applyWeapon());
