@@ -60,9 +60,8 @@ interface PortalSpot {
   x: number; z: number; ry: number; label: string;
 }
 
-/** Curated scenic overworld spots where random dungeon portals can open. */
+/** Curated scenic overworld spots where random dungeon portals can open (never fixed to one spot). */
 const PORTAL_SPOTS: PortalSpot[] = [
-  { x: 22, z: -8, ry: -Math.PI * 0.35, label: 'El Claro del Santuario' },
   { x: 135, z: 225, ry: 0.4, label: 'Valle de los Cerezos' },
   { x: 355, z: 95, ry: -0.9, label: 'Bosque de Bambú' },
   { x: -235, z: 130, ry: 0.8, label: 'Orilla del Lago Espejo' },
@@ -72,7 +71,13 @@ const PORTAL_SPOTS: PortalSpot[] = [
   { x: 95, z: 445, ry: -0.6, label: 'Cementerio de las Linternas' },
   { x: 560, z: 620, ry: -0.8, label: 'Llanura de los Susurros' },
   { x: -490, z: -760, ry: 0.6, label: 'Ruinas de Takamori' },
-  { x: 205, z: -165, ry: -0.5, label: 'Afueras de Aldea de Kiri' }
+  { x: 205, z: -165, ry: -0.5, label: 'Afueras de Aldea de Kiri' },
+  { x: -340, z: -310, ry: 0.9, label: 'Altos de los Pinos' },
+  { x: 740, z: -220, ry: -1.1, label: 'Afueras de Pueblo de Asagiri' },
+  { x: -760, z: -410, ry: 0.3, label: 'Lindes del Bosque Negro' },
+  { x: 340, z: 890, ry: -0.7, label: 'Pedregal de los Cuervos' },
+  { x: -820, z: 150, ry: 1.2, label: 'Riscos del Viento' },
+  { x: 280, z: -860, ry: -0.4, label: 'Canchal del Norte' }
 ];
 
 // ------------------------------------------------------------ 3 Distinct Dungeon Layout Archetypes
@@ -504,29 +509,27 @@ function compassDir(dx: number, dz: number): string {
   return dirs[Math.round(deg / 45) % 8];
 }
 
-function pickNextVariant(initial: boolean): ActiveVariant {
-  if (initial) {
-    return {
-      archetype: ARCHETYPE_FORTALEZA,
-      boss: DUNGEON_BOSSES[0],
-      mirrorX: false,
-      spot: PORTAL_SPOTS[0]
-    };
-  }
-  // Pick a different archetype, different boss, random mirror, and different overworld spot
-  const otherArchs = ARCHETYPES.filter(a => a.id !== activeVariant.archetype.id);
+let lastArchId: DungeonArchetype['id'] | null = null;
+let lastBossKind: EnemyKind | null = null;
+let lastSpotLabel: string | null = null;
+
+function pickNextVariant(): ActiveVariant {
+  const otherArchs = lastArchId ? ARCHETYPES.filter(a => a.id !== lastArchId) : ARCHETYPES;
   const archetype = otherArchs[Math.floor(Math.random() * otherArchs.length)];
-  const otherBosses = DUNGEON_BOSSES.filter(b => b.kind !== activeVariant.boss.kind);
+  const otherBosses = lastBossKind ? DUNGEON_BOSSES.filter(b => b.kind !== lastBossKind) : DUNGEON_BOSSES;
   const boss = otherBosses[Math.floor(Math.random() * otherBosses.length)];
-  const otherSpots = PORTAL_SPOTS.filter(s => s.label !== activeVariant.spot.label);
+  const otherSpots = lastSpotLabel ? PORTAL_SPOTS.filter(s => s.label !== lastSpotLabel) : PORTAL_SPOTS;
   const spot = otherSpots[Math.floor(Math.random() * otherSpots.length)];
   const mirrorX = Math.random() < 0.5;
+  lastArchId = archetype.id;
+  lastBossKind = boss.kind;
+  lastSpotLabel = spot.label;
   return { archetype, boss, mirrorX, spot };
 }
 
-export function spawnOverworldPortal(initial = false, announce = !initial) {
+export function spawnOverworldPortal(_initial = false, announce = true) {
   destroyOverworldPortal();
-  activeVariant = pickNextVariant(initial);
+  activeVariant = pickNextVariant();
   const { spot, boss, archetype } = activeVariant;
   const y = groundY(spot.x, spot.z);
   overworldPortal = buildPortalGateway(scene, spot.x, y, spot.z, spot.ry, boss.portalColors, true);
@@ -853,8 +856,8 @@ function spawnDungeonRoom(camp: Camp) {
   camp.active = true;
   for (const [idx, kind] of camp.roster.entries()) {
     const isMainBoss = kind === camp.boss;
-    const angle = (idx / Math.max(1, camp.roster.length)) * Math.PI * 2 + 0.4;
-    const dist = isMainBoss ? 0 : rnd(3.2, Math.min(8.0, camp.r * 0.55));
+    const angle = (idx / Math.max(1, camp.roster.length)) * Math.PI * 2 + rnd(-0.25, 0.25);
+    const dist = isMainBoss ? 0 : rnd(2.8, Math.min(10.5, camp.r * 0.72));
     const p = {
       x: camp.x + Math.cos(angle) * dist,
       z: camp.z + Math.sin(angle) * dist
@@ -915,6 +918,7 @@ export function onDungeonCampCleared(camp: Camp): boolean {
 function startInteriorSession(isKuro: boolean) {
   if (state.inDungeon || !state.playing || state.dead || state.menu) return;
   inKuroCastle = isKuro;
+  state.inKuroCastle = isKuro;
   buildDungeonGeometry();
 
   const { archetype, boss } = currentInterior();
@@ -983,6 +987,7 @@ export function exitDungeon(silent = false, targetPos?: THREE.Vector3) {
   clearDungeonEntities();
   state.inDungeon = false;
   inKuroCastle = false;
+  state.inKuroCastle = false;
   state.indoors = false;
   if (dungeonGroup) dungeonGroup.visible = false;
 
@@ -1040,6 +1045,7 @@ export function resetDungeon() {
     state.inDungeon = false;
   }
   inKuroCastle = false;
+  state.inKuroCastle = false;
   kuroConquered = false;
   disposeDungeonGeometry();
   run.bossDefeated = false;

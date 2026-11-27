@@ -36,6 +36,7 @@ export const state = {
   indoors: false,
   // inside the portal dungeon mission (La Fortaleza Abismal, dungeon.ts)
   inDungeon: false,
+  inKuroCastle: false,
   // An open menu pauses the fight. Two technique slots, each with its own charge (0..1): P (technique, special)
   // and J (technique2, special2). `casting` is the last one cast: its rank sets the damage (progression.ts).
   menu: null as MenuId | null,

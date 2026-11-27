@@ -18,7 +18,6 @@ import { buildSettlements } from './settlements';
 import { buildCanyons } from './canyons';
 import { buildMesas } from './mesas';
 import { buildTemples } from './temple-grounds';
-import { isKuroCastleInterior } from './dungeon';
 import { player, state } from './state';
 import { rnd } from './utils';
 import { sfx } from './sfx';
@@ -211,7 +210,7 @@ const ATMOS = {
 let atmosRain = -1;
 let dungeonAtmos = 0; // 0 = overworld, 1 = portal dungeon, 2 = kuro castle interior
 function applyDungeonAtmosphere() {
-  const kuro = isKuroCastleInterior();
+  const kuro = state.inDungeon && state.inKuroCastle;
   dungeonAtmos = kuro ? 2 : 1;
   sky.visible = false;
   if (kuro) {
@@ -523,7 +522,7 @@ updateChunks(player.pos.x, player.pos.z, 99);
 
 /** per frame: stream forest chunks, hide far landmarks, hand the lantern lights to the nearest lanterns */
 export function updateWorld() {
-  const wantAtmos = state.inDungeon ? (isKuroCastleInterior() ? 2 : 1) : 0;
+  const wantAtmos = state.inDungeon ? (state.inKuroCastle ? 2 : 1) : 0;
   if (wantAtmos !== dungeonAtmos) {
     if (wantAtmos) applyDungeonAtmosphere();
     else { scene.environment = sunsetMode ? sunsetEnv : nightEnv; applyAtmosphere(state.rainAmt); }
