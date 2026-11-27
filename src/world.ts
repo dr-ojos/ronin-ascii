@@ -208,7 +208,31 @@ const ATMOS = {
   }
 };
 let atmosRain = -1;
+let dungeonAtmos = false;
+function applyDungeonAtmosphere() {
+  dungeonAtmos = true;
+  sky.visible = false;
+  moonLight.color.setHex(0x6e6aa8);
+  moonLight.intensity = 1.65;
+  hemiLight.color.setHex(0x4c4878);
+  hemiLight.groundColor.setHex(0x16121e);
+  hemiLight.intensity = 0.85;
+  rimLight.color.setHex(0x8c7cff);
+  rimLight.intensity = 1.5;
+  keyLight.color.setHex(0xdcc8ff);
+  keyLight.intensity = 4.2;
+  renderer.toneMappingExposure = 1.16;
+  (scene.background as THREE.Color).setHex(0x07060e);
+  if (scene.fog instanceof THREE.FogExp2) {
+    scene.fog.color.setHex(0x0d0b1a);
+    scene.fog.density = 0.019;
+  }
+  scene.environment = nightEnv;
+}
 function applyAtmosphere(r: number) {
+  if (state.inDungeon) { applyDungeonAtmosphere(); return; }
+  dungeonAtmos = false;
+  sky.visible = true;
   atmosRain = r;
   const a = sunsetMode ? ATMOS.sunsetDry : ATMOS.nightDry;
   const b = sunsetMode ? ATMOS.sunsetRain : ATMOS.nightRain;
@@ -478,8 +502,14 @@ updateChunks(player.pos.x, player.pos.z, 99);
 
 /** per frame: stream forest chunks, hide far landmarks, hand the lantern lights to the nearest lanterns */
 export function updateWorld() {
-  updateChunks(player.pos.x, player.pos.z, 1);
-  updateStructures(player.pos.x, player.pos.z);
+  if (state.inDungeon !== dungeonAtmos) {
+    if (state.inDungeon) applyDungeonAtmosphere();
+    else { scene.environment = sunsetMode ? sunsetEnv : nightEnv; applyAtmosphere(state.rainAmt); }
+  }
+  if (!state.inDungeon) {
+    updateChunks(player.pos.x, player.pos.z, 1);
+    updateStructures(player.pos.x, player.pos.z);
+  }
   updateLights(player.pos.x, player.pos.z, state.time);
 }
 /** what the camera may have to pull in front of, around the player */
@@ -519,6 +549,7 @@ function toggleWeather() { // the cycle's own change: eases in / out instead of 
   state.rainT = state.raining ? rnd(SHOWER[0], SHOWER[1]) : rnd(DRY[0], DRY[1]);
 }
 export function updateRain(dt: number) {
+  if (state.inDungeon) { rain.visible = false; return; }
   state.rainT -= dt;
   if (state.rainT <= 0) toggleWeather();
   const target = state.raining ? 1 : 0, step = dt / FADE;
@@ -542,6 +573,8 @@ export function updateRain(dt: number) {
 
 // petals follow the player area
 export function updatePetals(dt: number) {
+  petals.visible = !state.inDungeon;
+  if (state.inDungeon) return;
   for (let i = 0; i < PETALS; i++) {
     const j = i * 3, s = petalSeed[i];
     petalPos[j] += (Math.sin(state.time * 0.9 + s) * 0.6 + 0.5) * dt;

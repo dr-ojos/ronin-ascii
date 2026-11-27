@@ -14,6 +14,7 @@ import { banner, bannerMat } from './banner';
 import { groundY, lakeLevel } from './terrain';
 import { riverDepth, lakeWater, ribbonWater, RIVER_FLOW, WATER_GLSL, rippleUniforms, weatherUniforms } from './water';
 import { ROADS, RIVER, RIVER_BANK_PAD, riverBankOffset, LAKES, BRIDGES, TORII_PATH, FOOTPRINTS, lakeRadius, lineDist, place, seeded, type P2, type Line } from './map';
+import { dungeonFloorY, state } from './state';
 
 const TAU = Math.PI * 2;
 let R = seeded(7331);
@@ -386,6 +387,7 @@ function archY(b: typeof BRIDGES[number], lz: number) { const t = lz / (b.len / 
 export const floors: ((x: number, z: number) => number | null)[] = [];
 /** walkable surface: the ground, a raised floor, or the deck of a bridge */
 export function surfaceY(x: number, z: number) {
+  if (state.inDungeon) return dungeonFloorY(x, z);
   const gy = groundY(x, z);
   for (const f of floors) { const y = f(x, z); if (y !== null) return Math.max(gy, y); }
   for (const b of BRIDGES) {
@@ -400,6 +402,7 @@ export function surfaceY(x: number, z: number) {
 }
 /** how deep in the water (the river, or the shallow pond of the shrine) a walker stands (0..1), 0 on a bridge or dry land */
 export function wadeDepth(x: number, z: number) {
+  if (state.inDungeon) return 0;
   const d = riverDepth(x, z);
   if (d <= 0) return pondDepth(x, z);
   return surfaceY(x, z) > groundY(x, z) + 0.2 ? 0 : d;

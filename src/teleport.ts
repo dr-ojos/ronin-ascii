@@ -9,6 +9,7 @@ import { sfx } from './sfx';
 import { skyFlash } from './special';
 import { player, state } from './state';
 import { surfaceY } from './structures';
+import { exitDungeon } from './dungeon';
 
 /** right outside the stone steps of Masa's shop, facing the doorway and signboard */
 export const SHOP_EXTERIOR = new THREE.Vector3(0, 0, -15.5);
@@ -46,6 +47,10 @@ export function tryTeleportToShop(): boolean {
     sfx.warn();
     showMsg(`Teletransporte recargando · ${Math.ceil(cooldown)} s`, 1.4);
     return false;
+  }
+
+  if (state.inDungeon) {
+    exitDungeon(true, SHOP_EXTERIOR);
   }
 
   // Departure talisman burst

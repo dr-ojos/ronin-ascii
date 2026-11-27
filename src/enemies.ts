@@ -153,6 +153,12 @@ export const KINDS: Record<EnemyKind, KindDef> = {
                      robe: 0x3b170a, maskC: 0xe68422,
                      moves: ['quake', 'fire', 'crush', 'slam'],
                      boss: { aura: 0xff9828, enraged: ['cataclysm', 'quake', 'shockwave', 'fire'], phase3: ['cataclysm', 'quake', 'shockwave', 'fire', 'eclipseSlash'] } },
+  // --- final dungeon boss of La Fortaleza Abismal (dungeon.ts) ---
+  senorCripta: { name: 'Shōgun de la Cripta', scale: 1.92, hp: 46, speed: [3.3, 3.6], dmg: 31, reach: 4.0, windup: 0.68, heavy: true, points: 2200, glyph: '♛',
+                 look: { tint: 0x161224, mask: 0x9b3dff, eye: 0x62f2ff, weapon: 'sword', crest: 'horns', plated: true, spikes: true, thirdEye: true, cape: true },
+                 robe: 0x24183a, maskC: 0x9b3dff,
+                 moves: ['bladeRush', 'eclipseSlash', 'quake', 'fire'],
+                 boss: { aura: 0xa45eff, enraged: ['whirlwind', 'eclipseSlash', 'storm', 'bladeRush', 'quake'] } },
   // --- the sub-bosses that guard chests (encounters.ts) ---
   // a spear master: three lunges in a row, barely a breath between them, then a long pause (your turn)
   kensei:   { name: 'kensei de la lanza', scale: 1.14, hp: 9, speed: [4.6, 4.6], dmg: 13, reach: 2.5, windup: 0.42, heavy: false, points: 450, glyph: 'K',

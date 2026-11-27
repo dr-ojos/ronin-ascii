@@ -2,6 +2,7 @@
 import { battleLine, battleStatus } from './battle';
 import { affixLabel, bossHud } from './boss-mechanics';
 import { liberationHud, liberationStatus, liberatedCount } from './liberation';
+import { dungeonHud, dungeonStatus } from './dungeon';
 import { activeWorldEvent, worldEventHud } from './world-events';
 import { player, state } from './state';
 import { camps, discovered, placeCount, chestsLeft } from './encounters';
@@ -231,9 +232,16 @@ function updateTHud() {
   r.ups.hidden = !ups;
   if (ups) r.ups.innerHTML = ups.split(' · ').map(u => `<span class="th-up">${esc(u)}</span>`).join('');
 
-  const m = liberationStatus();
-  r.mission.hidden = !m;
-  if (m) {
+  const dng = dungeonStatus();
+  const m = dng ? null : liberationStatus();
+  r.mission.hidden = !dng && !m;
+  if (dng) {
+    r.mTitle.textContent = `MAZMORRA · FORTALEZA ABISMAL`;
+    r.mBar.max = Math.max(1, dng.totalRooms);
+    r.mBar.value = dng.clearedRooms;
+    const bossTxt = dng.returnPortalOpen ? ' · Portal de regreso abierto' : ' · Jefe: Shōgun de la Cripta';
+    r.mSub.textContent = `${dng.zone} · Salas ${dng.clearedRooms}/${dng.totalRooms} · Cofres ${dng.openedChests}/${dng.totalChests}${bossTxt}`;
+  } else if (m) {
     r.mTitle.textContent = `MISIÓN · LIBERAR ${m.name.toUpperCase()}`;
     r.mBar.max = Math.max(1, m.total);
     r.mBar.value = m.cleared;
@@ -352,7 +360,7 @@ export function updateHud(dt: number) {
     `BAJAS ${state.kills}   GUARIDAS ${cleared}/${lairs.length}   <span class="y">${threatLabel()}</span>\n` +
     `COFRES ${state.chests}/${state.chests + chestsLeft()}   LUGARES ${discovered.size}/${placeCount()}   ${towns}\n` +
     (ups ? `<span class="y">${ups}</span>\n` : '') +
-    liberationHud() + worldEventHud() + battleLine() + foeBar +
+    (state.inDungeon ? dungeonHud() : liberationHud() + worldEventHud()) + battleLine() + foeBar +
     `${gain}\n` +
     `<span class="d">esquiva ${player.dashCd > 0 ? '·'.repeat(Math.ceil(player.dashCd * 8)) : 'lista'}${sfx.muted ? '  ·  sin sonido' : ''}</span>${player.snareT > 0 ? ' <span class="r">· telaraña</span>' : ''}`;
 }

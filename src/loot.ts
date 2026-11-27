@@ -6,7 +6,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, camera } from './renderer';
 import { M, CLS, tagMat } from './materials';
-import { addCollider } from './physics';
+import { addCollider, GLOBAL } from './physics';
 import { addLight, removeLights, type LightAnchor } from './lights';
 import { surfaceY } from './structures';
 import { burst } from './fx';
@@ -24,11 +24,16 @@ import { rnd } from './utils';
 import type { Chest, EnemyKind } from './types';
 
 export const chests: Chest[] = [];
-export function makeChest(x: number, z: number, ry: number, kind: Chest['kind'], tier: number, sealed: boolean): Chest {
+export function makeChest(x: number, z: number, ry: number, kind: Chest['kind'], tier: number, sealed: boolean, owner: unknown = GLOBAL): Chest {
   const c: Chest = { x, z, ry, kind, tier, state: sealed ? 'sealed' : 'closed', openT: 0 };
-  addCollider({ x, z, r: kind === 'jefe' ? 0.9 : kind === 'guardian' ? 0.8 : 0.7 });
+  addCollider({ x, z, r: kind === 'jefe' ? 0.9 : kind === 'guardian' ? 0.8 : 0.7 }, owner);
   chests.push(c);
   return c;
+}
+export function removeChest(c: Chest) {
+  dropChest(c);
+  const i = chests.indexOf(c);
+  if (i >= 0) chests.splice(i, 1);
 }
 
 // ------------------------------------------------------------ the chest model
@@ -211,7 +216,11 @@ export function unseal(c: Chest) {
   }
 }
 export function resetChests() {
-  for (const c of chests) { dropChest(c); c.openT = 0; c.state = c.kind === 'oculto' ? 'closed' : 'sealed'; }
+  for (let i = chests.length - 1; i >= 0; i--) {
+    const c = chests[i];
+    if (c.dungeon) { dropChest(c); chests.splice(i, 1); continue; }
+    dropChest(c); c.openT = 0; c.state = c.kind === 'oculto' ? 'closed' : 'sealed';
+  }
   while (pickups.length) removePickup(pickups.length - 1);
 }
 

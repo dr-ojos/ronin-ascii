@@ -12,6 +12,7 @@ import { showMsg } from './hud';
 import { discovered, camps } from './encounters';
 import { isTownLiberated, isTownMissionStarted, townCampsOf, type TownId } from './liberation';
 import { activeWorldEvent } from './world-events';
+import { OVERWORLD_PORTAL, dungeonMapData, dungeonZoneName } from './dungeon';
 import { POIS } from './landmarks';
 import { chests } from './loot';
 import { smithPos } from './shop';
@@ -260,6 +261,31 @@ function stamp(ctx: CanvasRenderingContext2D, proj: Proj, fs: number, isBig: boo
   }
   // Masa's shop, in the shrine at the start
   if (near(smithPos.x, smithPos.z, 400) && fogAt(smithPos.x, smithPos.z) >= 128) { ctx.fillStyle = '#8fb4ff'; text('†', smithPos.x, smithPos.z); }
+  // Portal to La Fortaleza Abismal (dungeon mission)
+  {
+    const [dx, dy] = proj(OVERWORLD_PORTAL.x, OVERWORLD_PORTAL.z);
+    const pulse = (state.time * 0.85) % 1;
+    ctx.save();
+    ctx.strokeStyle = '#b97aff';
+    ctx.lineWidth = isBig ? 1.8 : 1.4;
+    ctx.globalAlpha = (1 - pulse) * 0.8;
+    ctx.beginPath();
+    ctx.arc(dx, dy, fs * (0.55 + pulse * 0.9), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#c996ff';
+    ctx.font = `bold ${Math.round(fs * 1.05)}px ${FONT}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('◎', dx, dy);
+    if (isBig) {
+      ctx.font = `bold ${Math.round(fs * 0.85)}px ${FONT}`;
+      ctx.textAlign = 'left';
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+      ctx.strokeText('portal fortaleza', dx + fs * 0.8, dy);
+      ctx.fillText('portal fortaleza', dx + fs * 0.8, dy);
+    }
+    ctx.restore();
+  }
   // what moves: only what is close enough to see
   for (const e of enemies) {
     const x = e.g.position.x, z = e.g.position.z;
@@ -309,9 +335,89 @@ const MINI_PX = 0.8;                        // metres per CSS pixel
 const MINI_CELL = 6;                        // CSS pixels per character
 let miniGrid: Grid | null = null;
 
+function drawDungeonCanvas(ctx: CanvasRenderingContext2D, W: number, H: number, pxPerM: number, centerOnPlayer: boolean) {
+  const data = dungeonMapData();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#07060e';
+  ctx.fillRect(0, 0, W, H);
+  const cx = centerOnPlayer ? player.pos.x : data.ox;
+  const cz = centerOnPlayer ? player.pos.z : data.oz - 186;
+  const cr = centerOnPlayer ? Math.cos(mapYaw) : 1;
+  const sr = centerOnPlayer ? Math.sin(mapYaw) : 0;
+  const proj: Proj = (x, z) => {
+    const u = (x - cx) * pxPerM, v = (z - cz) * pxPerM;
+    return [W / 2 + u * cr - v * sr, H / 2 + u * sr + v * cr];
+  };
+  // Draw dungeon rooms & corridors
+  const themeFill: Record<string, string> = { castle: '#2c3040', cave: '#242b38', bridge: '#3d2830', boss: '#321c3d' };
+  const themeStroke: Record<string, string> = { castle: '#6b728e', cave: '#4eaec4', bridge: '#ff8f40', boss: '#b866ff' };
+  for (const r of data.rects) {
+    const corners: [number, number][] = [
+      proj(data.ox + r.x0, data.oz + r.z0),
+      proj(data.ox + r.x1, data.oz + r.z0),
+      proj(data.ox + r.x1, data.oz + r.z1),
+      proj(data.ox + r.x0, data.oz + r.z1)
+    ];
+    ctx.beginPath();
+    ctx.moveTo(corners[0][0], corners[0][1]);
+    for (let i = 1; i < 4; i++) ctx.lineTo(corners[i][0], corners[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = themeFill[r.theme];
+    ctx.fill();
+    ctx.strokeStyle = themeStroke[r.theme];
+    ctx.lineWidth = centerOnPlayer ? 1.5 : 2;
+    ctx.stroke();
+  }
+  const fs = centerOnPlayer ? 12 : 15;
+  ctx.font = `bold ${fs}px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Chests
+  for (const c of data.chests) {
+    if (c.state === 'open') continue;
+    const [x, y] = proj(c.x, c.z);
+    ctx.fillStyle = c.state === 'sealed' ? '#9e8452' : '#ffd25a';
+    ctx.fillText('$', x, y);
+  }
+  // Entrance & Victory portals
+  {
+    const [x, y] = proj(data.entrancePortal.x, data.entrancePortal.z);
+    ctx.fillStyle = '#a478ff';
+    ctx.fillText('◎', x, y);
+  }
+  if (data.victoryPortal) {
+    const [x, y] = proj(data.victoryPortal.x, data.victoryPortal.z);
+    ctx.fillStyle = '#52ffb4';
+    ctx.fillText('✦', x, y);
+  }
+  // Enemies
+  for (const e of enemies) {
+    const [x, y] = proj(e.g.position.x, e.g.position.z);
+    ctx.fillStyle = KINDS[e.kind].boss ? '#ff44aa' : COL.oni;
+    ctx.fillText(KINDS[e.kind].glyph, x, y);
+  }
+  // Player arrow
+  const [px, py] = proj(player.pos.x, player.pos.z);
+  const u = Math.sin(player.face), v = Math.cos(player.face);
+  drawPlayer(ctx, px, py, u * cr - v * sr, u * sr + v * cr, fs * 0.55);
+  if (!centerOnPlayer) {
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.font = `bold 13px ${FONT}`; ctx.fillStyle = '#c996ff';
+    ctx.fillText('MAZMORRA · LA FORTALEZA ABISMAL', 14, 12);
+    ctx.fillStyle = '#9aa3b5'; ctx.font = `bold 12px ${FONT}`;
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('◎ portal entrada  ·  $ cofres  ·  ✦ portal de regreso  ·  [N] cerrar', 14, H - 12);
+  }
+}
+
 function drawMinimap() {
   const dpr = dprNow();
   if (mini.width !== Math.round(MW * dpr)) { mini.width = Math.round(MW * dpr); mini.height = Math.round(MH * dpr); }
+  if (state.inDungeon) {
+    miniX.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawDungeonCanvas(miniX, MW, MH, 1.85, true);
+    return;
+  }
   const g = miniGrid ??= new Grid(MINI_PX * MINI_CELL);
   const ctx = miniX, W = MW, H = MH, D = Math.ceil(Math.hypot(W, H)) + 8;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -458,6 +564,11 @@ function drawBigMap() {
     bigEl.width = bigEl.height = Math.round(V.side * V.dpr);
     bigEl.style.width = bigEl.style.height = `${V.side}px`;
   }
+  if (state.inDungeon) {
+    bigX.setTransform(V.dpr, 0, 0, V.dpr, 0, 0);
+    drawDungeonCanvas(bigX, V.side, V.side, V.side / 425, false);
+    return;
+  }
   // the static layer is rebuilt when it is stale (at most twice a second while you walk)
   if (cacheFogV < 0 || !wasOpen || (cacheFogV !== fogVersion && Math.abs(state.time - cacheT) > 0.5)) renderBig(V);
   bigX.setTransform(1, 0, 0, 1, 0, 0); bigX.drawImage(cache, 0, 0);
@@ -515,6 +626,16 @@ export function updateMinimap(dt: number) {
   if (t > 0) return; t = 0.05;
   paintQueued(6);
   if (saveT <= 0) { saveT = 4; saveMinimap(); }
+  if (state.inDungeon) {
+    zone.textContent = `${dungeonZoneName().toLowerCase()} · mazmorra`;
+    if (!state.photo) mapYaw = state.yaw;
+    drawMinimap();
+    const mapOpen = state.bigMap && !state.menu;
+    if (mapOpen) drawBigMap();
+    wasOpen = mapOpen;
+    bigEl.style.display = mapOpen ? 'block' : 'none';
+    return;
+  }
   // where am I? (smallest named place that contains the player)
   let here: Place | null = null;
   for (const p of PLACES) if (Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < p.r && (!here || p.r < here.r)) here = p;

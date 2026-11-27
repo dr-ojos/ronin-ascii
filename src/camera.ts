@@ -7,7 +7,7 @@ import { nearBlockers, moonDir, keyLight } from './world';
 import { formKey } from './manga-art';
 import { groundY } from './terrain';
 import { shopCameraPos, shopFocus, shopStageActive } from './shop-stage';
-import { player, state } from './state';
+import { dungeonFloorY, player, state } from './state';
 import { rnd } from './utils';
 import { bossFocus, cineCam } from './cinematic';
 
@@ -49,7 +49,7 @@ export function updateCamera(dt: number) {
   const basePt = state.photo ? (0.3 + Math.min(0.5, (state.photoDist - 3.2) * 0.025)) * (1 - close) - 0.03 * close : dress ? 0.32 : state.pitch + (cine?.pitch ?? 0);
   const pt = THREE.MathUtils.lerp(basePt, 0.22, fw), cp = Math.cos(pt);
   // inside Masa's shop the camera comes in closer (its roof is hidden, shop.ts)
-  const camDist = (state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.camDistUser) * (cine?.dist ?? 1) * (1 + 0.15 * fw);
+  const camDist = (state.photo ? state.photoDist : dress ? 4.4 : state.indoors ? Math.min(state.camDistUser, 11) : state.inDungeon ? Math.min(state.camDistUser, 19) : state.camDistUser) * (cine?.dist ?? 1) * (1 + 0.15 * fw);
   camera.position.set(
     camTarget.x + Math.sin(state.yaw) * cp * camDist,
     camTarget.y + Math.sin(pt) * camDist,
@@ -65,7 +65,7 @@ export function updateCamera(dt: number) {
   const hit = camRay.intersectObjects(nearBlockers(player.pos.x, player.pos.z), true)[0];
   if (hit && pt < 0.55) camera.position.copy(camTarget).addScaledVector(tmp, Math.max(1.5, hit.distance - 0.4));
   // never dig into a hillside
-  const gy = groundY(camera.position.x, camera.position.z) + 1.2;
+  const gy = (state.inDungeon ? dungeonFloorY(camera.position.x, camera.position.z) : groundY(camera.position.x, camera.position.z)) + 1.2;
   if (camera.position.y < gy) camera.position.y = gy;
   // the title screen keeps its panel on the left: aim a little left of the warrior so he stands on the right
   if (state.showcase && !state.menu && innerWidth > 820) {

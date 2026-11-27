@@ -33,6 +33,8 @@ export const state = {
   weaponLevels: {} as Record<string, number>, weaponXp: {} as Record<string, number>,
   // inside Masa's shop (the shrine at the start): its roof hides and the camera comes closer
   indoors: false,
+  // inside the portal dungeon mission (La Fortaleza Abismal, dungeon.ts)
+  inDungeon: false,
   // An open menu pauses the fight. Two technique slots, each with its own charge (0..1): P (technique, special)
   // and J (technique2, special2). `casting` is the last one cast: its rank sets the damage (progression.ts).
   menu: null as MenuId | null,
@@ -52,3 +54,13 @@ export const state = {
 
 /** keys currently held, by KeyboardEvent.code */
 export const keys: Record<string, boolean> = {};
+
+/** Isolated coordinate origin and walkable floor elevation for La Fortaleza Abismal (dungeon.ts). */
+export const DUNGEON_ORIGIN = { x: 3000, z: 0 };
+export function dungeonFloorY(wx: number, wz: number): number {
+  const lz = wz - DUNGEON_ORIGIN.z;
+  if (lz >= -326) return 0;
+  if (lz > -338) return ((lz + 326) / -12) * 1.4;
+  if (lz <= -366 && Math.abs(wx - DUNGEON_ORIGIN.x) < 9.5) return 1.9;
+  return 1.4;
+}

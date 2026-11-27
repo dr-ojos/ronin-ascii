@@ -6,6 +6,7 @@ import { toggleSurfaceGlyphs } from './surface-glyphs';
 import { tryAttack, tryDash, tryJump } from './player';
 import { reset } from './encounters';
 import { tryOpen } from './loot';
+import { tryUseDungeonPortal } from './dungeon';
 import { trySpecial } from './special';
 import { cycleRangedElement, tryElementalOrb } from './elemental-orb';
 import { cycleTechnique } from './techniques';
@@ -70,7 +71,7 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyV') tryDash();
   if (!e.repeat && e.code === 'KeyK' && state.playing && !state.dead) tryAttack(false);
   if (!e.repeat && e.code === 'KeyL' && state.playing && !state.dead) tryAttack(true);
-  if (!e.repeat && e.code === 'KeyE' && !tryTalk() && !tryTalkTemple()) tryOpen();
+  if (!e.repeat && e.code === 'KeyE' && !tryTalk() && !tryTalkTemple() && !tryUseDungeonPortal()) tryOpen();
   if (!e.repeat && e.code === 'KeyQ' && state.playing && !state.dead) {
     const w = cycleWeapon();
     showMsg(w ? `— ${weaponDisplayName(w)} —` : `solo tienes ${weaponDisplayName(weapon())} · Masa vende más en la casa del santuario`, w ? 1.2 : 2.2);

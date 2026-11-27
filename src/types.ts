@@ -67,6 +67,7 @@ export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 
   | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianViento' | 'guardianFuego' | 'guardianAgua' | 'guardianRayo' | 'shuten' | 'enma' | 'senorBosque' | 'yukiOnna'
   | 'kagutsuchi' | 'daimyoHueso' | 'taikoDemonio'
   | 'gashadokuro' | 'susanooTempestad' | 'amaterasuCeniza'
+  | 'senorCripta'
   | 'kensei' | 'tengu' | 'raijin';
 export type Affix = 'acorazado' | 'regenerador' | 'furioso' | 'gelido' | 'invocador' | 'errante' | 'espinoso';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
@@ -159,6 +160,8 @@ export interface Camp {
   town?: 'aldea' | 'pueblo';
   /** random colossal boss world event id (world-events.ts) */
   worldEvent?: string;
+  /** dungeon room id this encounter belongs to (dungeon.ts) */
+  dungeonRoom?: string;
 }
 /** a chest in the world (loot.ts) */
 export interface Chest {
@@ -169,6 +172,7 @@ export interface Chest {
   g?: THREE.Object3D;
   lid?: THREE.Object3D;
   openT: number;
+  dungeon?: boolean;
 }
 export interface AnimatedEnemy extends EnemyBase { model: EnemyModel; move: number }
 /** procedural oni (fallback): flashes through its two materials */

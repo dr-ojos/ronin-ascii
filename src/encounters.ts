@@ -24,6 +24,7 @@ import { sfx } from './sfx';
 import { resetSpecial } from './special';
 import { isTownLiberated, registerTownCamp, resetLiberation, type TownId } from './liberation';
 import { activeWorldEvent, resetWorldEvents } from './world-events';
+import { resetDungeon } from './dungeon';
 import { player, state } from './state';
 import { rnd } from './utils';
 import type { Camp, EnemyKind } from './types';
@@ -273,6 +274,7 @@ export function reset() {
   resetScore();
   resetLiberation();
   resetWorldEvents();
+  resetDungeon();
   discovered.clear(); discovered.add('claro');
   ambushT = rnd(20, 35);
 }
@@ -302,6 +304,11 @@ let scan = 0;
 export function updateEncounters(dt: number) {
   updateScore(dt);
   updateLoot(dt);
+  if (state.inDungeon) {
+    const fighting = enemies.some(e => e.state !== 'idle' && e.state !== 'return');
+    if (!fighting && state.time - state.lastHurt > 5) player.hp = Math.min(player.maxHp, player.hp + 4 * dt);
+    return;
+  }
   // patrols walk their road while calm (their oni follow their moving home)
   for (const c of camps) if (c.route) {
     const calm = !c.active || enemies.every(e => e.camp !== c || e.state === 'idle');
@@ -336,4 +343,4 @@ export function updateEncounters(dt: number) {
 }
 
 /** chests nobody has opened yet (for the HUD) */
-export const chestsLeft = () => chests.filter(c => c.state !== 'open').length;
+export const chestsLeft = () => chests.filter(c => !c.dungeon && c.state !== 'open').length;

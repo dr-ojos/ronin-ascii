@@ -13,9 +13,8 @@ function withWhiteColors(g: THREE.BufferGeometry) {
   return g;
 }
 
-// Shared primitives (spider + shadow ring + small eye/nostril accents)
+// Shared primitives (shadow ring + small eye/nostril/dewclaw accents)
 const SPHERE = withWhiteColors(new THREE.SphereGeometry(1, 12, 9));
-const LIMB = withWhiteColors(new THREE.CylinderGeometry(0.74, 1, 1, 7));
 const CONE = withWhiteColors(new THREE.ConeGeometry(1, 1, 6));
 const RING = new THREE.RingGeometry(0.85, 1.05, 28).rotateX(-Math.PI / 2);
 
@@ -207,6 +206,57 @@ const scorpionGeo = {
   legTibia: crystalShardGeo(0.72, 0.040, 5)
 };
 
+// Sculpted Jorogumo / Tsuchigumo giant silk spider geometry
+const spiderGeo = {
+  // Swollen, organic, armored opisthosoma (abdomen) with dorsal ridge
+  abdomen: loftMesh([
+    { z: -1.16, y: 0.56, rx: 0.09, ryTop: 0.08, ryBot: 0.07, topPinch: 0.25, shadeTop: 0.72, shadeSide: 0.86, shadeBot: 0.68 },
+    { z: -0.96, y: 0.65, rx: 0.30, ryTop: 0.26, ryBot: 0.22, topPinch: 0.18, shadeTop: 0.82, shadeSide: 0.98, shadeBot: 0.70 },
+    { z: -0.66, y: 0.72, rx: 0.48, ryTop: 0.40, ryBot: 0.32, topPinch: 0.15, square: 0.14, shadeTop: 0.90, shadeSide: 1.05, shadeBot: 0.72 },
+    { z: -0.34, y: 0.66, rx: 0.42, ryTop: 0.34, ryBot: 0.26, topPinch: 0.20, shadeTop: 0.86, shadeSide: 1.00, shadeBot: 0.74 },
+    { z: -0.10, y: 0.56, rx: 0.17, ryTop: 0.14, ryBot: 0.12, shadeTop: 0.76, shadeSide: 0.90, shadeBot: 0.74 }
+  ], 16),
+  // Sculpted dorsal chitin carapace plates overlapping the abdomen
+  abdPlate: loftMesh([
+    { z: -0.13, y: 0.00, rx: 0.32, ryTop: 0.09, ryBot: 0.02, topPinch: 0.42, shadeTop: 0.95, shadeSide: 1.05, shadeBot: 0.80 },
+    { z:  0.00, y: 0.03, rx: 0.38, ryTop: 0.11, ryBot: 0.02, topPinch: 0.36, shadeTop: 1.02, shadeSide: 1.08, shadeBot: 0.82 },
+    { z:  0.12, y: 0.00, rx: 0.28, ryTop: 0.07, ryBot: 0.02, topPinch: 0.30, shadeTop: 0.92, shadeSide: 1.00, shadeBot: 0.78 }
+  ], 12),
+  // Glowing dorsal venom-silk sac crest
+  venomMark: loftMesh([
+    { z: -0.24, y: 0.00, rx: 0.05, ryTop: 0.03, ryBot: 0.01 },
+    { z: -0.10, y: 0.02, rx: 0.16, ryTop: 0.055, ryBot: 0.01, topPinch: 0.35 },
+    { z:  0.00, y: 0.015, rx: 0.07, ryTop: 0.035, ryBot: 0.01 },
+    { z:  0.11, y: 0.02, rx: 0.14, ryTop: 0.05, ryBot: 0.01, topPinch: 0.35 },
+    { z:  0.22, y: 0.00, rx: 0.04, ryTop: 0.025, ryBot: 0.01 }
+  ], 10),
+  // Armored prosoma (cephalothorax) with brow shield
+  thorax: loftMesh([
+    { z: -0.22, y: 0.00, rx: 0.20, ryTop: 0.15, ryBot: 0.11, topPinch: 0.22, shadeTop: 0.84, shadeSide: 0.98, shadeBot: 0.72 },
+    { z: -0.02, y: 0.03, rx: 0.33, ryTop: 0.22, ryBot: 0.16, topPinch: 0.24, square: 0.22, shadeTop: 0.92, shadeSide: 1.05, shadeBot: 0.76 },
+    { z:  0.20, y: 0.02, rx: 0.28, ryTop: 0.19, ryBot: 0.14, topPinch: 0.28, square: 0.18, shadeTop: 0.96, shadeSide: 1.04, shadeBot: 0.78 },
+    { z:  0.34, y: -0.02, rx: 0.18, ryTop: 0.12, ryBot: 0.09, topPinch: 0.18, shadeTop: 0.90, shadeSide: 0.98, shadeBot: 0.78 }
+  ], 14),
+  // Curved venom fangs (chelicerae) and grasping pedipalps
+  chelicera: loftMesh([
+    { z: 0.00, y: 0.00, rx: 0.068, ryTop: 0.075, ryBot: 0.068 },
+    { z: 0.08, y: -0.04, rx: 0.062, ryTop: 0.072, ryBot: 0.062 },
+    { z: 0.13, y: -0.10, rx: 0.042, ryTop: 0.046, ryBot: 0.040 }
+  ], 8),
+  fangL: taperTube([[0, 0, 0], [0.025, -0.08, 0.045], [-0.015, -0.18, 0.035], [-0.055, -0.24, -0.01]], 0.032, 0.004, 7, 10),
+  fangR: taperTube([[0, 0, 0], [-0.025, -0.08, 0.045], [0.015, -0.18, 0.035], [0.055, -0.24, -0.01]], 0.032, 0.004, 7, 10),
+  pedipalpL: taperTube([[0, 0, 0], [0.11, 0.04, 0.14], [0.15, -0.03, 0.30], [0.08, -0.13, 0.38]], 0.038, 0.011, 7, 10),
+  pedipalpR: taperTube([[0, 0, 0], [-0.11, 0.04, 0.14], [-0.15, -0.03, 0.30], [-0.08, -0.13, 0.38]], 0.038, 0.011, 7, 10),
+  spinneret: taperTube([[0, 0, 0], [0, -0.02, -0.10], [0, -0.05, -0.20]], 0.044, 0.012, 7, 8),
+  spine: taperTube([[0, 0, 0], [0, 0.07, -0.03], [0, 0.15, -0.09]], 0.026, 0.003, 6, 7),
+  // Sculpted multi-jointed arachnid leg segments (femur arches up & out, tibia+tarsus sweeps down to razor tip)
+  legFemurR: taperTube([[0, 0, 0], [0.22, 0.22, 0.01], [0.46, 0.36, 0.0], [0.62, 0.38, -0.01]], 0.068, 0.046, 8, 10, t => 0.056 + Math.sin(t * Math.PI) * 0.024),
+  legFemurL: taperTube([[0, 0, 0], [-0.22, 0.22, 0.01], [-0.46, 0.36, 0.0], [-0.62, 0.38, -0.01]], 0.068, 0.046, 8, 10, t => 0.056 + Math.sin(t * Math.PI) * 0.024),
+  legTibiaR: taperTube([[0, 0, 0], [0.16, -0.18, 0.0], [0.28, -0.52, 0.0], [0.34, -0.92, 0.0]], 0.048, 0.008, 7, 12, t => THREE.MathUtils.lerp(0.048, 0.007, Math.pow(t, 0.78))),
+  legTibiaL: taperTube([[0, 0, 0], [-0.16, -0.18, 0.0], [-0.28, -0.52, 0.0], [-0.34, -0.92, 0.0]], 0.048, 0.008, 7, 12, t => THREE.MathUtils.lerp(0.048, 0.007, Math.pow(t, 0.78))),
+  legKnee: withWhiteColors(new THREE.DodecahedronGeometry(0.064, 0))
+};
+
 // ------------------------------------------------------------ Helper builders
 
 interface LegRig {
@@ -217,6 +267,7 @@ interface LegRig {
   phase: number;
   baseUpperX: number;
   baseLowerX: number;
+  baseY: number;
 }
 
 function addMesh(
@@ -295,6 +346,9 @@ export function createBeast(look: BeastLook): EnemyModel {
   const flashMats: THREE.MeshStandardMaterial[] = [coat, trim, dark];
   const tailSegs: THREE.Group[] = [];
   const pincers: { arm: THREE.Group; finger: THREE.Group; side: number }[] = [];
+  const spiderFangs: { g: THREE.Group; side: number }[] = [];
+  const spiderPalps: { g: THREE.Group; side: number }[] = [];
+  let spiderGlowMat: THREE.MeshStandardMaterial | null = null;
   let crystalGlowMat: THREE.MeshPhysicalMaterial | null = null;
   let crystalBaseEmissive: THREE.Color | null = null;
 
@@ -303,12 +357,13 @@ export function createBeast(look: BeastLook): EnemyModel {
   root.add(ring);
 
   const legs: LegRig[] = [];
-  const addLeg = (x: number, y: number, z: number, side: number, front: boolean, phase: number, baseUpperX = 0, baseLowerX = 0) => {
+  const addLeg = (x: number, y: number, z: number, side: number, front: boolean, phase: number, baseUpperX = 0, baseLowerX = 0, baseY = 0) => {
     const g = new THREE.Group();
     g.position.set(x, y, z);
     g.rotation.x = baseUpperX;
+    g.rotation.y = baseY;
     body.add(g);
-    const rig: LegRig = { joint: g, side, front, phase, baseUpperX, baseLowerX };
+    const rig: LegRig = { joint: g, side, front, phase, baseUpperX, baseLowerX, baseY };
     legs.push(rig);
     return rig;
   };
@@ -400,20 +455,22 @@ export function createBeast(look: BeastLook): EnemyModel {
       addMesh(finger, side > 0 ? scorpionGeo.clawInnerL : scorpionGeo.clawInnerR, crystalGlowMat);
       pincers.push({ arm, finger, side });
 
-      // 4 pairs of splayed faceted crystal arachnid legs landing cleanly on y = 0
+      // 4 pairs of splayed faceted crystal arachnid legs with articulated knees landing cleanly on y = 0
       for (let i = 0; i < 4; i++) {
         const zLeg = 0.28 - i * 0.20;
-        const rig = addLeg(side * 0.24, 0.44, zLeg, side, i < 2, (i + (side > 0 ? 1 : 0)) * Math.PI);
-        // Splay legs outward from front (+Z) to rear (-Z) like a real arachnid
-        rig.joint.rotation.y = -side * (1.5 - i) * 0.32;
+        const baseY = -side * (1.5 - i) * 0.32;
+        const rig = addLeg(side * 0.24, 0.44, zLeg, side, i < 2, i * 1.55 + (side > 0 ? 0 : Math.PI), 0, 0, baseY);
         // Upper crystal femur angling up & out to knee at (side*0.31, +0.20, 0)
         const femur = addMesh(rig.joint, scorpionGeo.legFemur, crystalCore, 0, 0, 0);
         femur.rotation.set(0, side * Math.PI / 2, 0);
         femur.rotateX(-0.56);
-        // Sharp faceted crystal knee joint
-        addMesh(rig.joint, scorpionGeo.legKnee, crystalFacet, side * 0.31, 0.20, 0, 0.3, 0.4, 0.2);
-        // Long tapered translucent crystal tibia spear angling down & out to ground (y = 0)
-        const tibia = addMesh(rig.joint, scorpionGeo.legTibia, crystalFacet, side * 0.31, 0.20, 0);
+        // Articulated knee group (patella + tapered translucent crystal tibia spear)
+        const lower = new THREE.Group();
+        lower.position.set(side * 0.31, 0.20, 0);
+        rig.joint.add(lower);
+        rig.lower = lower;
+        addMesh(lower, scorpionGeo.legKnee, crystalFacet, 0, 0, 0, 0.3, 0.4, 0.2);
+        const tibia = addMesh(lower, scorpionGeo.legTibia, crystalFacet, 0, 0, 0);
         tibia.rotation.set(0, side * Math.PI / 2, 0);
         tibia.rotateX(1.06);
       }
@@ -443,20 +500,124 @@ export function createBeast(look: BeastLook): EnemyModel {
     addMesh(telsonGroup, scorpionGeo.stinger, crystalGlowMat, 0, 0, -0.19);
     tailSegs.push(telsonGroup);
   } else if (spider) {
-    part(body, SPHERE, coat, 0, 0.61, -0.44, 0.43, 0.37, 0.66);
-    part(body, SPHERE, trim, 0, 0.84, -0.46, 0.19, 0.105, 0.36);
-    head.position.set(0, 0.54, 0.24);
-    part(head, SPHERE, coat, 0, 0, 0, 0.31, 0.22, 0.38);
+    // ======================== GIANT SILK SPIDER (Araña de Seda / Jorōgumo) ========================
+    const chitinMat = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(look.coat).multiplyScalar(0.88),
+      roughness: 0.28,
+      metalness: 0.22,
+      clearcoat: 0.92,
+      clearcoatRoughness: 0.14,
+      vertexColors: true
+    });
+    const plateMat = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(look.coat).multiplyScalar(0.54),
+      roughness: 0.34,
+      metalness: 0.28,
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.18,
+      vertexColors: true
+    });
+    const jointMat = new THREE.MeshPhysicalMaterial({
+      color: look.trim,
+      roughness: 0.42,
+      metalness: 0.18,
+      clearcoat: 0.55,
+      vertexColors: true
+    });
+    spiderGlowMat = new THREE.MeshStandardMaterial({
+      color: 0xff5a36,
+      emissive: new THREE.Color(0xd92838),
+      emissiveIntensity: 1.05,
+      roughness: 0.3,
+      metalness: 0.1
+    });
+    const fangMat = new THREE.MeshPhysicalMaterial({
+      color: 0x16121a,
+      emissive: new THREE.Color(0x280810),
+      roughness: 0.16,
+      metalness: 0.45,
+      clearcoat: 1.0
+    });
+    extraMats.push(chitinMat, plateMat, jointMat, spiderGlowMat, fangMat);
+    flashMats.push(chitinMat, plateMat, jointMat);
+
+    // Sculpted bulbous abdomen + overlapping chitin plates + pulsing crimson hourglass venom crest
+    addMesh(body, spiderGeo.abdomen, chitinMat);
+    addMesh(body, spiderGeo.abdPlate, plateMat, 0, 1.01, -0.44, 0.12, 0, 0).scale.set(0.95, 1, 1);
+    addMesh(body, spiderGeo.abdPlate, plateMat, 0, 1.06, -0.68, -0.05, 0, 0).scale.set(1.12, 1.08, 1.08);
+    addMesh(body, spiderGeo.abdPlate, plateMat, 0, 0.97, -0.90, -0.26, 0, 0).scale.set(0.84, 0.92, 0.92);
+    addMesh(body, spiderGeo.venomMark, spiderGlowMat, 0, 1.12, -0.66, -0.06, 0, 0);
+
+    // Dorsal chitin spines along the abdomen flanks
+    for (let i = 0; i < 3; i++) {
+      const z = -0.42 - i * 0.22;
+      const y = 0.98 + (i === 1 ? 0.05 : -0.02);
+      for (const side of [-1, 1]) {
+        const sp = addMesh(body, spiderGeo.spine, plateMat, side * (0.28 + (i === 1 ? 0.08 : 0)), y, z, -0.25, side * 0.25, -side * 0.55);
+        sp.scale.setScalar(i === 1 ? 1.18 : 0.9);
+      }
+    }
+
+    // Articulated rear silk spinnerets
+    tail.position.set(0, 0.56, -1.12);
     for (const side of [-1, 1]) {
-      part(head, SPHERE, eyes, side * 0.10, 0.08, 0.318, 0.041, 0.037, 0.031);
-      part(head, SPHERE, eyes, side * 0.198, 0.065, 0.268, 0.030, 0.027, 0.024);
-      part(head, CONE, ivory, side * 0.115, -0.11, 0.34, 0.05, 0.22, 0.05).rotation.x = Math.PI * 0.75;
+      addMesh(tail, spiderGeo.spinneret, jointMat, side * 0.065, -0.01, 0, 0.1, side * 0.24, 0);
+    }
+
+    // Armored cephalothorax (prosoma)
+    head.position.set(0, 0.56, 0.22);
+    addMesh(head, spiderGeo.thorax, plateMat);
+    addMesh(head, spiderGeo.spine, chitinMat, 0, 0.21, -0.02, -0.35, 0, 0).scale.setScalar(0.85);
+
+    // 8-eye arachnid cluster (2 huge fierce front eyes, 2 medium outer eyes, 4 smaller upper eyes)
+    for (const side of [-1, 1]) {
+      part(head, SPHERE, eyes, side * 0.068, 0.058, 0.335, 0.046, 0.044, 0.036);   // primary anterior median
+      part(head, SPHERE, eyes, side * 0.148, 0.052, 0.305, 0.031, 0.030, 0.025);   // anterior lateral
+      part(head, SPHERE, eyes, side * 0.112, 0.105, 0.295, 0.023, 0.022, 0.020);   // posterior median
+      part(head, SPHERE, eyes, side * 0.188, 0.090, 0.255, 0.020, 0.020, 0.018);   // posterior lateral
+
+      // Articulated chelicera + curved venomous fang
+      const fangGroup = new THREE.Group();
+      fangGroup.position.set(side * 0.082, -0.02, 0.27);
+      head.add(fangGroup);
+      addMesh(fangGroup, spiderGeo.chelicera, chitinMat);
+      addMesh(fangGroup, side > 0 ? spiderGeo.fangR : spiderGeo.fangL, fangMat, 0, -0.08, 0.11);
+      spiderFangs.push({ g: fangGroup, side });
+
+      // Articulated sensory pedipalp
+      const palpGroup = new THREE.Group();
+      palpGroup.position.set(side * 0.18, -0.01, 0.22);
+      head.add(palpGroup);
+      addMesh(palpGroup, side > 0 ? spiderGeo.pedipalpR : spiderGeo.pedipalpL, jointMat);
+      spiderPalps.push({ g: palpGroup, side });
+
+      // 8 sculpted, double-jointed arachnid legs with armored knees & barbed spines
+      const legConfigs: [number, number, number][] = [
+        [0.34,  0.58, 1.12],  // front reach leg (longest)
+        [0.18,  0.18, 1.00],  // mid-front
+        [0.01, -0.22, 0.96],  // mid-rear
+        [-0.16, -0.62, 1.08]  // hind bracing leg
+      ];
       for (let i = 0; i < 4; i++) {
-        const rig = addLeg(side * 0.24, 0.53, 0.31 - i * 0.19, side, i < 2, (i + (side > 0 ? 1 : 0)) * Math.PI);
-        rig.joint.rotation.y = side * (i - 1.5) * 0.43;
-        part(rig.joint, LIMB, trim, side * 0.26, 0.15, 0, 0.066, 0.62, 0.068).rotation.z = -side * 1.05;
-        part(rig.joint, SPHERE, coat, side * 0.53, 0.29, 0, 0.088, 0.09, 0.09);
-        part(rig.joint, LIMB, leather, side * 0.70, -0.075, 0, 0.051, 0.84, 0.053).rotation.z = side * 0.43;
+        const [zOff, yawBase, lenScale] = legConfigs[i];
+        const baseY = side * yawBase;
+        const rig = addLeg(side * 0.23, 0.56, zOff, side, i < 2, i * 1.55 + (side > 0 ? 0 : Math.PI), 0, 0, baseY);
+        rig.joint.scale.setScalar(lenScale);
+
+        // Upper femur (arches up & outward)
+        addMesh(rig.joint, side > 0 ? spiderGeo.legFemurR : spiderGeo.legFemurL, chitinMat);
+        // Femur barb spike
+        const barb = addMesh(rig.joint, spiderGeo.spine, jointMat, side * 0.36, 0.30, 0, 0, 0, -side * 0.55);
+        barb.scale.setScalar(0.55);
+
+        // Articulated knee (patella + lower tibia/tarsus claw)
+        const lower = new THREE.Group();
+        lower.position.set(side * 0.62, 0.38, -0.01);
+        rig.joint.add(lower);
+        rig.lower = lower;
+
+        addMesh(lower, spiderGeo.legKnee, jointMat);
+        addMesh(lower, side > 0 ? spiderGeo.legTibiaR : spiderGeo.legTibiaL, plateMat);
       }
     }
   } else if (bear) {
@@ -705,30 +866,32 @@ export function createBeast(look: BeastLook): EnemyModel {
   // Apply the same manga rim light, form shading, and ASCII surface glyphs as the samurai & oni
   mangaFinish(root);
 
-  let stride = Math.random() * Math.PI * 2, time = 0, pose = 0;
+  let stride = Math.random() * Math.PI * 2, time = 0, pose = 0, smoothMove = 0;
   const allMats: THREE.Material[] = [coat, trim, dark, leather, mouth, ivory, eyes, ring.material, ...extraMats];
 
   return {
     root, ring,
     update(dt, { moving, speed, state }) {
       time += dt;
-      stride += dt * Math.min(20, 4 + speed * (spider || scorpion ? 1.85 : bear ? 1.35 : 1.65));
+      smoothMove = THREE.MathUtils.damp(smoothMove, moving, 9, dt);
+      stride += dt * Math.min(20, (spider || scorpion ? 2.5 : 4) + speed * (spider || scorpion ? 2.15 : bear ? 1.35 : 1.65));
       const wind = state === 'windup', strike = state === 'strike';
       pose = THREE.MathUtils.damp(pose, wind ? 1 : strike ? -1 : 0, 14, dt);
 
       const breathe = Math.sin(time * 3.1) * 0.014;
-      const bounce = Math.abs(Math.sin(stride)) * moving * (bear ? 0.06 : scorpion ? 0.035 : 0.075);
+      const bounce = Math.abs(Math.sin(stride)) * smoothMove * (bear ? 0.06 : spider || scorpion ? 0.028 : 0.075);
 
       if (scorpion) {
-        body.position.y = breathe * 0.6 + bounce - Math.max(0, pose) * 0.05;
+        body.position.y = breathe * 0.7 + bounce - Math.max(0, pose) * 0.04;
         body.rotation.x = pose * -0.12;
+        body.rotation.z = Math.sin(stride) * 0.045 * smoothMove;
         // Articulated 5-segment overhead tail coils high on windup and whips forward on strike
         const sway = Math.sin(time * 2.8) * 0.035;
         tailSegs.forEach((seg, i) => {
           const base = i === 0 ? 0.68 : i === 5 ? 0.25 : 0.46;
           seg.rotation.x = base - pose * (i === 0 ? 0.14 : 0.18) + sway;
         });
-        tail.rotation.y = Math.sin(time * (2.2 + moving * 2.5)) * 0.14;
+        tail.rotation.y = Math.sin(time * (2.2 + smoothMove * 2.5)) * 0.14;
         // Pincers spread & open wide on windup, snap shut forward on strike
         for (const p of pincers) {
           p.arm.rotation.y = p.side * (0.36 + pose * 0.34);
@@ -757,9 +920,23 @@ export function createBeast(look: BeastLook): EnemyModel {
         body.rotation.x = pose * 0.14;
         head.rotation.x = -pose * 0.24 + Math.sin(time * 2.4) * 0.035;
       } else {
-        body.position.y = breathe + bounce - pose * 0.10;
-        body.rotation.x = pose * 0.10;
-        head.rotation.x = -pose * 0.22;
+        // Spider rears its cephalothorax up menacingly on windup, snaps fangs & lunges on strike
+        const rear = Math.max(0, pose);
+        body.position.y = breathe * 1.1 + bounce * 0.85 + rear * 0.14 - Math.max(0, -pose) * 0.08;
+        body.rotation.x = -rear * 0.26 + Math.max(0, -pose) * 0.16;
+        body.rotation.z = Math.sin(stride) * 0.055 * smoothMove;
+        head.rotation.x = -rear * 0.18 + Math.sin(time * 3.4) * 0.03;
+        for (const f of spiderFangs) {
+          f.g.rotation.z = f.side * (0.08 + rear * 0.42 - Math.max(0, -pose) * 0.22 + Math.sin(time * 6.5) * 0.04);
+          f.g.rotation.x = -rear * 0.24 + Math.max(0, -pose) * 0.32;
+        }
+        for (const p of spiderPalps) {
+          p.g.rotation.x = -rear * 0.55 + Math.sin(time * 7.2 + p.side) * 0.12;
+          p.g.rotation.y = p.side * (rear * 0.28 + Math.cos(time * 5.1) * 0.08);
+        }
+        if (spiderGlowMat) {
+          spiderGlowMat.emissiveIntensity = 0.85 + Math.sin(time * 4.5) * 0.28 + rear * 0.65;
+        }
       }
 
       // Snarling / roaring articulated jaw
@@ -776,10 +953,29 @@ export function createBeast(look: BeastLook): EnemyModel {
       }
 
       for (const leg of legs) {
-        const s = Math.sin(stride + leg.phase) * moving;
-        const lift = Math.max(0, Math.cos(stride + leg.phase)) * moving;
-        if (spider || scorpion) {
-          leg.joint.rotation.z = leg.side * (s * 0.21 - pose * 0.10);
+        const phi = stride + leg.phase;
+        const s = Math.sin(phi) * smoothMove;
+        const lift = Math.max(0, Math.cos(phi)) * smoothMove;
+        if (spider) {
+          // Fluid metachronal 8-leg arachnid gait: forward/back horizontal sweep + arched lift + knee tuck
+          const arcLift = Math.pow(Math.max(0, Math.cos(phi)), 1.35) * smoothMove;
+          const idleShift = Math.sin(time * 2.4 + leg.phase) * 0.035 * (1 - smoothMove);
+          const rearLift = leg.front ? Math.max(0, pose) * 0.52 : -Math.max(0, pose) * 0.10;
+          leg.joint.rotation.y = leg.baseY + leg.side * (-s * 0.30 + idleShift);
+          leg.joint.rotation.z = leg.side * (arcLift * 0.36 + rearLift + idleShift * 0.7);
+          if (leg.lower) {
+            leg.lower.rotation.z = -leg.side * (arcLift * 0.48 - s * 0.12 + rearLift * 0.55);
+          }
+        } else if (scorpion) {
+          // Fluid scuttling scorpion wave-gait: horizontal leg sweep + smooth lift + articulated knee flex
+          const arcLift = Math.pow(Math.max(0, Math.cos(phi)), 1.35) * smoothMove;
+          const idleShift = Math.sin(time * 2.6 + leg.phase) * 0.03 * (1 - smoothMove);
+          const brace = Math.max(0, pose) * 0.14;
+          leg.joint.rotation.y = leg.baseY + leg.side * (-s * 0.28 + idleShift);
+          leg.joint.rotation.z = leg.side * (arcLift * 0.32 - brace + idleShift * 0.6);
+          if (leg.lower) {
+            leg.lower.rotation.z = -leg.side * (arcLift * 0.42 - s * 0.10 - brace * 0.5);
+          }
         } else if (bear) {
           const swipe = leg.front ? (Math.max(0, pose) * 0.85 - Math.max(0, -pose) * 0.55) : -Math.max(0, pose) * 0.42;
           leg.joint.rotation.x = leg.baseUpperX + s * 0.44 - swipe;

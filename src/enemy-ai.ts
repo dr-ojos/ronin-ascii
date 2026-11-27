@@ -18,6 +18,7 @@ import { chargeKill, bolt, skyFlash } from './special';
 import { circle, onEnrage, onKill, takeTurn } from './battle';
 import { affixLabel } from './boss-mechanics';
 import { onTownCampCleared, startTownMission } from './liberation';
+import { onDungeonCampCleared } from './dungeon';
 import { onWorldEventBossDefeat, onWorldEventBossPhase } from './world-events';
 import { earnTechnique, TECHNIQUES } from './techniques';
 import { applyWeapon, weapon } from './weapons';
@@ -577,6 +578,7 @@ function campCleared(camp: Camp, last: Enemy['kind'], relicName: string | null =
   const chest = camp.chest && camp.chest.state === 'sealed' ? '\nel cofre se ha abierto' : '';
   const drop = relicName ? `\n✦ Ha soltado: ${relicName}` : '';
   if (camp.chest) unseal(camp.chest);
+  if (onDungeonCampCleared(camp)) return;
   const townStatus = onTownCampCleared(camp);
   if (camp.technique && earnTechnique(camp.technique)) {
     sfx.chime(true); skyFlash(0.6);

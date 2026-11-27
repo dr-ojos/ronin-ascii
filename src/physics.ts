@@ -2,6 +2,7 @@
 // and the edge of the world. Colliders live in a spatial hash, so a huge world costs the same as a small one;
 // each collider has an owner (a streamed chunk) so it can be removed when that chunk is unloaded.
 import { WORLD_R, LAKES, lakeRadius } from './map';
+import { state } from './state';
 import type { Collider, XZ } from './types';
 
 const CELL = 16, MARGIN = 2;
@@ -73,7 +74,9 @@ export function collide(p: XZ, r: number) {
       if (d < m && d > 1e-4) { p.x = c.x + dx / d * m; p.z = c.z + dz / d * m; }
     }
   }
-  const d = Math.hypot(p.x, p.z); if (d > WORLD_R) { p.x *= WORLD_R / d; p.z *= WORLD_R / d; }
+  if (!state.inDungeon) {
+    const d = Math.hypot(p.x, p.z); if (d > WORLD_R) { p.x *= WORLD_R / d; p.z *= WORLD_R / d; }
+  }
 }
 
 for (const l of LAKES) addCollider({ lake: l });
