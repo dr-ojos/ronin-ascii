@@ -53,6 +53,15 @@ function decode(raw: unknown): Saves {
   return out;
 }
 const total = (raw: string) => { try { return Number(JSON.parse(raw)?.total) || 0; } catch { return 0; } };
+function mergeProgress(localRaw: string, remoteRaw: string): string {
+  const winnerRaw = total(remoteRaw) >= total(localRaw) ? remoteRaw : localRaw;
+  try {
+    const l = JSON.parse(localRaw), r = JSON.parse(remoteRaw), w = JSON.parse(winnerRaw);
+    const hpBonus = Math.max(Math.floor(Number(l?.hpBonus) || 0), Math.floor(Number(r?.hpBonus) || 0));
+    if (hpBonus > 0 && w && typeof w === 'object') { w.hpBonus = hpBonus; return JSON.stringify(w); }
+  } catch { /* fall back to winner */ }
+  return winnerRaw;
+}
 
 /** this browser's save and the cloud's into one (stable: merging the result again changes nothing) */
 function mergeSaves(local: Saves, remote: Saves): Saves {
@@ -60,7 +69,7 @@ function mergeSaves(local: Saves, remote: Saves): Saves {
   for (const [k, r] of Object.entries(remote)) {
     const l = local[k];
     if (l === undefined || l === r) out[k] = r;
-    else if (k.startsWith(PREFIX + 'progress.')) out[k] = total(r) >= total(l) ? r : l;
+    else if (k.startsWith(PREFIX + 'progress.')) out[k] = mergeProgress(l, r);
     else if (k.startsWith(VAULT_PREFIX)) out[k] = JSON.stringify(mergeVaults(parseVault(l), parseVault(r)));
     else if (k === MAP_KEY) out[k] = mergeFogs(l, r, FOG_CELLS);
     else if (k === PREFIX + 'best') out[k] = String(Math.max(Number(l) || 0, Number(r) || 0));

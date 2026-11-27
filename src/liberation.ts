@@ -9,6 +9,7 @@ import { addPoints } from './score';
 import { sfx } from './sfx';
 import { skyFlash } from './special';
 import { player, state } from './state';
+import { saveVault } from './vault';
 import type { Camp } from './types';
 
 export type TownId = 'aldea' | 'pueblo';
@@ -99,6 +100,7 @@ export function onTownCampCleared(camp: Camp): { liberated: boolean; note: strin
   m.liberated = true;
   addPoints(m.rewardPoints, `${m.name.toLowerCase()} liberado`);
   state.jade += m.rewardJade;
+  saveVault();
   player.hp = player.maxHp;
   sfx.chime(true);
   sfx.taiko(1.3);

@@ -83,8 +83,10 @@ interface Profile {
   level: number; xp: number; total: number; stats: Record<StatId, number>;
   /** technique ranks bought with points (rank 1, the one a technique is learnt at, is not stored) */
   ranks: Partial<Record<TechniqueId, number>>;
+  /** permanent bonus max life (e.g. restored from previous runs/rebalances) */
+  hpBonus?: number;
 }
-const blank = (): Profile => ({ level: 1, xp: 0, total: 0, stats: { vigor: 0, fuerza: 0, agilidad: 0, temple: 0, espiritu: 0, fortuna: 0 }, ranks: {} });
+const blank = (): Profile => ({ level: 1, xp: 0, total: 0, stats: { vigor: 0, fuerza: 0, agilidad: 0, temple: 0, espiritu: 0, fortuna: 0 }, ranks: {}, hpBonus: 0 });
 let prof = blank(), dirty = false, saveT = 0;
 const key = (id: ClassId) => `ronin-ascii.progress.${id}`;
 
@@ -101,6 +103,7 @@ export function loadProgress(id: ClassId = state.cls) {
         const r = Math.floor(Number(raw.ranks?.[t]) || 1);
         if (r > 1) prof.ranks[t] = Math.min(MAX_RANK, r);
       }
+      prof.hpBonus = Math.max(0, Math.floor(Number(raw.hpBonus) || 0));
       // never more points spent than the level has given
       // more spent than the level gives (an old save, from when levels gave more): every point comes back
       if (spent() > pointsAt(prof.level)) refundAll();
@@ -129,9 +132,18 @@ export const hasPerk = (id: PerkId) => prof.level >= PERKS.find(p => p.id === id
 
 // ------------------------------------------------------------ what the rest of the game reads
 /** max life on top of the class's own */
-export const bonusHp = () => levelHp(prof.level) + prof.stats.vigor * VIGOR_HP + (hasPerk('leyenda') ? LEGEND_HP : 0);
+export const bonusHp = () => levelHp(prof.level) + prof.stats.vigor * VIGOR_HP + (hasPerk('leyenda') ? LEGEND_HP : 0) + (prof.hpBonus || 0);
 /** max life at the start of a run */
 export const baseHp = () => cls().hp + bonusHp();
+/** ensures the current warrior's max life is at least `target` by persisting any missing difference into `hpBonus` */
+export function ensureMinMaxHp(target: number) {
+  const diff = Math.round(target - player.maxHp);
+  if (diff <= 0) return;
+  prof.hpBonus = (prof.hpBonus || 0) + diff;
+  player.maxHp += diff;
+  player.hp = player.maxHp;
+  saveProgress();
+}
 export const statDmg = () => (1 + 0.02 * prof.stats.fuerza) * (hasPerk('leyenda') ? 1.15 : 1);
 export const statHurt = () => (1 - 0.006 * prof.stats.temple) * (hasPerk('acero') ? 0.88 : 1);
 export const statRun = () => 1 + 0.004 * prof.stats.agilidad;

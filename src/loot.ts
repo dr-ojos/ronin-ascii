@@ -18,6 +18,7 @@ import { grantWeapon, owns, weaponById } from './weapons';
 import { armorById, grantArmor, ownsArmor } from './armor';
 import { hasFixedArmor } from './classes';
 import { dressUp } from './outfit';
+import { saveVault } from './vault';
 import { player, state } from './state';
 import { rnd } from './utils';
 import type { Chest, EnemyKind } from './types';
@@ -222,6 +223,7 @@ function openChest(c: Chest) {
   addPoints(mon, 'mon del cofre', false, 1); lines.push(`+${mon} mon`);
   const jade = c.kind === 'jefe' ? 3 : c.kind === 'guardian' ? 2 : 1;
   state.jade += jade;
+  saveVault();
   lines.push(`+${jade} ${jade === 1 ? 'sello' : 'sellos'} de jade`);
   if (c.kind !== 'oculto') { const h = c.kind === 'jefe' ? 50 : c.kind === 'guardian' ? 40 : 30; player.hp = Math.min(player.maxHp, player.hp + h); lines.push(`+${h} vida`); }
   const chance = c.kind === 'jefe' || c.kind === 'guardian' ? 1 : c.kind === 'oculto' ? 0.75 : 0.4;

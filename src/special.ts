@@ -179,7 +179,7 @@ export function resetSpecial() {
   Object.assign(state, {
     special: 0, special2: 0,
     learnedOrbs, rangedElement, rangedCharges: rangedElement ? MAX_RANGED_CHARGES : 0, rangedCharge: 0,
-    jade: 0, technique, technique2, casting: technique, learnedTechniques: learned
+    jade: v.jade ?? 0, technique, technique2, casting: technique, learnedTechniques: learned
   });
   clearArts();
   clearVfxArt();

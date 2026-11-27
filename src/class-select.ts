@@ -9,7 +9,8 @@ import { dressUp } from './outfit';
 import { resetSpecial } from './special';
 import { TECHNIQUES } from './techniques';
 import { player, state } from './state';
-import { baseHp, level, loadProgress, xpFrac } from './progression';
+import { baseHp, ensureMinMaxHp, level, loadProgress, xpFrac } from './progression';
+import { saveVault } from './vault';
 
 const pick = document.getElementById('class-pick')!;
 const desc = document.getElementById('class-desc')!;
@@ -32,6 +33,18 @@ function render() {
   dispatchEvent(new Event('ronin:class'));   // title.ts names the warrior beside the figure
 }
 
+const RONIN_RESTORE_KEY = 'ronin-ascii.restore.ronin-420-jade17';
+/** one-time restore of the ronin's 420 max HP and 17 jade seals lost before jade was persisted in the vault */
+function restoreRoninOnce() {
+  if (state.cls !== 'ronin') return;
+  try {
+    if (localStorage.getItem(RONIN_RESTORE_KEY) === '1') return;
+    ensureMinMaxHp(420);
+    if (state.jade < 17) { state.jade = 17; saveVault(); }
+    localStorage.setItem(RONIN_RESTORE_KEY, '1');
+  } catch { /* no storage */ }
+}
+
 /** arm and dress the avatar as the stored class (on load, and after a pick) */
 function outfitClass() {
   loadProgress();
@@ -40,6 +53,7 @@ function outfitClass() {
   resetSpecial();
   player.maxHp = player.hp = baseHp();
   resetArmor();
+  restoreRoninOnce();
   dressUp();
   render();
 }

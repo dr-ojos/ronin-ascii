@@ -1,7 +1,7 @@
-// The ronin's vault: the blades, armour and techniques won are kept from one run to the next, one vault per
+// The ronin's vault: the blades, armour, techniques and jade seals won are kept from one run to the next, one vault per
 // class, saved in the browser (and in the cloud with an account: account.ts). The resets of a new run
-// (weapons.ts, armor.ts, special.ts) read it back, so a run starts with everything already earned; mon,
-// jade seals and the passive upgrades still belong to the run.
+// (weapons.ts, armor.ts, special.ts) read it back, so a run starts with everything already earned; mon
+// and the passive chest upgrades still belong to the run.
 //
 // Saving is a union: an item once in the vault never leaves it, so no ordering of resets can lose one.
 // A cheap check every second and a half writes the vault when what the ronin owns or wears has changed.
@@ -15,6 +15,7 @@ export interface Vault {
   orbs?: OrbElement[]; rangedElement?: OrbElement;
   weapon?: string; armor?: string; technique?: TechniqueId; technique2?: TechniqueId;
   weaponLevels?: Record<string, number>; weaponXp?: Record<string, number>;
+  jade?: number;
 }
 export const VAULT_PREFIX = 'ronin-ascii.items.';
 const key = (id: ClassId) => VAULT_PREFIX + id;
@@ -39,7 +40,8 @@ export function parseVault(raw: string | null): Vault {
       orbs: strings(v.orbs) as OrbElement[], rangedElement: str(v.rangedElement) as OrbElement | undefined,
       weapon: str(v.weapon), armor: str(v.armor), technique: str(v.technique) as TechniqueId | undefined,
       technique2: str(v.technique2) as TechniqueId | undefined,
-      weaponLevels: numMap(v.weaponLevels), weaponXp: numMap(v.weaponXp)
+      weaponLevels: numMap(v.weaponLevels), weaponXp: numMap(v.weaponXp),
+      jade: typeof v.jade === 'number' && Number.isFinite(v.jade) && v.jade >= 0 ? Math.floor(v.jade) : undefined
     };
   } catch { /* broken save */ }
   return { weapons: [], armors: [], techniques: [], orbs: [], weaponLevels: {}, weaponXp: {} };
@@ -72,6 +74,7 @@ export function mergeVaults(a: Vault, b: Vault): Vault {
     orbs: union(a.orbs ?? [], b.orbs ?? []), rangedElement: b.rangedElement ?? a.rangedElement,
     weapon: b.weapon ?? a.weapon, armor: b.armor ?? a.armor, technique: b.technique ?? a.technique,
     technique2: b.technique2 ?? a.technique2,
+    jade: b.jade ?? a.jade,
     ...mergeWeaponProgress(a.weaponLevels, a.weaponXp, b.weaponLevels, b.weaponXp)
   };
 }
@@ -88,6 +91,7 @@ export function saveVault() {
   const sig = [
     state.cls, state.owned, state.ownedArmor, state.learnedTechniques, state.learnedOrbs,
     state.weapon, state.armor, state.technique, state.technique2, state.rangedElement ?? '',
+    state.jade,
     JSON.stringify(state.weaponLevels), JSON.stringify(state.weaponXp)
   ].join('|');
   if (sig === lastSig) return;
@@ -96,7 +100,8 @@ export function saveVault() {
     weapons: state.owned.slice(), armors: state.ownedArmor.slice(), techniques: state.learnedTechniques.slice(),
     orbs: state.learnedOrbs.slice(), rangedElement: state.rangedElement ?? undefined,
     weapon: state.weapon, armor: state.armor, technique: state.technique, technique2: state.technique2,
-    weaponLevels: { ...state.weaponLevels }, weaponXp: { ...state.weaponXp }
+    weaponLevels: { ...state.weaponLevels }, weaponXp: { ...state.weaponXp },
+    jade: Math.max(0, Math.floor(state.jade))
   };
   try { localStorage.setItem(key(state.cls), JSON.stringify(mergeVaults(readVault(), now))); } catch { /* no storage */ }
 }

@@ -9,6 +9,7 @@ import { MAX_RANGED_CHARGES, ORB_INFO, type OrbElement } from './elemental-orb';
 import { templeMasters } from './temple-grounds';
 import { animateTempleMonk } from './temple-monks';
 import { angDiff } from './utils';
+import { saveVault } from './vault';
 
 const TALK_RANGE = 2.8;
 const jadeLabel = (n: number) => `${n} ${n === 1 ? 'sello' : 'sellos'} de jade`;
@@ -47,6 +48,7 @@ function lessonRow(id: TempleTechniqueId, temple: TemplePlace) {
       if (!learned) {
         state.jade -= cost;
         state.learnedTechniques.push(id);
+        saveVault();
       }
       // E again moves it between the two slots
       const to: Slot = slot === 1 ? 2 : 1;
@@ -72,6 +74,7 @@ function orbRow(el: OrbElement) {
       if (!learned) {
         state.jade -= orb.cost;
         state.learnedOrbs.push(el);
+        saveVault();
       }
       state.rangedElement = el;
       if (first) { state.rangedCharges = MAX_RANGED_CHARGES; state.rangedCharge = 0; }
