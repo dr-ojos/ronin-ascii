@@ -1,7 +1,7 @@
 // One-shot effects: particle bursts (hits, deaths) and the dodge's halo (the cut itself leaves its trail in katana-fx.ts).
 import * as THREE from 'three';
 import { scene } from './renderer';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { rnd } from './utils';
 import { groundY } from './terrain';
 import { makeShockRingMat, softGlowTex } from './vfx-art';
@@ -19,7 +19,7 @@ export function burst(pos: THREE.Vector3, color: THREE.ColorRepresentation, n = 
     color, size: size * 1.9, map: softGlowTex, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending, toneMapped: false,
   }), CLS.fx));
-  scene.add(pts); bursts.push({ pts, v, life: 0.9, max: 0.9, floor: groundY(pos.x, pos.z) + 0.05 });
+  scene.add(markCombatFx(pts)); bursts.push({ pts, v, life: 0.9, max: 0.9, floor: groundY(pos.x, pos.z) + 0.05 });
 }
 
 // ------------------------------------------------------------ dodge halo: glowing after-images along the dash
@@ -32,13 +32,13 @@ export function dashGhost(pos: THREE.Vector3, face: number, k = 1) {
   const mat = ghostMat.clone(), g = new THREE.Group();
   const body = new THREE.Mesh(GHOST_BODY, mat); body.position.y = 0.85; g.add(body);
   const head = new THREE.Mesh(GHOST_HEAD, mat); head.position.y = 1.62; g.add(head);
-  g.position.copy(pos); g.rotation.y = face; scene.add(g);
+  g.position.copy(pos); g.rotation.y = face; scene.add(markCombatFx(g));
   ghosts.push({ g, mat, life: 0.45, max: 0.45, peak: 0.45 * k, grow: 0.15 });
 }
 /** a ring of light that spreads from your feet when you start the dodge */
 export function dashRing(pos: THREE.Vector3) {
   const mat = makeShockRingMat(0xffffff, 0x7fd8ff, 0.85), m = new THREE.Mesh(SHOCK_PLANE, mat);
-  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.08, pos.z); scene.add(m);
+  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.08, pos.z); scene.add(markCombatFx(m));
   ghosts.push({ g: m, mat, life: 0.42, max: 0.42, peak: 0.85, grow: 2.2 });
 }
 
@@ -46,7 +46,7 @@ export function dashRing(pos: THREE.Vector3) {
 export function impactRing(pos: THREE.Vector3, color: THREE.ColorRepresentation, size = 4) {
   const mat = makeShockRingMat(0xffffff, color, 0.95);
   const m = new THREE.Mesh(SHOCK_PLANE, mat);
-  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.09, pos.z); scene.add(m);
+  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, groundY(pos.x, pos.z) + 0.09, pos.z); scene.add(markCombatFx(m));
   ghosts.push({ g: m, mat, life: 0.5, max: 0.5, peak: 0.95, grow: size });
 }
 

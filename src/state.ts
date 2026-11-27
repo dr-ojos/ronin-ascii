@@ -6,6 +6,7 @@ import type { ClassId } from './classes';
 import type { OrbElement } from './elemental-orb';
 
 export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory' | 'level' | 'info';
+export type ViewMode = '3d' | 'hybrid' | 'ascii';
 
 export const player = {
   pos: new THREE.Vector3(0, 0, 4), face: Math.PI, hp: 100, maxHp: 100, attackT: -1, attackDur: 0.3, combo: 0, lastAttackEnd: -9,
@@ -45,8 +46,8 @@ export const state = {
   shake: 0, hitStop: 0, time: 0,
   // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes
   raining: false, rainAmt: 0, rainT: 120 + Math.random() * 240,
-  // toggles (Modo T 3D is default; press T to toggle ASCII mode)
-  asciiOn: false, colorMode: 0, photo: false, bigMap: false
+  // toggles (Modo T 3D is default; press T to cycle 3D -> Híbrido (personajes y combate ASCII) -> ASCII completo)
+  viewMode: '3d' as ViewMode, asciiOn: false, colorMode: 0, photo: false, bigMap: false
 };
 
 /** keys currently held, by KeyboardEvent.code */

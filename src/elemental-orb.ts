@@ -13,7 +13,7 @@ import { bossHit, damageTaken } from './boss-mechanics';
 import { burst, impactRing } from './fx';
 import { flare } from './flare';
 import { sparkBurst } from './katana-fx';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { collidersAt } from './physics';
 import { panOf, sfx } from './sfx';
 import { player, state } from './state';
@@ -101,7 +101,7 @@ interface Prop {
 const props: Prop[] = [];
 
 function addProp(obj: THREE.Object3D, mats: THREE.Material[], life: number, tick?: Prop['tick']) {
-  scene.add(obj);
+  scene.add(markCombatFx(obj));
   const p: Prop = { obj, mats, t: 0, life, tick };
   props.push(p);
   return p;
@@ -620,11 +620,11 @@ export function tryElementalOrb() {
 
   const visual = buildOrbVisual(el);
   visual.root.scale.setScalar(0.16);
-  scene.add(visual.root);
+  scene.add(markCombatFx(visual.root));
 
   const seal = buildSeal(info.color, info.core, 1.2);
   seal.outer.scale.setScalar(0.2);
-  scene.add(seal.outer);
+  scene.add(markCombatFx(seal.outer));
 
   // converging energy streaks rushing into the forming orb
   for (let i = 0; i < 10; i++) {

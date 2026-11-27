@@ -8,7 +8,7 @@ import { enemies } from './enemies';
 import { provoke, staggerEnemy } from './enemy-ai';
 import { burst } from './fx';
 import { flare } from './flare';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { panOf, sfx } from './sfx';
 import { specialDamage } from './special-damage';
 import { TECHNIQUES } from './techniques';
@@ -78,7 +78,7 @@ export function startFlyingSwords() {
     g.position.set(player.pos.x + Math.sin(a) * 0.7, player.pos.y + 1.6 + (1 - Math.abs(k) * 2) * 0.35, player.pos.z + Math.cos(a) * 0.7);
     g.lookAt(g.position.x, g.position.y + 5, g.position.z);
     g.scale.setScalar(0.01);
-    scene.add(g);
+    scene.add(markCombatFx(g));
     const target = targets.length ? targets[i % targets.length].e : undefined;
     const dir = new THREE.Vector3(Math.sin(face + k * 1.2), 0.05, Math.cos(face + k * 1.2));
     swords.push({ g, target, dir, t: 0, wait: RISE + i * 0.07, life: 1.6 });

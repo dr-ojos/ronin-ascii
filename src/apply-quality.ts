@@ -9,7 +9,7 @@ import { state } from './state';
 
 /** what the renderer runs right now (renderer.ts and world.ts start with the stored quality) */
 let applied: Quality = quality;
-export const effectiveQuality = (): Quality => state.asciiOn ? quality : 'baja';
+export const effectiveQuality = (): Quality => state.viewMode === '3d' ? 'baja' : quality;
 
 function apply(q: Quality) {
   applied = q;

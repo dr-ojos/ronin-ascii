@@ -10,7 +10,7 @@ import { provoke, staggerEnemy } from './enemy-ai';
 import { burst, dashRing, impactRing } from './fx';
 import { flare } from './flare';
 import { sparkBurst } from './katana-fx';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { collide } from './physics';
 import { panOf, sfx } from './sfx';
 import { specialDamage } from './special-damage';
@@ -147,7 +147,7 @@ function spawnSpectralSlash(at: THREE.Vector3, yaw: number, combo: number) {
   g.rotation.set(0, yaw - Math.PI / 2, roll);
   const r = combo === 2 ? 2.15 : 1.75;
   g.scale.setScalar(r * 0.75);
-  scene.add(g);
+  scene.add(markCombatFx(g));
   slashes.push({ g, mat, t: 0, life: 0.28, r });
 }
 
@@ -214,7 +214,7 @@ function buildPool(): CloneSlot[] {
     avatar.root.add(ring);
 
     avatar.root.visible = false;
-    scene.add(avatar.root);
+    scene.add(markCombatFx(avatar.root));
 
     return {
       avatar, fade, ringMat, ring,

@@ -8,6 +8,17 @@ export const M = (color: THREE.ColorRepresentation, o: THREE.MeshStandardMateria
 export const CLS = { grass: 0.1, grassBlade: 0.12, ground: 0.2, wood: 0.3, foliage: 0.4, foliageLeaf: 0.42, light: 0.5, actor: 0.6, fx: 0.7, water: 0.8, sky: 1.0 };
 export const BLADE_SPARK_ALPHA = 0.75;
 export const BLADE_SHEEN_ALPHA = 0.66;
+/** Layer for combat VFX: rendered with the world in 3D/ASCII modes, isolated into an ASCII pass in Hybrid mode */
+export const COMBAT_FX_LAYER = 2;
+
+export function markCombatFx<T extends THREE.Object3D>(obj: T): T {
+  obj.traverse(o => {
+    if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) {
+      o.layers.set(COMBAT_FX_LAYER);
+    }
+  });
+  return obj;
+}
 
 export function keepAlpha<T extends THREE.Material>(mat: T, additive: boolean): T {
   Object.assign(mat, {

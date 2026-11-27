@@ -1,6 +1,7 @@
 // WebGL renderer, main scene and camera.
 import * as THREE from 'three';
 import { dprFor, preset, quality } from './quality';
+import { COMBAT_FX_LAYER } from './materials';
 
 export const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 /** screen pixels per CSS pixel, capped by the graphics quality (quality.ts); changes live via setDpr */
@@ -19,3 +20,4 @@ export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x060912);
 scene.fog = new THREE.FogExp2(0x131b34, 0.016);
 export const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 260);
+camera.layers.enable(COMBAT_FX_LAYER);

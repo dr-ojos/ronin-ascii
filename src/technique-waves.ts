@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { provoke, staggerEnemy } from './enemy-ai';
 import { enemies } from './enemies';
 import { burst, impactRing } from './fx';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { scene } from './renderer';
 import { panOf, sfx } from './sfx';
 import { player, state } from './state';
@@ -713,7 +713,7 @@ function addWave(id: WaveTechniqueId, delay = 0, echo = false): Wave {
     drawFireRing(wave, 0.3, 1);
     fire.group.visible = delay <= 0;
     waves.push(wave);
-    scene.add(fire.group);
+    scene.add(markCombatFx(fire.group));
     return wave;
   }
   if (id === 'agua') {
@@ -722,7 +722,7 @@ function addWave(id: WaveTechniqueId, delay = 0, echo = false): Wave {
     drawWaterWave(wave, 0.4, 1);
     water.group.visible = delay <= 0;
     waves.push(wave);
-    scene.add(water.group);
+    scene.add(markCombatFx(water.group));
     return wave;
   }
   if (id === 'viento') {
@@ -731,7 +731,7 @@ function addWave(id: WaveTechniqueId, delay = 0, echo = false): Wave {
     drawWindSlash(wave, 0.6, 1);
     wind.group.visible = delay <= 0;
     waves.push(wave);
-    scene.add(wind.group);
+    scene.add(markCombatFx(wind.group));
     return wave;
   }
   if (id === 'campana') {
@@ -740,7 +740,7 @@ function addWave(id: WaveTechniqueId, delay = 0, echo = false): Wave {
     drawBellWave(wave, 0.4, 1);
     bell.group.visible = delay <= 0;
     waves.push(wave);
-    scene.add(bell.group);
+    scene.add(markCombatFx(bell.group));
     return wave;
   }
   const petal = makePetalStormFx();
@@ -748,7 +748,7 @@ function addWave(id: WaveTechniqueId, delay = 0, echo = false): Wave {
   drawPetalStorm(wave, 0.4, 1);
   petal.group.visible = delay <= 0;
   waves.push(wave);
-  scene.add(petal.group);
+  scene.add(markCombatFx(petal.group));
   return wave;
 }
 

@@ -42,9 +42,14 @@ const atlas = (() => {
 /** shared by every figure material and by the final ASCII pass (ascii.ts) */
 export const surfaceGlyphs = {
   uSurfGlyph: { value: 1 },        // 1: letters on the surface; 0: the classic screen-grid characters
+  uActorAscii: { value: 0 },       // 1: figures rendered in ASCII (full ASCII or Hybrid mode); 0: plain 3D
   uGlyphH: { value: 0.06 },        // letter height in metres
   tGlyphs: { value: atlas }
 };
+
+export function setActorAscii(enabled: boolean) {
+  surfaceGlyphs.uActorAscii.value = enabled ? 1 : 0;
+}
 
 const VERT = /* glsl */`
 {
@@ -71,8 +76,8 @@ const FRAG = /* glsl */`
 #ifndef PIXEL_CLS
   float pixelCls = 0.0;
 #endif
-// the 3D view (T) shows the figures plainly: no letters on them
-if (uSurfGlyph > 0.5 && uDetailedSurfaces < 0.5) {
+// the 3D view (T) shows the figures plainly: no letters on them; Hybrid and ASCII modes print letters
+if (uSurfGlyph > 0.5 && uActorAscii > 0.5) {
   // pick the plane the surface faces most, so the letters stand upright on it
   vec3 n = abs(vGlyphN), P = vGlyphP;
   vec2 q; float face;
@@ -111,7 +116,7 @@ export function glyphShader(sh: THREE.WebGLProgramParametersWithUniforms, sub: n
     + (rest ? '#define GLYPH_REST\nattribute vec3 glyphRest; attribute vec3 glyphRestN;\n' : '')
     + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VERT);
   sh.fragmentShader = `varying vec3 vGlyphP; varying vec3 vGlyphN;
-uniform float uSurfGlyph; uniform float uDetailedSurfaces; uniform float uGlyphH; uniform sampler2D tGlyphs;
+uniform float uSurfGlyph; uniform float uActorAscii; uniform float uDetailedSurfaces; uniform float uGlyphH; uniform sampler2D tGlyphs;
 #define GLYPH_SUB ${sub.toFixed(1)}
 ` + sh.fragmentShader.replace('#include <opaque_fragment>', FRAG + '#include <opaque_fragment>');
 }

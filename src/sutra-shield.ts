@@ -6,7 +6,7 @@ import { enemies } from './enemies';
 import { provoke, staggerEnemy } from './enemy-ai';
 import { burst } from './fx';
 import { flare } from './flare';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { sfx } from './sfx';
 import { specialDamage } from './special-damage';
 import { dmgMult } from './upgrades';
@@ -31,7 +31,7 @@ const slips = GLYPHS.map(ch => {
   const core = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.72), fx({ map: tex, color: color.clone().multiplyScalar(1.35) }));
   aura.position.z = -0.01;
   g.add(aura, core);
-  ring.add(g);
+  ring.add(markCombatFx(g));
   return g;
 });
 

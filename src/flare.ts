@@ -46,7 +46,7 @@ const flarePool = Array.from({ length: MAX_FLARES }, () => {
 });
 
 function sync3dFlares() {
-  const show = !state.asciiOn;
+  const show = state.viewMode === '3d';
   for (let i = 0; i < MAX_FLARES; i++) {
     const slot = flarePool[i];
     const f = show ? flares[i] : undefined;

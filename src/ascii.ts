@@ -2,7 +2,7 @@
 // character per cell), with a finer character grid for the actors and light-aware contours.
 import * as THREE from 'three';
 import { renderer, DPR } from './renderer';
-import { asciiGrid, BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, FLOWER_GLYPHS } from './materials';
+import { asciiGrid, BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, COMBAT_FX_LAYER, FLOWER_GLYPHS } from './materials';
 import { flareUniforms, MAX_FLARES, projectFlares } from './flare';
 import { surfaceGlyphs } from './surface-glyphs';
 
@@ -11,6 +11,7 @@ renderer.getDrawingBufferSize(bufSize);
 const RT_SCALE = bufSize.x * bufSize.y > 4e6 ? 0.6 : 1;
 const sceneDepth = new THREE.DepthTexture(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE, THREE.UnsignedIntType);
 const rt = new THREE.WebGLRenderTarget(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE, { type: THREE.HalfFloatType, depthTexture: sceneDepth });
+const fxRT = new THREE.WebGLRenderTarget(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE, { type: THREE.HalfFloatType, depthTexture: sceneDepth });
 
 // Real text-mode output: the screen is a grid of small cells and every cell holds ONE printable
 // ASCII character (0x20-0x7E) in ONE colour, on black. Glyphs are drawn larger than their cell
@@ -132,6 +133,7 @@ export const cellMat = new THREE.ShaderMaterial({
     tScene: { value: rt.texture }, tMask: { value: maskRT.texture },
     uRes: { value: bufSize.clone() }, uCell: { value: new THREE.Vector2() },
     uN: { value: N }, uEdgeRow: { value: EDGE_ROW }, uMode: { value: 0 }, uHit: { value: 0 }, uTime: { value: 0 }, uActor: { value: 0 }, uRain: { value: 0 },
+    uHybridFx: { value: 0 }, uActorExp: { value: 1.8 },
     uLight: { value: new THREE.Vector2(0, 1) },  // moonlight direction on screen (unit, pixels, y up)
     // ---- relief engine: the scene's depth buffer rebuilt into view-space positions and normals
     tDepth: { value: sceneDepth }, uProjInv: { value: new THREE.Matrix4() }, uProj: { value: new THREE.Matrix4() }, uProjScale: { value: new THREE.Vector2(1, 1) },
@@ -144,6 +146,7 @@ export const cellMat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */`
     uniform sampler2D tScene; uniform sampler2D tMask; uniform sampler2D tDepth;
     uniform vec2 uRes; uniform vec2 uCell; uniform float uN; uniform float uEdgeRow; uniform float uMode; uniform float uHit; uniform float uActor; uniform float uRain;
+    uniform float uHybridFx; uniform float uActorExp;
     uniform vec2 uLight;
     uniform mat4 uProjInv; uniform mat4 uProj; uniform vec2 uProjScale; uniform mat3 uViewRot; uniform vec3 uMoonV; uniform float uExposure; uniform float uTime;
     #define MAXF ${MAX_FLARES}
@@ -195,21 +198,46 @@ export const cellMat = new THREE.ShaderMaterial({
       vec4 sides = vec4(Mk(uv + dx), Mk(uv - dx), Mk(uv + dy), Mk(uv - dy));
       float coverage = center * 2.0 + dot(sides, vec4(1.0));
       vec4 surface = texelFetch(tScene, ivec2(uv * vec2(textureSize(tScene, 0))), 0);
-      if (abs(surface.a - ${BLADE_SPARK_ALPHA.toFixed(2)}) < 0.002 && (uActor > 0.5 ? coverage >= 1.0 : coverage <= 2.0)) {
+      if (uHybridFx > 0.5) {
+        vec3 fx0 = texture2D(tScene, uv).rgb;
+        vec3 fx1 = texture2D(tScene, uv + dx).rgb;
+        vec3 fx2 = texture2D(tScene, uv - dx).rgb;
+        vec3 fx3 = texture2D(tScene, uv + dy).rgb;
+        vec3 fx4 = texture2D(tScene, uv - dy).rgb;
+        vec3 fxAvg = (fx0 * 2.0 + fx1 + fx2 + fx3 + fx4) / 6.0;
+        vec3 fxMax = max(fx0, max(max(fx1, fx2), max(fx3, fx4)));
+        vec3 fxRaw = mix(fxAvg, fxMax, 0.55);
+        float peak = max(max(fxRaw.r, fxRaw.g), fxRaw.b);
+        if (abs(surface.a - ${BLADE_SPARK_ALPHA.toFixed(2)}) < 0.002) {
+          float sp = max(max(surface.r, surface.g), surface.b);
+          vec3 tint = sqrt(surface.rgb / max(sp, 0.01));
+          c = modeCol(tint * (0.85 + 0.55 * sqrt(min(1.0, sp))), sp);
+          row = ${FLOWER_ROW.toFixed(1)}; idx = ${FLOWER_GLYPHS.indexOf('*').toFixed(1)};
+          glowLvl = 2.0;
+        } else if (peak > 0.02) {
+          vec3 col = pow(aces(fxRaw * 1.9), vec3(1.0 / 2.2));
+          float l = clamp(pow(luma(col) * 1.35, 0.8), 0.0, 0.999);
+          vec3 tint = col / max(max(max(col.r, col.g), col.b), 0.04);
+          c = modeCol(mix(tint, vec3(1.0), 0.22) * (0.78 + 0.62 * l), l);
+          row = 5.0;
+          idx = clamp(floor(l * uN), 1.0, uN - 1.0);
+          glowLvl = 2.0;
+        } else {
+          row = 0.0; idx = 0.0; c = vec3(0.0);
+        }
+      } else if (abs(surface.a - ${BLADE_SPARK_ALPHA.toFixed(2)}) < 0.002 && (uActor > 0.5 ? coverage >= 1.0 : coverage <= 2.0)) {
         // Keep blade sparks saturated and legible as single asterisks at the normal camera distance.
         float peak = max(max(surface.r, surface.g), surface.b);
         vec3 tint = sqrt(surface.rgb / max(peak, 0.01));
         c = modeCol(tint * (0.8 + 0.55 * sqrt(min(1.0, peak))), peak);
         gl_FragColor = vec4(c, ${(SPARK_GLYPH + 2 * GLOW_STEP).toFixed(1)});
         return;
-      }
-      if (uActor > 0.5) {
+      } else if (uActor > 0.5) {
         if (coverage < 1.0) { gl_FragColor = vec4(0.0); return; }
         // ---- actors: silhouette drawn with | \\ - / strokes, creases too, body filled with the actor ramp
         // Sample actor colours only, so a narrow horn or blade keeps its colour at the edge.
-        // the figures get their own exposure (x1.8): at night they would otherwise sit in the bottom
-        // third of the ramp, all dots; this way the lit side reaches the dense letters
-        vec3 ac = grade(1.8 * (texture2D(tScene, uv).rgb * (2.0 * center)
+        // the figures get their own exposure (uActorExp: x1.8 at night, ~0.72 in daylight hybrid)
+        vec3 ac = grade(uActorExp * (texture2D(tScene, uv).rgb * (2.0 * center)
           + texture2D(tScene, uv + dx).rgb * sides.x + texture2D(tScene, uv - dx).rgb * sides.y
           + texture2D(tScene, uv + dy).rgb * sides.z + texture2D(tScene, uv - dy).rgb * sides.w) / coverage);
         float al = min(pow(luma(ac), 0.75), 0.999);
@@ -544,7 +572,8 @@ const postMat = new THREE.ShaderMaterial({
     uCell: { value: new THREE.Vector2() }, uGlyph: { value: new THREE.Vector2() }, uGrid: { value: new THREE.Vector2() },
     uCellA: { value: new THREE.Vector2() }, uGlyphA: { value: new THREE.Vector2() }, uGridA: { value: new THREE.Vector2() },
     tGlow: { value: glowA.texture }, tGlowW: { value: wideA.texture }, uGlow: flareUniforms.uGlow,
-    uSurf: surfaceGlyphs.uSurfGlyph   // 1: the figures carry their letters on their own surface (surface-glyphs.ts)
+    uSurf: surfaceGlyphs.uSurfGlyph,   // 1: the figures carry their letters on their own surface (surface-glyphs.ts)
+    uHybrid: { value: 0 }, uActorExp: cellMat.uniforms.uActorExp
   },
   vertexShader: `void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */`
@@ -553,6 +582,7 @@ const postMat = new THREE.ShaderMaterial({
     uniform vec2 uCell; uniform vec2 uGlyph; uniform vec2 uGrid; uniform vec2 uCellA; uniform vec2 uGlyphA; uniform vec2 uGridA;
     uniform sampler2D tScene; uniform float uMode; uniform float uHit; uniform float uRain; uniform float uRim; uniform vec2 uLight;
     uniform sampler2D tGlow; uniform sampler2D tGlowW; uniform float uGlow; uniform float uSurf;
+    uniform float uHybrid; uniform float uActorExp;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
     vec3 grade(vec3 c){ return pow(aces(c * 1.9), vec3(1.0 / 2.2)); }
@@ -561,7 +591,7 @@ const postMat = new THREE.ShaderMaterial({
     // solid colour behind the actor characters, one flat tile per actor cell, cel-shaded in bands
     vec3 actorBacking(vec2 fc){
       vec2 p = (floor(fc / uCellA) + 0.5) * uCellA;
-      vec3 bc = grade(1.8 * texture2D(tScene, (mask(p) > 0.5 ? p : fc) / uRes).rgb);   // same exposure as the characters
+      vec3 bc = grade(uActorExp * texture2D(tScene, (mask(p) > 0.5 ? p : fc) / uRes).rgb);   // same exposure as the characters
       float l = luma(bc);
       float band = l < 0.06 ? 0.02 : l < 0.14 ? 0.1 : l < 0.26 ? 0.24 : l < 0.42 ? 0.42 : l < 0.62 ? 0.6 : 0.8;
       vec3 tint = bc / max(max(max(bc.r, bc.g), bc.b), 0.03);
@@ -609,9 +639,30 @@ const postMat = new THREE.ShaderMaterial({
       if (uSurf < 0.5) layer(tCellsA, tFontA, uCellA, uGlyphA, uGridA, fc, false, at, as);
       vec3 actor = mix(at, as, 0.2);
       vec3 col;
+      if (uHybrid > 0.5) {
+        if (mask(fc) > 0.5) {
+          col = uSurf > 0.5 ? surfaceInk(grade(uActorExp * texture2D(tScene, fc / uRes).rgb)) : max(actor, actorBacking(fc));
+        } else {
+          vec3 raw3d = texture2D(tScene, fc / uRes).rgb;
+          col = pow(aces(raw3d * 1.2), vec3(1.0 / 2.2));
+          float r = uRim * 2.2, d = r * 0.7;
+          float near = max(max(max(mask(fc + vec2(r, 0.)), mask(fc - vec2(r, 0.))), max(mask(fc + vec2(0., r)), mask(fc - vec2(0., r)))),
+                           max(max(mask(fc + vec2(d, d)), mask(fc - vec2(d, d))), max(mask(fc + vec2(d, -d)), mask(fc + vec2(-d, d)))));
+          col *= 1.0 - near * 0.72;
+        }
+        layer(tCells, tFont, uCell, uGlyph, uGrid, fc, false, et, es);
+        vec3 fxChar = mix(et, es, 0.35);
+        float fxInk = clamp(max(fxChar.r, max(fxChar.g, fxChar.b)) * 1.8, 0.0, 1.0);
+        vec2 guv = fc / (uGrid * uCell);
+        vec3 glow = (texture2D(tGlow, guv).rgb * 0.8 + texture2D(tGlowW, guv).rgb * 1.3) * uGlow;
+        col = mix(col, col * 0.22, fxInk * 0.85) + fxChar + glow * (0.28 + 0.55 * fxInk);
+        if (uHit > 0.001) col = mix(col, vec3(1.0, 0.14, 0.08), uHit * 0.25);
+        gl_FragColor = vec4(col, 1.0);
+        return;
+      }
       if (mask(fc) > 0.5) {
         // inside a silhouette: the surface letters, or small grid characters over a solid cel-shaded backing
-        col = uSurf > 0.5 ? surfaceInk(grade(1.8 * texture2D(tScene, fc / uRes).rgb)) : max(actor, actorBacking(fc));
+        col = uSurf > 0.5 ? surfaceInk(grade(uActorExp * texture2D(tScene, fc / uRes).rgb)) : max(actor, actorBacking(fc));
       } else {
         layer(tCells, tFont, uCell, uGlyph, uGrid, fc, true, et, es);
         col = max(mix(et, es, 0.25), actor);
@@ -708,6 +759,7 @@ export function changeDensity(step: number) {
 /** scene -> actor mask -> character cells (environment grid + actor grid) -> screen */
 export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
   projectFlares();
+  camera.layers.set(0); camera.layers.enable(COMBAT_FX_LAYER);
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
   // the relief engine's camera: rebuild view-space positions from depth, light them with the moon
   const cu0 = cellMat.uniforms, pc = camera as THREE.PerspectiveCamera;
@@ -721,8 +773,11 @@ export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
   scene.background = null; scene.overrideMaterial = maskMat; camera.layers.set(ACTOR_LAYER);
   renderer.setClearColor(0x000000, 1);
   renderer.setRenderTarget(maskRT); renderer.clear(); renderer.render(scene, camera);
-  scene.background = bg; scene.overrideMaterial = null; camera.layers.set(0);
+  scene.background = bg; scene.overrideMaterial = null;
+  camera.layers.set(0); camera.layers.enable(COMBAT_FX_LAYER);
   const cu = cellMat.uniforms;
+  cu.tScene.value = rt.texture;
+  cu.uHybridFx.value = 0; cu.uActorExp.value = 1.8;
   cu.uActor.value = 0; cu.uCell.value.set(grids.env!.cw, grids.env!.ch);
   renderer.setRenderTarget(cellRT); renderer.render(cellScene, postCam);
   if (surfaceGlyphs.uSurfGlyph.value < 0.5) {   // the figures' screen grid (not needed when they wear their letters)
@@ -730,13 +785,56 @@ export function renderAscii(scene: THREE.Scene, camera: THREE.Camera) {
     renderer.setRenderTarget(actorCellRT); renderer.render(cellScene, postCam);
   }
   renderGlow();
+  postMat.uniforms.uHybrid.value = 0;
+  renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+}
+
+/** Hybrid T mode: 3D world + ASCII characters + ASCII combat effects (depth-tested against the 3D scene) */
+export function renderHybrid(scene: THREE.Scene, camera: THREE.Camera) {
+  projectFlares();
+  // 1. Render 3D world + actors (excluding combat FX layer) into rt + sceneDepth
+  camera.layers.set(0);
+  renderer.setRenderTarget(rt); renderer.render(scene, camera);
+  // 2. Render actor silhouette mask depth-tested against sceneDepth
+  const bg = scene.background;
+  scene.background = null; scene.overrideMaterial = maskMat; camera.layers.set(ACTOR_LAYER);
+  renderer.setClearColor(0x000000, 1);
+  renderer.setRenderTarget(maskRT); renderer.clear(); renderer.render(scene, camera);
+  scene.overrideMaterial = null;
+  // 3. Render combat FX only into fxRT, sharing sceneDepth so FX occlude properly behind 3D world/actors
+  const prevAutoClear = renderer.autoClear;
+  renderer.autoClear = false;
+  camera.layers.set(COMBAT_FX_LAYER);
+  renderer.setRenderTarget(fxRT);
+  renderer.setClearColor(0x000000, 0);
+  renderer.clearColor();
+  renderer.render(scene, camera);
+  renderer.autoClear = prevAutoClear;
+  scene.background = bg;
+  camera.layers.set(0); camera.layers.enable(COMBAT_FX_LAYER);
+  // 4. Convert combat FX + technique flares to ASCII cells
+  const cu = cellMat.uniforms;
+  cu.tScene.value = fxRT.texture;
+  cu.uHybridFx.value = 1; cu.uActorExp.value = 0.72;
+  cu.uActor.value = 0; cu.uCell.value.set(grids.env!.cw, grids.env!.ch);
+  renderer.setRenderTarget(cellRT); renderer.render(cellScene, postCam);
+  // 5. Convert actors to fine ASCII grid when screen-grid mode (G) is active
+  cu.tScene.value = rt.texture; cu.uHybridFx.value = 0;
+  if (surfaceGlyphs.uSurfGlyph.value < 0.5) {
+    cu.uActor.value = 1; cu.uCell.value.set(grids.actor!.cw, grids.actor!.ch);
+    renderer.setRenderTarget(actorCellRT); renderer.render(cellScene, postCam);
+  }
+  renderGlow();
+  postMat.uniforms.uHybrid.value = 1;
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 
 /** call after renderer.setSize */
 export function resizeAscii() {
   renderer.getDrawingBufferSize(bufSize);
-  rt.setSize(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE); maskRT.setSize(bufSize.x, bufSize.y);
+  rt.setSize(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE);
+  fxRT.setSize(bufSize.x * RT_SCALE, bufSize.y * RT_SCALE);
+  maskRT.setSize(bufSize.x, bufSize.y);
   postMat.uniforms.uRim.value = 1.15 * DPR;   // the graphics quality can change DPR while playing
   applyDensity();   // grid size + glyph atlas follow the new canvas size
 }

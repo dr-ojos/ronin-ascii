@@ -12,6 +12,7 @@ import { dmgMult } from './upgrades';
 import { specialDamage } from './special-damage';
 import { flare } from './flare';
 import { makeFireBladeMat } from './vfx-art';
+import { markCombatFx } from './materials';
 
 const RANGE = 14;
 const WINDUP = 0.32, FADE = 0.31;
@@ -83,7 +84,7 @@ export function startFourFlames() {
     const aim = nearest[0].enemy.g.position;
     player.face = Math.atan2(aim.x - player.pos.x, aim.z - player.pos.z);
   }
-  drawFlames(cast); casts.push(cast); scene.add(group);
+  drawFlames(cast); casts.push(cast); scene.add(markCombatFx(group));
   sfx.swing({ power: 1.35, pan: 0 });
 }
 

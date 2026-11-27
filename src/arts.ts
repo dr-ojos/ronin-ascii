@@ -18,7 +18,7 @@ import { provoke, staggerEnemy } from './enemy-ai';
 import { burst, dashGhost, dashRing } from './fx';
 import { flare } from './flare';
 import { sparkBurst } from './katana-fx';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { collide } from './physics';
 import { panOf, sfx } from './sfx';
 import { specialDamage } from './special-damage';
@@ -85,7 +85,7 @@ const later: { t: number; fn: () => void }[] = [];
 const burning = new Map<Enemy, { ticks: number; t: number }>();
 
 function addProp(obj: THREE.Object3D, mats: THREE.Material[], life: number, tick?: Prop['tick'], end?: () => void, geo?: THREE.BufferGeometry) {
-  scene.add(obj);
+  scene.add(markCombatFx(obj));
   const p: Prop = { obj, mats, t: 0, life, tick, end, geo };
   props.push(p);
   return p;

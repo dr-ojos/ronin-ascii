@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { collide } from './physics';
 import { scene } from './renderer';
 import { surfaceY } from './structures';
@@ -100,7 +100,7 @@ function groundWarning(outlines: XZ[][], color: number, innerRadiusRatio = 0) {
     depthWrite: false
   }), CLS.fx);
   const mesh = new THREE.Mesh(geo, mat);
-  scene.add(mesh);
+  scene.add(markCombatFx(mesh));
   return mesh;
 }
 

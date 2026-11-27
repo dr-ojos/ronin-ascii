@@ -22,7 +22,7 @@ import { onWorldEventBossDefeat, onWorldEventBossPhase } from './world-events';
 import { earnTechnique, TECHNIQUES } from './techniques';
 import { applyWeapon, weapon } from './weapons';
 import { gainWeaponXp } from './weapon-upgrades';
-import { CLS, tagMat } from './materials';
+import { CLS, markCombatFx, tagMat } from './materials';
 import { player, state } from './state';
 import { angDiff, rnd } from './utils';
 import type { Camp, Enemy, Wildlife } from './types';
@@ -87,7 +87,7 @@ function shoot(en: Enemy, yaw = 0, target?: THREE.Vector3, dmg = en.dmg) {
   const flight = from.distanceTo(to) / 24;
   if (!target && player.moving > 0.5) to.addScaledVector(lastMove, 5.6 * flight * 0.6);
   const v = to.sub(from).normalize().multiplyScalar(24).applyAxisAngle(UP, yaw);
-  const m = new THREE.Mesh(ARROW, arrowMat); m.position.copy(from); m.lookAt(from.clone().add(v)); scene.add(m);
+  const m = new THREE.Mesh(ARROW, arrowMat); m.position.copy(from); m.lookAt(from.clone().add(v)); scene.add(markCombatFx(m));
   projectiles.push({ m, v, life: 1.4, dmg });
   if (yaw === 0) sfx.arrow(panOf(from.x, from.z));
 }
@@ -98,7 +98,7 @@ function castCrescent(attack: EnemyAttack, width: number, dmg: number) {
   const v = new THREE.Vector3(Math.sin(attack.yaw), 0, Math.cos(attack.yaw)).multiplyScalar(10.5);
   const m = new THREE.Mesh(CRESCENT, crescentMat);
   m.position.copy(attack.origin); m.position.y += 0.55;
-  m.rotation.y = attack.yaw; m.scale.x = width / 1.32; scene.add(m);
+  m.rotation.y = attack.yaw; m.scale.x = width / 1.32; scene.add(markCombatFx(m));
   projectiles.push({ m, v, life: attack.length / v.length(), dmg, waveWidth: width });
   sfx.swing({ power: 0.9, pan: panOf(m.position.x, m.position.z) });
 }
@@ -144,7 +144,7 @@ function callThunder(en: Enemy) {
     const a = Math.random() * Math.PI * 2, r = i === 0 ? 0 : rnd(2.2, 4.5);
     const x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
     const mat = tagMat(new THREE.MeshBasicMaterial({ color: 0x9fc0ff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }), CLS.fx);
-    const m = new THREE.Mesh(MARK, mat); m.position.set(x, surfaceY(x, z) + 0.06, z); scene.add(m);
+    const m = new THREE.Mesh(MARK, mat); m.position.set(x, surfaceY(x, z) + 0.06, z); scene.add(markCombatFx(m));
     const t = 0.95 + i * 0.18;
     marks.push({ m, t, max: t, dmg: en.dmg });
   }

@@ -3,7 +3,7 @@ import { LOOK_PROFILE } from './blade-looks';
 import { MANGA_PROFILE } from './manga-swords';
 import * as THREE from 'three';
 import { scene } from './renderer';
-import { BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, tagMat } from './materials';
+import { BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, markCombatFx, tagMat } from './materials';
 import { sam, bladeMat } from './avatar';
 import { BELLY_POW, BLADE_PROFILE, bladeSection } from './samurai';
 import { BLADE_LAYOUT } from './weapon-models';
@@ -85,10 +85,10 @@ const halo = new THREE.Group();
   const outer = new THREE.Mesh(g, haloMat), inner = new THREE.Mesh(g, haloCore);
   outer.name = 'outer'; inner.name = 'inner'; halo.add(outer, inner);
 }
-sam.katana.add(halo);
+sam.katana.add(markCombatFx(halo));
 const offhandHalo = halo.clone();
 offhandHalo.visible = false;
-sam.offhand.add(offhandHalo);
+sam.offhand.add(markCombatFx(offhandHalo));
 
 // ---------------------------------------------------------------- blade flames
 // Volumetric animated flame sheath wrapping fire blades (extra: 'flames'): two crossed ribbons
@@ -168,10 +168,10 @@ bladeFlames.name = 'blade-flames';
   }
 }
 bladeFlames.visible = false;
-sam.katana.add(bladeFlames);
+sam.katana.add(markCombatFx(bladeFlames));
 const offhandFlames = bladeFlames.clone();
 offhandFlames.visible = false;
-sam.offhand.add(offhandFlames);
+sam.offhand.add(markCombatFx(offhandFlames));
 const C1 = new THREE.Color(), C2 = new THREE.Color(), CG = new THREE.Color();
 let fxWeapon: Weapon | undefined;
 /** resolved blade metrics for the currently displayed weapon (handles manga models, looks & forms) */
@@ -279,11 +279,11 @@ edgeSparks.onBeforeRender = renderer => {
   edgeMat.uniforms.uViewportHeight.value = height;
   edgeMat.uniforms.uRasterScale.value = height / innerHeight;
 };
-sam.katana.add(edgeSparks);
+sam.katana.add(markCombatFx(edgeSparks));
 const offhandSparks = edgeSparks.clone();
 offhandSparks.name = 'offhand-sparks';
 offhandSparks.onBeforeRender = edgeSparks.onBeforeRender;
-sam.offhand.add(offhandSparks);
+sam.offhand.add(markCombatFx(offhandSparks));
 function cuttingEdge(w: Weapon, t: number) {
   const { scale, profile } = bladeMetrics(w);
   if (w.form === 'spear') return -BLADE_PROFILE.width * 0.52 * Math.pow(Math.sin(Math.PI * t), 0.72) * scale;
@@ -384,7 +384,7 @@ sparkMat.onBeforeCompile = sh => {
     .replace(/}\s*$/, `  gl_FragColor.a = ${CLS.light.toFixed(2)};\n}`);
 };
 const sparkPts = new THREE.Points(spGeo, sparkMat);
-sparkPts.frustumCulled = false; scene.add(sparkPts);
+sparkPts.frustumCulled = false; scene.add(markCombatFx(sparkPts));
 let spNext = 0, sparkAcc = 0, moteAcc = 0, bloodAcc = 0, flameAcc = 0, bladeHeat = 0, swingS = 0;
 // 0..1: how much the ronin is fighting right now. Running swings the blade too, but only a cut
 // (player.attackT >= 0) may draw the white trail, flare the halo or shower sparks.
@@ -431,7 +431,7 @@ function ribbon(cls: number, grains: boolean) {
       .replace(/}\s*$/, `  gl_FragColor.a = ${cls.toFixed(2)};\n}`);
   };
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.frustumCulled = false; scene.add(mesh);
+  mesh.frustumCulled = false; scene.add(markCombatFx(mesh));
   return { pos, col, geo };
 }
 const makeTrail = () => ({ points: [] as TrailPt[], streak: ribbon(CLS.light, false), vapour: ribbon(CLS.sky, true) });
@@ -664,7 +664,7 @@ function flourish(kind: 'bolts' | 'blood' | 'feathers' | 'stars' | 'flames', dt:
       const pts = [spTmp.clone()];
       for (let k = 0; k < 4; k++) pts.push(pts[k].clone().add(new THREE.Vector3(rnd(-0.18, 0.18), rnd(-0.12, 0.18), rnd(-0.18, 0.18))));
       const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), boltMat); l.frustumCulled = false;
-      scene.add(l); bolts.push({ l, life: 0.09 });
+      scene.add(markCombatFx(l)); bolts.push({ l, life: 0.09 });
       if (Math.random() < 0.3) spawnSpark(spTmp, rnd(-1, 1), rnd(0, 1.5), rnd(-1, 1), 0.2);
     } else if (kind === 'blood') spawnSpark(spTmp, rnd(-0.3, 0.3) + tipVel.x * 0.1, rnd(-0.5, 0.2), rnd(-0.3, 0.3) + tipVel.z * 0.1, rnd(0.5, 0.9));
     else if (kind === 'flames') spawnSpark(spTmp, rnd(-0.9, 0.9) + tipVel.x * 0.18, rnd(0.7, 2.2), rnd(-0.9, 0.9) + tipVel.z * 0.18, rnd(0.45, 0.95), 0.45);

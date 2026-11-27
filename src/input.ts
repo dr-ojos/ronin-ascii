@@ -93,7 +93,16 @@ addEventListener('keydown', e => {
   // switches act once per press: a held key repeats ~30 times a second, and every T rebuilds the graphics
   // (quality, shadow map, shaders) — holding it froze the game for seconds and could bring the browser down
   if (e.repeat) { if (e.code !== 'Equal' && e.code !== 'Minus' && e.code !== 'NumpadAdd' && e.code !== 'NumpadSubtract' && e.key !== '+' && e.key !== '-') return; }
-  if (e.code === 'KeyT') state.asciiOn = !state.asciiOn;
+  if (e.code === 'KeyT') {
+    state.viewMode = state.viewMode === '3d' ? 'hybrid' : state.viewMode === 'hybrid' ? 'ascii' : '3d';
+    state.asciiOn = state.viewMode === 'ascii';
+    showMsg(
+      state.viewMode === 'hybrid' ? 'MODO HÍBRIDO · personajes y combate ASCII'
+        : state.viewMode === 'ascii' ? 'MODO ASCII'
+        : 'MODO 3D',
+      1.6
+    );
+  }
   if (e.code === 'KeyG') toggleSurfaceGlyphs();   // letters on the figures' surface <-> screen-grid characters
   if (e.code === 'KeyM') sfx.setMuted(!sfx.muted);
   if (e.code === 'KeyN') state.bigMap = !state.bigMap;
