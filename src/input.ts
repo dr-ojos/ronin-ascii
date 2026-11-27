@@ -9,6 +9,7 @@ import { tryOpen } from './loot';
 import { tryUseDungeonPortal } from './dungeon';
 import { trySpecial } from './special';
 import { cycleRangedElement, tryElementalOrb } from './elemental-orb';
+import { cycleCompanion, trySummonCompanion } from './companions';
 import { cycleTechnique } from './techniques';
 import { tryTalkTemple } from './temples';
 import { tryTalk } from './shop';
@@ -79,6 +80,10 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyB' && state.playing && !state.dead) tryTeleportToShop();
   if (!e.repeat && e.code === 'KeyP') trySpecial(1);
   if (!e.repeat && e.code === 'KeyJ') trySpecial(2);
+  if (!e.repeat && e.code === 'KeyR' && state.playing && !state.dead && !state.photo) {
+    if (e.shiftKey) cycleCompanion();
+    else trySummonCompanion();
+  }
   // Ñ launches the elemental ranged orb (3 charges); SHIFT+Ñ cycles Fuego / Rayo / Agua / Viento
   if (!e.repeat && (e.code === 'Semicolon' || e.key === 'ñ' || e.key === 'Ñ')) {
     e.preventDefault();

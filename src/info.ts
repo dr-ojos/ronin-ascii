@@ -21,7 +21,9 @@ const SECTIONS: [string, [string, string][]][] = [
     ['Usar la técnica secundaria', 'J'],
     ['Cambiar técnica de P / de J', 'O / ⇧O'],
     ['Orbe elemental a distancia (3 cargas)', 'Ñ'],
-    ['Cambiar elemento (fuego/rayo/agua/viento)', '⇧Ñ']
+    ['Cambiar elemento (fuego/rayo/agua/viento)', '⇧Ñ'],
+    ['Invocar o llamar a tu(s) compañero(s) (2 en nv. 50)', 'R'],
+    ['Cambiar de compañero', '⇧R']
   ]],
   ['MUNDO', [
     ['Hablar · abrir cofres', 'E'],

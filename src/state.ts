@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { TechniqueId } from './techniques';
 import type { ClassId } from './classes';
 import type { OrbElement } from './elemental-orb';
+import type { CompanionId } from './companions';
 
 export type MenuId = 'shop' | 'custom' | 'temple' | 'inventory' | 'level' | 'info';
 export type ViewMode = '3d' | 'hybrid' | 'ascii';
@@ -44,6 +45,9 @@ export const state = {
   special2: 0, technique2: 'iai' as TechniqueId, casting: 'tajos' as TechniqueId,
   // ranged elemental orb attack (Ñ): bought at elemental temples, 3 charges with slow dedicated recharge
   rangedElement: null as OrbElement | null, learnedOrbs: [] as OrbElement[], rangedCharges: 0, rangedCharge: 0,
+  // companion / summon system (R to summon, SHIFT+R to cycle owned companions; 2nd slot unlocks at level 50)
+  companion: null as CompanionId | null, companion2: null as CompanionId | null,
+  ownedCompanions: [] as CompanionId[], companionCharge: 1, companionCharge2: 1,
   // feel
   shake: 0, hitStop: 0, time: 0,
   // weather: `raining` is where it is heading, rainAmt how hard it rains now (0..1), rainT seconds until it changes

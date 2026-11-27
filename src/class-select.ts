@@ -7,6 +7,7 @@ import { resetWeapons } from './weapons';
 import { resetArmor } from './armor';
 import { dressUp } from './outfit';
 import { resetSpecial } from './special';
+import { resetCompanions } from './companions';
 import { TECHNIQUES } from './techniques';
 import { player, state } from './state';
 import { baseHp, ensureMinMaxHp, level, loadProgress, xpFrac } from './progression';
@@ -51,6 +52,7 @@ function outfitClass() {
   loadLook();
   resetWeapons();
   resetSpecial();
+  resetCompanions();
   player.maxHp = player.hp = baseHp();
   resetArmor();
   restoreRoninOnce();

@@ -25,6 +25,7 @@ import {
 } from './weapon-upgrades';
 import { cls, hasFixedArmor } from './classes';
 import { armorsForSale, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
+import { COMPANION_IDS, COMPANIONS, DUAL_COMPANION_LEVEL, buyCompanion, companionSlotOf, companionStats, equipCompanion, maxCompanionSlots, ownsCompanion } from './companions';
 import { player, state } from './state';
 import { threatLabel } from './equipment-threat';
 import { level, levelOk, levelReq } from './progression';
@@ -244,6 +245,34 @@ function shopRows(): MenuRow[] {
         }
       });
     }
+  }
+  const dualComp = maxCompanionSlots() >= 2;
+  rows.push({ label: dualComp ? 'COMPAÑEROS DE COMBATE (2 RANURAS · NV. 50+)' : `COMPAÑEROS DE COMBATE (2 A LA VEZ EN NV. ${DUAL_COMPANION_LEVEL})`, head: true });
+  for (const id of COMPANION_IDS) {
+    const c = COMPANIONS[id];
+    const mine = ownsCompanion(id), slot = companionSlotOf(id), shut = !mine && level() < c.minLevel;
+    rows.push({
+      label: `${c.minLevel >= 20 ? '✦ ' : ''}${c.kanji} ${c.name}`,
+      value: shut ? `nivel ${c.minLevel}` : slot ? (dualComp ? `ranura ${slot} · cambiar` : 'equipado') : mine ? (dualComp ? 'asignar' : 'equipar') : `${c.price} mon`,
+      cls: slot ? 'y' : mine ? 'b' : shut ? 'd' : state.mon >= c.price ? '' : 'r',
+      note: `${shut ? `requiere nivel ${c.minLevel} (tienes ${level()}) · ${c.price} mon · ` : ''}${c.desc} · ${companionStats(c)} · pulsa R para invocar`,
+      preview: restoreGear,
+      act() {
+        if (slot && !dualComp) return menuStatus(`${c.name} ya está equipado · pulsa R fuera de la tienda para invocarlo`);
+        if (shut) { sfx.warn(); return menuStatus(`«Necesitas más experiencia para liderar a ${c.name}.» · nivel ${c.minLevel}`); }
+        if (mine) {
+          const to = dualComp ? (slot === 1 ? 2 : 1) : 1;
+          equipCompanion(id, to);
+          sfx.chime(false);
+          return menuStatus(`Compañero en ranura ${to} · ${c.name} (pulsa R para invocar)`);
+        }
+        const res = buyCompanion(c);
+        if (res === 'level') { sfx.warn(); return menuStatus(`Requiere nivel ${c.minLevel} (tienes ${level()})`); }
+        if (res === 'poor') { sfx.warn(); return menuStatus(`te faltan ${c.price - state.mon} mon para reclutar a ${c.name}`); }
+        sfx.chime(true);
+        menuStatus(`«Un aliado fiel en la batalla.» · ${c.name} se une a ti (pulsa R)`);
+      }
+    });
   }
   rows.push({ label: 'OTROS', head: true });
   rows.push({

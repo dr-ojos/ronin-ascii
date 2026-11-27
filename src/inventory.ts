@@ -10,6 +10,7 @@ import { WEAPONS, equip, owns, weaponStats } from './weapons';
 import { weaponDisplayName, weaponMasteryText } from './weapon-upgrades';
 import { techniqueRows, toggleLevelMenu } from './level-menu';
 import { freePoints, level, rank, ROMAN } from './progression';
+import { COMPANIONS, DUAL_COMPANION_LEVEL, companionSlotOf, companionStats, equipCompanion, maxCompanionSlots } from './companions';
 
 export const inventoryButton = document.querySelector<HTMLButtonElement>('#inventory-btn')!;
 const ownedWeapons = () => WEAPONS.filter(w => owns(w.id));
@@ -72,6 +73,27 @@ function inventoryRows(): MenuRow[] {
           dressUp();
           sfx.dash();
           menuStatus(`Vestimenta equipada · ${a.name}`);
+        }
+      });
+    }
+  }
+  if (state.ownedCompanions.length) {
+    const dual = maxCompanionSlots() >= 2;
+    rows.push({ label: dual ? 'COMPAÑEROS (2 RANURAS · NV. 50+)' : `COMPAÑEROS (2 A LA VEZ EN NV. ${DUAL_COMPANION_LEVEL})`, head: true });
+    for (const id of state.ownedCompanions) {
+      const c = COMPANIONS[id];
+      const slot = companionSlotOf(id);
+      rows.push({
+        label: `${c.kanji} ${c.name}`,
+        value: slot ? (dual ? `ranura ${slot} · cambiar` : 'en R · activo') : (dual ? 'asignar en R' : 'equipar en R'),
+        cls: slot ? 'y' : 'b',
+        note: `${c.desc} · ${companionStats(c)} · R invocar · ⇧R cambiar`,
+        act() {
+          if (slot && !dual) return menuStatus(`${c.name} ya está equipado en R.`);
+          const to = dual ? (slot === 1 ? 2 : 1) : 1;
+          equipCompanion(id, to);
+          sfx.chime(false);
+          menuStatus(`${c.name} en ranura ${to} · pulsa R para invocar`);
         }
       });
     }

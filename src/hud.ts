@@ -16,6 +16,7 @@ import { enemies, KINDS } from './enemies';
 import { sfx } from './sfx';
 import { TECHNIQUES } from './techniques';
 import { MAX_RANGED_CHARGES, ORB_INFO } from './elemental-orb';
+import { companionStatuses } from './companions';
 import { cls } from './classes';
 import { freePoints, level, MAX_LEVEL, xpFrac } from './progression';
 
@@ -39,6 +40,8 @@ type THudRefs = {
   score: HTMLElement; mult: HTMLElement; best: HTMLElement; mon: HTMLElement; jade: HTMLElement; gain: HTMLElement;
   slot1: HTMLElement; slot1Name: HTMLElement; slot1Bar: HTMLProgressElement; slot1Val: HTMLElement;
   slot2: HTMLElement; slot2Name: HTMLElement; slot2Bar: HTMLProgressElement; slot2Val: HTMLElement;
+  compSlot: HTMLElement; compName: HTMLElement; compBar: HTMLProgressElement; compVal: HTMLElement;
+  compSlot2: HTMLElement; compName2: HTMLElement; compBar2: HTMLProgressElement; compVal2: HTMLElement;
   orbSlot: HTMLElement; orbSub: HTMLElement; orbName: HTMLElement; orbDots: HTMLElement[]; orbBar: HTMLProgressElement; orbVal: HTMLElement;
   dash: HTMLElement; dashTxt: HTMLElement; snare: HTMLElement; mute: HTMLElement;
   meta: HTMLElement; ups: HTMLElement;
@@ -81,6 +84,8 @@ function mountTHud(): THudRefs {
     `<section class="th-card th-techs" aria-label="Técnicas">` +
       `<div class="th-slot" data-r="slot1"><kbd>P</kbd><span class="th-sname" data-r="slot1Name"></span><progress class="th-bar th-tbar" data-r="slot1Bar" max="100" value="0" aria-label="Técnica P"></progress><span class="th-sval" data-r="slot1Val"></span></div>` +
       `<div class="th-slot" data-r="slot2"><kbd>J</kbd><span class="th-sname" data-r="slot2Name"></span><progress class="th-bar th-tbar" data-r="slot2Bar" max="100" value="0" aria-label="Técnica J"></progress><span class="th-sval" data-r="slot2Val"></span></div>` +
+      `<div class="th-slot" data-r="compSlot"><kbd>R</kbd><span class="th-sname" data-r="compName"></span><progress class="th-bar th-tbar" data-r="compBar" max="100" value="100" aria-label="Compañero 1"></progress><span class="th-sval" data-r="compVal"></span></div>` +
+      `<div class="th-slot" data-r="compSlot2" hidden><kbd>R2</kbd><span class="th-sname" data-r="compName2"></span><progress class="th-bar th-tbar" data-r="compBar2" max="100" value="100" aria-label="Compañero 2"></progress><span class="th-sval" data-r="compVal2"></span></div>` +
       `<div class="th-slot" data-r="orbSlot"><kbd>Ñ</kbd><span class="th-sname" data-r="orbName"></span><div class="th-orbs">${Array.from({ length: MAX_RANGED_CHARGES }, () => '<i class="th-orb-dot"></i>').join('')}</div><span class="th-sval" data-r="orbVal"></span></div>` +
       `<div class="th-orb-sub" data-r="orbSub"><span>⇧Ñ cambiar elemento</span><progress class="th-bar th-tbar" data-r="orbBar" max="100" value="100" aria-label="Carga de orbe"></progress></div>` +
       `<div class="th-foot"><span class="th-dash" data-r="dash"><i></i><span data-r="dashTxt"></span></span><span class="th-flags"><span class="th-snare" data-r="snare" hidden>TELARAÑA</span><span class="th-mute" data-r="mute" hidden>SIN SONIDO</span></span></div>` +
@@ -116,6 +121,8 @@ function mountTHud(): THudRefs {
     score: q('score'), mult: q('mult'), best: q('best'), mon: q('mon'), jade: q('jade'), gain: q('gain'),
     slot1: q('slot1'), slot1Name: q('slot1Name'), slot1Bar: q('slot1Bar'), slot1Val: q('slot1Val'),
     slot2: q('slot2'), slot2Name: q('slot2Name'), slot2Bar: q('slot2Bar'), slot2Val: q('slot2Val'),
+    compSlot: q('compSlot'), compName: q('compName'), compBar: q('compBar'), compVal: q('compVal'),
+    compSlot2: q('compSlot2'), compName2: q('compName2'), compBar2: q('compBar2'), compVal2: q('compVal2'),
     orbSlot: q('orbSlot'), orbSub: q('orbSub'), orbName: q('orbName'), orbDots: [...hud.querySelectorAll<HTMLElement>('.th-orb-dot')],
     orbBar: q('orbBar'), orbVal: q('orbVal'),
     dash: q('dash'), dashTxt: q('dashTxt'), snare: q('snare'), mute: q('mute'),
@@ -194,6 +201,33 @@ function updateTHud() {
   };
   syncSlot(r.slot1, r.slot1Name, r.slot1Bar, r.slot1Val, state.technique, state.special);
   syncSlot(r.slot2, r.slot2Name, r.slot2Bar, r.slot2Val, state.technique2, state.special2);
+
+  const comps = companionStatuses();
+  const syncComp = (
+    slotEl: HTMLElement, nameEl: HTMLElement, barEl: HTMLProgressElement, valEl: HTMLElement,
+    comp: (typeof comps)[number] | undefined
+  ) => {
+    slotEl.hidden = !comp;
+    if (!comp) return;
+    const compHex = '#' + comp.def.color.toString(16).padStart(6, '0');
+    nameEl.textContent = `${comp.def.kanji} ${comp.def.short}`;
+    nameEl.style.color = compHex;
+    if (comp.alive) {
+      const pct = Math.max(0, Math.min(100, Math.round((comp.hp / Math.max(1, comp.maxHp)) * 100)));
+      slotEl.dataset.ready = '0';
+      barEl.value = pct;
+      barEl.style.setProperty('--fill', pct > 50 ? 'linear-gradient(90deg,#3bc98b,#7cf5b5)' : pct > 25 ? '#ffc957' : '#ff4d40');
+      valEl.textContent = `${comp.hp} HP`;
+    } else {
+      const ready = comp.charge >= 1;
+      slotEl.dataset.ready = ready ? '1' : '0';
+      barEl.value = Math.min(100, Math.floor(comp.charge * 100));
+      barEl.style.setProperty('--fill', ready ? 'linear-gradient(90deg,#e09f3e,#fff0b3)' : compHex);
+      valEl.textContent = ready ? 'LISTO' : `${Math.floor(comp.charge * 100)}%`;
+    }
+  };
+  syncComp(r.compSlot, r.compName, r.compBar, r.compVal, comps[0]);
+  syncComp(r.compSlot2, r.compName2, r.compBar2, r.compVal2, comps[1]);
 
   const orbEl = state.rangedElement;
   r.orbSlot.hidden = !orbEl;
@@ -335,7 +369,23 @@ export function updateHud(dt: number) {
       : `[<span style="color:${orbHex}">${'#'.repeat(Math.floor(state.rangedCharge * 6))}</span>${'-'.repeat(6 - Math.floor(state.rangedCharge * 6))}] <span class="d">${Math.floor(state.rangedCharge * 100)} %</span>`;
     rangedLine = `\n<span class="d">Ñ</span> <span style="color:${orbHex}">${orbLabel}</span>${orbsStr} ${orbBar} <span class="d">· ⇧Ñ</span>`;
   }
-  const special = `${slotLine(state.technique, state.special, 'P')}\n${slotLine(state.technique2, state.special2, 'J')}${rangedLine}`;
+  const comps = companionStatuses();
+  let compLine = '';
+  for (const comp of comps) {
+    const compHex = '#' + comp.def.color.toString(16).padStart(6, '0');
+    const compLabel = `${comp.def.kanji} ${comp.def.short.toUpperCase()}`.padEnd(13);
+    const keyLbl = comp.slot === 1 ? 'R' : 'R2';
+    if (comp.alive) {
+      const cf = Math.max(0, Math.round((comp.hp / Math.max(1, comp.maxHp)) * 12));
+      compLine += `\n<span class="d">${keyLbl}</span> <span style="color:${compHex}">${compLabel}</span>[<span class="${cf < 4 ? 'r' : 'jade'}">${'#'.repeat(cf)}</span>${'-'.repeat(12 - cf)}] <span class="jade">${comp.hp} HP</span>`;
+    } else {
+      const cf = Math.floor(comp.charge * 12);
+      compLine += `\n<span class="d">${keyLbl}</span> <span style="color:${compHex}">${compLabel}</span>` + (comp.charge >= 1
+        ? `[<span class="y">${'#'.repeat(12)}</span>] <span class="y">listo</span>`
+        : `[<span class="b">${'#'.repeat(cf)}</span>${'-'.repeat(12 - cf)}] <span class="d">${Math.floor(comp.charge * 100)} %</span>`);
+    }
+  }
+  const special = `${slotLine(state.technique, state.special, 'P')}\n${slotLine(state.technique2, state.special2, 'J')}${compLine}${rangedLine}`;
   const foe = findTrackedFoe();
   const ff = foe ? Math.max(0, Math.ceil(foe.hp / foe.maxHp * 16)) : 0;
   const foeBar = foe

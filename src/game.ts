@@ -3,6 +3,7 @@ import { cellMat } from './ascii';
 import { sam } from './avatar';
 import { updatePetals } from './world';
 import { updatePlayer } from './player';
+import { updateCompanions } from './companions';
 import { updateEnemies } from './enemy-ai';
 import { updateBattle } from './battle';
 import { updateEncounters } from './encounters';
@@ -43,6 +44,7 @@ export function update(dt: number) {
   sam.root.rotation.z = 0;
 
   updatePlayer(dt);
+  updateCompanions(dt);
   updateEnemies(dt);
   updateBattle(dt);
   updateEncounters(dt);

@@ -9,10 +9,12 @@ import { state } from './state';
 import type { ClassId } from './classes';
 import type { TechniqueId } from './techniques';
 import type { OrbElement } from './elemental-orb';
+import type { CompanionId } from './companions';
 
 export interface Vault {
   weapons: string[]; armors: string[]; techniques: TechniqueId[];
   orbs?: OrbElement[]; rangedElement?: OrbElement;
+  companions?: CompanionId[]; companion?: CompanionId; companion2?: CompanionId;
   weapon?: string; armor?: string; technique?: TechniqueId; technique2?: TechniqueId;
   weaponLevels?: Record<string, number>; weaponXp?: Record<string, number>;
   jade?: number;
@@ -38,6 +40,8 @@ export function parseVault(raw: string | null): Vault {
     if (v && typeof v === 'object') return {
       weapons: strings(v.weapons), armors: strings(v.armors), techniques: strings(v.techniques) as TechniqueId[],
       orbs: strings(v.orbs) as OrbElement[], rangedElement: str(v.rangedElement) as OrbElement | undefined,
+      companions: strings(v.companions) as CompanionId[], companion: str(v.companion) as CompanionId | undefined,
+      companion2: str(v.companion2) as CompanionId | undefined,
       weapon: str(v.weapon), armor: str(v.armor), technique: str(v.technique) as TechniqueId | undefined,
       technique2: str(v.technique2) as TechniqueId | undefined,
       weaponLevels: numMap(v.weaponLevels), weaponXp: numMap(v.weaponXp),
@@ -72,6 +76,8 @@ export function mergeVaults(a: Vault, b: Vault): Vault {
   return {
     weapons: union(a.weapons, b.weapons), armors: union(a.armors, b.armors), techniques: union(a.techniques, b.techniques),
     orbs: union(a.orbs ?? [], b.orbs ?? []), rangedElement: b.rangedElement ?? a.rangedElement,
+    companions: union(a.companions ?? [], b.companions ?? []), companion: b.companion ?? a.companion,
+    companion2: b.companion2 ?? a.companion2,
     weapon: b.weapon ?? a.weapon, armor: b.armor ?? a.armor, technique: b.technique ?? a.technique,
     technique2: b.technique2 ?? a.technique2,
     jade: b.jade ?? a.jade,
@@ -90,6 +96,7 @@ export function saveVault() {
   if (!ready) return;
   const sig = [
     state.cls, state.owned, state.ownedArmor, state.learnedTechniques, state.learnedOrbs,
+    state.ownedCompanions, state.companion ?? '', state.companion2 ?? '',
     state.weapon, state.armor, state.technique, state.technique2, state.rangedElement ?? '',
     state.jade,
     JSON.stringify(state.weaponLevels), JSON.stringify(state.weaponXp)
@@ -99,6 +106,7 @@ export function saveVault() {
   const now: Vault = {
     weapons: state.owned.slice(), armors: state.ownedArmor.slice(), techniques: state.learnedTechniques.slice(),
     orbs: state.learnedOrbs.slice(), rangedElement: state.rangedElement ?? undefined,
+    companions: state.ownedCompanions.slice(), companion: state.companion ?? undefined, companion2: state.companion2 ?? undefined,
     weapon: state.weapon, armor: state.armor, technique: state.technique, technique2: state.technique2,
     weaponLevels: { ...state.weaponLevels }, weaponXp: { ...state.weaponXp },
     jade: Math.max(0, Math.floor(state.jade))

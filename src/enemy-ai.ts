@@ -4,6 +4,7 @@ import { scene } from './renderer';
 import { enemies, KINDS, despawn } from './enemies';
 import { chargeBlocked, clearEnemyAttack, moveDef, prepareEnemyAttack, removeEnemyWarning, type EnemyAttack } from './enemy-moves';
 import { hurtPlayer } from './damage';
+import { getActiveCompanionTargets, hurtCompanion } from './companions';
 import { burst } from './fx';
 import { sfx, panOf } from './sfx';
 import { showMsg } from './hud';
@@ -106,6 +107,7 @@ function castCrescent(attack: EnemyAttack, width: number, dmg: number) {
 
 function updateProjectiles(dt: number) {
   if (dt > 0) { lastMove.subVectors(player.pos, prevPos).setY(0); if (lastMove.lengthSq() > 1e-6) lastMove.normalize(); prevPos.copy(player.pos); }
+  const comps = getActiveCompanionTargets();
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const a = projectiles[i];
     a.m.position.addScaledVector(a.v, dt); a.life -= dt;
@@ -117,6 +119,27 @@ function updateProjectiles(dt: number) {
       const speed = a.v.length(), forward = (dx * a.v.x + dz * a.v.z) / speed, side = (dx * a.v.z - dz * a.v.x) / speed;
       gone = a.life <= 0;
       hits = Math.abs(forward) < 0.65 && Math.abs(side) < a.waveWidth;
+      if (!gone) {
+        for (const comp of comps) {
+          if (comp.flying && comp.altitude >= 2.2) continue;
+          const cdx = p.x - comp.pos.x, cdz = p.z - comp.pos.z;
+          const cFwd = (cdx * a.v.x + cdz * a.v.z) / speed, cSide = (cdx * a.v.z - cdz * a.v.x) / speed;
+          if (Math.abs(cFwd) < 0.65 + comp.radius && Math.abs(cSide) < a.waveWidth + comp.radius * 0.5) {
+            hurtCompanion(comp.slot, a.dmg, p);
+          }
+        }
+      }
+    } else if (!gone) {
+      for (const comp of comps) {
+        const cdx = p.x - comp.pos.x, cdz = p.z - comp.pos.z;
+        const cdy = p.y - (comp.pos.y + (comp.flying ? 0.1 : 1.0));
+        const cr = comp.radius + 0.35;
+        if (cdx * cdx + cdz * cdz < cr * cr && Math.abs(cdy) < 1.2) {
+          hurtCompanion(comp.slot, a.dmg, p);
+          gone = true;
+          break;
+        }
+      }
     }
     if (!gone && hits) {
       gone = true;
@@ -162,6 +185,9 @@ function updateMarks(dt: number) {
       bolt(pos.clone()); skyFlash(0.2); state.shake = Math.max(state.shake, 0.35);
       sfx.thunder(panOf(pos.x, pos.z), false);
       if (Math.hypot(player.pos.x - pos.x, player.pos.z - pos.z) < 1.9) hurtPlayer(k.dmg);
+      for (const comp of getActiveCompanionTargets()) {
+        if (Math.hypot(comp.pos.x - pos.x, comp.pos.z - pos.z) < 1.9 + comp.radius) hurtCompanion(comp.slot, k.dmg, pos);
+      }
       scene.remove(k.m); k.m.material.dispose(); marks.splice(i, 1);
     }
   }
@@ -196,6 +222,9 @@ function slam(en: Enemy, r: number) {
   burst(new THREE.Vector3(g.position.x, g.position.y + 0.2, g.position.z), 0xb8a890, 90, 9, 0.18);
   state.shake = Math.max(state.shake, 0.45); sfx.taiko(0.7);
   if (Math.hypot(player.pos.x - g.position.x, player.pos.z - g.position.z) < r) hurtPlayer(en.dmg);
+  for (const comp of getActiveCompanionTargets()) {
+    if ((!comp.flying || comp.altitude < 2.2) && Math.hypot(comp.pos.x - g.position.x, comp.pos.z - g.position.z) < r + comp.radius) hurtCompanion(comp.slot, en.dmg, g.position);
+  }
 }
 
 const CHARGE_T = 0.36;
@@ -227,6 +256,9 @@ function updateFire(dt: number) {
     p.pulse = 0.55;
     for (const center of p.centers) burst(center, 0xff793c, 20, 4, 0.14);
     if (p.centers.some(center => Math.hypot(player.pos.x - center.x, player.pos.z - center.z) < p.radius)) hurtPlayer(p.damage);
+    for (const comp of getActiveCompanionTargets()) {
+      if ((!comp.flying || comp.altitude < 1.8) && p.centers.some(center => Math.hypot(comp.pos.x - center.x, comp.pos.z - center.z) < p.radius + comp.radius)) hurtCompanion(comp.slot, p.damage);
+    }
   }
 }
 
@@ -284,6 +316,14 @@ function executeMove(en: Enemy, attack: EnemyAttack) {
     if (distance >= (move.innerRadius ?? 0) && distance < move.radius && Math.abs(angDiff(Math.atan2(dx, dz), yaw)) <= move.angle) {
       if (hurtPlayer(dmg) && move.pull) pullPlayer(dx, dz, distance, move.pull);
     }
+    for (const comp of getActiveCompanionTargets()) {
+      if (comp.flying && comp.altitude >= 2.3) continue;
+      const cdx = comp.pos.x - origin.x, cdz = comp.pos.z - origin.z;
+      const cDist = Math.hypot(cdx, cdz);
+      if (cDist >= (move.innerRadius ?? 0) && cDist < move.radius + comp.radius && Math.abs(angDiff(Math.atan2(cdx, cdz), yaw)) <= move.angle) {
+        hurtCompanion(comp.slot, dmg, origin);
+      }
+    }
     const edge = origin.clone().add(new THREE.Vector3(Math.sin(yaw), 0.24, Math.cos(yaw)).multiplyScalar(move.angle < Math.PI ? move.radius * 0.55 : 1));
     burst(edge, move.color, 80, 8, 0.16);
     state.shake = Math.max(state.shake, move.angle === Math.PI ? 0.6 : 0.3);
@@ -296,6 +336,11 @@ function executeMove(en: Enemy, attack: EnemyAttack) {
     }
     if (centers.some(p => Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < move.radius)) {
       if (hurtPlayer(dmg) && move.effect === 'web' && !state.dead) player.snareT = Math.max(player.snareT, 1.9);
+    }
+    for (const comp of getActiveCompanionTargets()) {
+      if ((!comp.flying || comp.altitude < 2.4 || move.effect === 'thunder') && centers.some(p => Math.hypot(comp.pos.x - p.x, comp.pos.z - p.z) < move.radius + comp.radius)) {
+        hurtCompanion(comp.slot, dmg, origin);
+      }
     }
     if (move.effect === 'fire') {
       fires.push({ owner: en, centers, warning: attack.warning, radius: move.radius, damage: Math.max(1, Math.round(dmg * 0.48)), life: 2.55, pulse: 0.6 });
@@ -322,17 +367,44 @@ function advanceCharge(en: Enemy, attack: EnemyAttack) {
       attack.hit = true;
       hurtPlayer(moveDamage(en, attack));
     }
+    if (length > 0) {
+      for (const comp of getActiveCompanionTargets()) {
+        if (comp.flying && comp.altitude >= 2.2) continue;
+        const cdx = comp.pos.x - origin.x, cdz = comp.pos.z - origin.z;
+        const cFwd = cdx * fx + cdz * fz;
+        if (cFwd >= prev - 0.2 && cFwd <= distance && Math.abs(cdx * fz - cdz * fx) < move.width + comp.radius) {
+          hurtCompanion(comp.slot, moveDamage(en, attack), origin);
+        }
+      }
+    }
   }
   if (blocked || en.t <= 0) finishMove(en, attack);
 }
 
 // ------------------------------------------------------------ every frame
 const tmp = new THREE.Vector3(), step = new THREE.Vector3();
+function chooseTargetPos(en: Enemy, ranged: boolean): THREE.Vector3 {
+  const comps = getActiveCompanionTargets();
+  if (!comps.length) return player.pos;
+  const g = en.g.position;
+  const dPlayer = Math.hypot(player.pos.x - g.x, player.pos.z - g.z);
+  let bestPos: THREE.Vector3 = player.pos;
+  let bestScore = dPlayer;
+  for (const comp of comps) {
+    if (comp.flying && comp.altitude > 2.2 && !ranged) continue;
+    const dComp = Math.hypot(comp.pos.x - g.x, comp.pos.z - g.z);
+    if (comp.tauntRadius > 0 && dComp < comp.tauntRadius) return comp.pos;
+    const score = dComp / 1.12;
+    if (score < bestScore) { bestScore = score; bestPos = comp.pos; }
+  }
+  return bestPos;
+}
+
 /** does this chaser have to go the long way round (nav holds where to)? Archers in range just shoot. */
-function detour(en: Enemy, d: number, shootRange: number) {
+function detour(en: Enemy, d: number, shootRange: number, goal: THREE.Vector3) {
   const g = en.g;
-  navTarget(g.position.x, g.position.z, player.pos.x, player.pos.z, nav);
-  const roundabout = Math.abs(nav.x - player.pos.x) > 0.01 || Math.abs(nav.z - player.pos.z) > 0.01;
+  navTarget(g.position.x, g.position.z, goal.x, goal.z, nav);
+  const roundabout = Math.abs(nav.x - goal.x) > 0.01 || Math.abs(nav.z - goal.z) > 0.01;
   if (shootRange > 0 && d < shootRange + 1) return false;
   return roundabout;
 }
@@ -344,8 +416,10 @@ export function updateEnemies(dt: number) {
   for (let i = enemies.length - 1; i >= 0; i--) {
     const en = enemies[i], g = en.g, camp = en.camp, def = KINDS[en.kind];
     if (en.hp <= 0) { kill(en, i, surfaceY(g.position.x, g.position.z) - wadeDepth(g.position.x, g.position.z) * WADE_SINK); continue; }
-    tmp.subVectors(player.pos, g.position); tmp.y = 0;
-    const ranged = !!def.ranged, d = tmp.length(), reach = ranged ? en.reach : en.reach * en.scale + 0.3;
+    const ranged = !!def.ranged;
+    const goal = chooseTargetPos(en, ranged);
+    tmp.subVectors(goal, g.position); tmp.y = 0;
+    const d = tmp.length(), reach = ranged ? en.reach : en.reach * en.scale + 0.3;
     const fromHome = Math.hypot(g.position.x - camp.x, g.position.z - camp.z);
     const youFromHome = Math.hypot(player.pos.x - camp.x, player.pos.z - camp.z);
     let walk = 0, heading: number | null = null;   // speed this frame (for the walk cycle) and where it looks
@@ -409,7 +483,7 @@ export function updateEnemies(dt: number) {
     } else if (leaving) {
       clearEnemyAttack(en);
       en.state = 'return';
-    } else if (en.state === 'chase' && detour(en, d, ranged ? en.reach : 0)) {
+    } else if (en.state === 'chase' && detour(en, d, ranged ? en.reach : 0, goal)) {
       // a cliff is in the way (or you are up where it can't reach yet): walk the way round, don't strike
       step.set(nav.x - g.position.x, 0, nav.z - g.position.z);
       const left = step.length();
@@ -426,7 +500,7 @@ export function updateEnemies(dt: number) {
         const waiting = pack && enemies.some(o => o !== en && o.camp === camp && (o.state === 'windup' || o.state === 'charge'));
         const turn = takeTurn(en);
         if (d <= move.range && en.t <= 0 && !waiting && turn) {
-          en.attack = prepareEnemyAttack(en, move, player.pos, Math.atan2(tmp.x, tmp.z));
+          en.attack = prepareEnemyAttack(en, move, goal, Math.atan2(tmp.x, tmp.z));
           en.state = 'windup'; en.t = en.attack.windup; en.knock.set(0, 0, 0);
           if (def.beast) {
             if (def.beast.species !== 'spider') sfx.growl(panOf(g.position.x, g.position.z), def.beast.species === 'bear');
@@ -461,13 +535,20 @@ export function updateEnemies(dt: number) {
         if (en.kind === 'tengu') {
           // a fan of three arrows, and every third time a wide one of five
           const fan = en.swings % 3 === 0 ? [-0.36, -0.18, 0, 0.18, 0.36] : [-0.16, 0, 0.16];
-          for (const y of fan) shoot(en, y);
+          for (const y of fan) shoot(en, y, goal === player.pos ? undefined : goal);
           en.state = 'recover'; en.t = rnd(1.0, 1.4);
-        } else if (ranged) { shoot(en); en.state = 'recover'; en.t = rnd(1.1, 1.6); }
+        } else if (ranged) { shoot(en, 0, goal === player.pos ? undefined : goal); en.state = 'recover'; en.t = rnd(1.1, 1.6); }
         else if (thunder) { callThunder(en); en.state = 'recover'; en.t = 1.1; }
         else {
           if (slamming) slam(en, 2.9 * en.scale);
-          else if (d < reach * 1.35) hurtPlayer(en.dmg);
+          else {
+            if (Math.hypot(player.pos.x - g.position.x, player.pos.z - g.position.z) < reach * 1.35) hurtPlayer(en.dmg);
+            for (const comp of getActiveCompanionTargets()) {
+              if ((!comp.flying || comp.altitude < 2.3) && Math.hypot(comp.pos.x - g.position.x, comp.pos.z - g.position.z) < reach * 1.35 + comp.radius) {
+                hurtCompanion(comp.slot, en.dmg, g.position);
+              }
+            }
+          }
           // the spearman lunges, everyone else steps into the blow
           const lunge = en.kind === 'ashigaru' || en.kind === 'kensei';
           en.knock.copy(tmp).normalize().multiplyScalar(lunge ? (en.kind === 'kensei' ? 13 : 11) : slamming ? 0 : 5);

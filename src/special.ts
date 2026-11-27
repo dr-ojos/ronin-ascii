@@ -23,6 +23,7 @@ import { clearSutras, startSutras, updateSutras } from './sutra-shield';
 import { clearFlyingSwords, startFlyingSwords, updateFlyingSwords } from './flying-swords';
 import { clearSpectralClones, startSpectralClones, updateSpectralClones } from './spectral-clones';
 import { chargeRanged, clearElementalOrbs, MAX_RANGED_CHARGES, ORB_ELEMENTS, updateElementalOrbs } from './elemental-orb';
+import { chargeCompanionKill } from './companions';
 import { clearVfxArt, spawnCinematicBolt, spawnLightningTelegraph, spawnStormCanopy, updateVfxArt } from './vfx-art';
 import { cls } from './classes';
 import { chargeMult } from './progression';
@@ -43,7 +44,7 @@ export function charge(amount: number) {
     if (state[key] >= 1) { sfx.chime(false); showMsg(`— ${TECHNIQUES[slotTechnique(slot)].name.toUpperCase()} —\nCarga lista · pulsa ${SLOT_KEY[slot]}`, 1.6); }
   }
 }
-export const chargeKill = () => { charge(KILL_BONUS); chargeRanged(0.12); };
+export const chargeKill = () => { charge(KILL_BONUS); chargeRanged(0.12); chargeCompanionKill(); };
 
 // ------------------------------------------------------------ bolts
 const pending: { t: number; fn: () => void }[] = [];

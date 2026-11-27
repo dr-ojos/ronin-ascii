@@ -22,6 +22,7 @@ import { equipmentThreat } from './equipment-threat';
 import { showMsg } from './hud';
 import { sfx } from './sfx';
 import { resetSpecial } from './special';
+import { resetCompanions } from './companions';
 import { isTownLiberated, registerTownCamp, resetLiberation, type TownId } from './liberation';
 import { activeWorldEvent, resetWorldEvents } from './world-events';
 import { resetDungeon } from './dungeon';
@@ -270,6 +271,7 @@ export function reset() {
   Object.assign(player, { hp: baseHp(), maxHp: baseHp(), attackT: -1, combo: 0, dashT: 0, dashCd: 0, invuln: 1, snareT: 0, jumpY: 0, vy: 0, jumpBuf: 0, landT: 0, airDashUsed: false });
   player.pos.set(0, 0, 4); state.yaw = 0; state.dead = false; state.lastHurt = -99; state.chests = 0;
   resetSpecial();
+  resetCompanions();
   resetBattle();
   resetScore();
   resetLiberation();
