@@ -18,7 +18,7 @@ import { chargeKill, bolt, skyFlash } from './special';
 import { circle, onEnrage, onKill, takeTurn } from './battle';
 import { affixLabel } from './boss-mechanics';
 import { onTownCampCleared, startTownMission } from './liberation';
-import { onWorldEventBossDefeat, onWorldEventBossEnrage } from './world-events';
+import { onWorldEventBossDefeat, onWorldEventBossPhase } from './world-events';
 import { earnTechnique, TECHNIQUES } from './techniques';
 import { applyWeapon, weapon } from './weapons';
 import { gainWeaponXp } from './weapon-upgrades';
@@ -198,7 +198,7 @@ function slam(en: Enemy, r: number) {
 }
 
 const CHARGE_T = 0.36;
-const moveDamage = (en: Enemy, attack: EnemyAttack) => Math.round(en.dmg * attack.move.power * (en.enraged ? 1.18 : 1));
+const moveDamage = (en: Enemy, attack: EnemyAttack) => Math.round(en.dmg * attack.move.power * (en.phase === 3 ? 1.36 : en.enraged ? 1.18 : 1));
 
 interface FirePatch {
   owner: Enemy;
@@ -250,7 +250,7 @@ function pullPlayer(dx: number, dz: number, distance: number, strength: number) 
 function finishMove(en: Enemy, attack: EnemyAttack) {
   clearEnemyAttack(en);
   en.state = 'recover';
-  en.t = attack.move.recovery * (en.enraged ? 0.9 : 1);
+  en.t = attack.move.recovery * (en.phase === 3 ? 0.76 : en.enraged ? 0.9 : 1);
 }
 
 function executeMove(en: Enemy, attack: EnemyAttack) {
@@ -349,16 +349,35 @@ export function updateEnemies(dt: number) {
     const youFromHome = Math.hypot(player.pos.x - camp.x, player.pos.z - camp.z);
     let walk = 0, heading: number | null = null;   // speed this frame (for the walk cycle) and where it looks
     const leaving = fromHome > camp.leash || youFromHome > camp.leash + 4 || state.dead;
-    if (def.boss && !en.enraged && en.hp <= en.maxHp * 0.5 && en.state !== 'idle' && en.state !== 'return' && !leaving) {
-      en.enraged = true;
-      burst(g.position.clone().add(new THREE.Vector3(0, 1.25 * en.scale, 0)), def.boss.aura, 90, 7, 0.16);
-      if (en.aura) en.aura.intensity = !def.beast && def.look.colossal ? 7.2 : 4;
-      sfx.roar({ big: true, pan: panOf(g.position.x, g.position.z) });
-      onEnrage(en);
-      if (camp.worldEvent) onWorldEventBossEnrage(en);
-      else showMsg(`¡ ${def.name.toUpperCase()} ENFURECIDO !\nllama a sus refuerzos`, 2);
+    const curPhase = en.phase ?? (en.enraged ? 2 : 1);
+    if (def.boss && en.state !== 'idle' && en.state !== 'return' && !leaving) {
+      if (def.boss.phase3) {
+        // 3-phase colossal boss: Phase II at 66% HP, Phase III at 33% HP (each summons a bigger common-enemy wave)
+        if (curPhase < 2 && en.hp <= en.maxHp * 0.66) {
+          en.phase = 2; en.enraged = true;
+          burst(g.position.clone().add(new THREE.Vector3(0, 1.25 * en.scale, 0)), def.boss.aura, 90, 7, 0.16);
+          if (en.aura) en.aura.intensity = 7.2;
+          sfx.roar({ big: true, pan: panOf(g.position.x, g.position.z) });
+          if (camp.worldEvent) onWorldEventBossPhase(en, 2);
+          else { onEnrage(en); showMsg(`¡ ${def.name.toUpperCase()} · FASE II !`, 2); }
+        } else if (curPhase < 3 && en.hp <= en.maxHp * 0.33) {
+          en.phase = 3; en.enraged = true;
+          burst(g.position.clone().add(new THREE.Vector3(0, 1.35 * en.scale, 0)), def.boss.aura, 130, 9, 0.2);
+          if (en.aura) en.aura.intensity = 9.5;
+          sfx.roar({ big: true, pan: panOf(g.position.x, g.position.z) });
+          if (camp.worldEvent) onWorldEventBossPhase(en, 3);
+          else { onEnrage(en); showMsg(`¡ ${def.name.toUpperCase()} · FASE III !`, 2.2); }
+        }
+      } else if (!en.enraged && en.hp <= en.maxHp * 0.5) {
+        en.phase = 2; en.enraged = true;
+        burst(g.position.clone().add(new THREE.Vector3(0, 1.25 * en.scale, 0)), def.boss.aura, 90, 7, 0.16);
+        if (en.aura) en.aura.intensity = !def.beast && def.look.colossal ? 7.2 : 4;
+        sfx.roar({ big: true, pan: panOf(g.position.x, g.position.z) });
+        onEnrage(en);
+        showMsg(`¡ ${def.name.toUpperCase()} ENFURECIDO !\nllama a sus refuerzos`, 2);
+      }
     }
-    const speed = en.speed * (en.enraged ? 1.13 : 1) * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));
+    const speed = en.speed * (en.phase === 3 ? 1.26 : en.enraged ? 1.13 : 1) * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));
     en.t -= dt; en.cd -= dt;
     en.strikeT = Math.max(0, en.strikeT - dt);
     const slamming = en.kind === 'bruto' || (en.kind === 'raijin' && en.swings % 3 === 2);
@@ -374,8 +393,8 @@ export function updateEnemies(dt: number) {
       const left = step.length();
       if (home) en.hp = Math.min(en.maxHp, en.hp + en.maxHp * 0.4 * dt);
       if (home && fromHome < camp.r * 0.5) {
-        en.state = 'idle'; en.hp = en.maxHp; en.enraged = false; en.swings = 0;
-        if (en.aura) en.aura.intensity = 2.6;
+        en.state = 'idle'; en.hp = en.maxHp; en.enraged = false; en.phase = 1; en.swings = 0;
+        if (en.aura) en.aura.intensity = !def.beast && def.look.colossal ? 4.8 : 2.6;
         pickWander(en); en.t = rnd(1, 3);
       }
       else if (left > 0.6 && (home || en.t <= 0)) {
@@ -396,7 +415,7 @@ export function updateEnemies(dt: number) {
       walk = speed;
       if (left > 0.3) { g.position.addScaledVector(step.multiplyScalar(1 / left), Math.min(left, speed * dt)); heading = Math.atan2(step.x, step.z); }
     } else if (en.state === 'chase') {
-      const cycle = en.enraged ? def.boss?.enraged : def.moves;
+      const cycle = en.phase === 3 && def.boss?.phase3 ? def.boss.phase3 : en.enraged ? def.boss?.enraged : def.moves;
       if (en.kind === 'sombra' && d > 5 && d < 12 && en.cd <= 0) blink(en, true);
       else if (cycle) {
         const planned = moveDef(cycle[en.swings % cycle.length]);
@@ -525,7 +544,9 @@ function kill(en: Enemy, i: number, gy: number) {
   const r = camp.roster.indexOf(en.kind); if (r >= 0) camp.roster.splice(r, 1);
   if (camp.roster.length === 0) campCleared(camp, en.kind, relicName, eventVictory);
   else if (def.boss && !eventVictory) {
-    const escort = camp.chest?.state === 'sealed' ? '\nel cofre se abrirá cuando caiga su escolta' : '';
+    const escort = camp.chest?.state === 'sealed'
+      ? '\nel cofre se abrirá cuando caiga su escolta'
+      : camp.technique ? '\nla técnica será tuya cuando caiga su guardia' : '';
     const drop = relicName ? `\n✦ Ha soltado: ${relicName}` : '';
     showMsg(`¡ ${def.name.toUpperCase()} ABATIDO !${drop}${escort}`, relicName ? 3.2 : 2.2);
   }

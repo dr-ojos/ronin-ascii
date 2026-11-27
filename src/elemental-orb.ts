@@ -27,8 +27,10 @@ import { impactFlash, rangedPulse, screenSlash } from './cinematic';
 import { rnd } from './utils';
 import type { Enemy } from './types';
 import {
-  makeCrescentSlashMat, makeEnergyPillarMat, makeFresnelShellMat,
-  makeShockRingMat, mandalaTex, spawnCinematicBolt, spawnMiniArc,
+  makeCrescentSlashMat, makeEnergyPillarMat, makeFireBladeMat, makeFresnelShellMat,
+  makeLiquidOrbMat, makePlasmaOrbMat, makeShockRingMat, makeSolarOrbMat,
+  makeWaterWaveBodyMat, makeWindGaleMat, mandalaTex, spawnCinematicBolt,
+  spawnFireOrbDetonation, spawnMiniArc, spawnWaterSplashCrown, spawnWindGaleBurst,
 } from './vfx-art';
 
 export type OrbElement = 'fuego' | 'rayo' | 'agua' | 'viento';
@@ -60,14 +62,13 @@ export const ORB_INFO: Record<OrbElement, {
 
 // ------------------------------------------------------------ shared geometries & light
 const SPHERE = new THREE.SphereGeometry(1, 16, 12);
-const ICO = new THREE.IcosahedronGeometry(1, 1);
-const OCTA = new THREE.OctahedronGeometry(1, 0);
+const LIQUID_SPHERE = new THREE.SphereGeometry(1, 28, 20);
+const DROP_GEO = new THREE.SphereGeometry(1, 10, 8);
 const TORUS = new THREE.TorusGeometry(1, 0.09, 6, 28);
 const TORUS_THIN = new THREE.TorusGeometry(1, 0.045, 5, 28);
 const ARC = new THREE.RingGeometry(0.68, 1, 24, 1, 0, Math.PI * 0.88);
 const CONE = new THREE.ConeGeometry(0.28, 1, 5);
 const BOX = new THREE.BoxGeometry(1, 1, 1);
-const DOME = new THREE.SphereGeometry(1, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2);
 const COLUMN = new THREE.CylinderGeometry(1, 1, 1, 16, 1, true);
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
@@ -129,18 +130,6 @@ function spawnRing(at: THREE.Vector3, color: number, r: number, life = 0.42, opa
     const k = p.t / p.life;
     m.scale.setScalar(0.25 + r * (1 - (1 - k) ** 3));
     mat.uniforms.uOpacity.value = opacity * (1 - k);
-  });
-}
-
-function spawnDome(at: THREE.Vector3, color: number, r: number, life = 0.45, opacity = 0.62) {
-  const mat = makeFresnelShellMat(0xffffff, color, opacity, 2.0);
-  const m = new THREE.Mesh(DOME, mat);
-  m.position.set(at.x, surfaceY(at.x, at.z), at.z);
-  addProp(m, [mat], life, p => {
-    const k = p.t / p.life, e = 1 - (1 - k) ** 3;
-    const s = r * e + 0.05;
-    m.scale.set(s, s * (0.78 - 0.35 * k), s);
-    mat.uniforms.uOpacity.value = opacity * (1 - k) ** 1.5;
   });
 }
 
@@ -217,124 +206,158 @@ function buildOrbVisual(el: OrbElement): OrbVisual {
   const rimMat = mk(info.rim, 0.55);
 
   if (el === 'fuego') {
-    // Blazing solar core + molten corona + counter-rotating flame rings + 6 swept flame fins
-    const core = new THREE.Mesh(ICO, coreMat); core.scale.setScalar(0.38); root.add(core);
-    const shell = new THREE.Mesh(SPHERE, bodyMat); shell.scale.setScalar(0.56); root.add(shell);
-    const ringA = new THREE.Mesh(TORUS, bodyMat); ringA.scale.setScalar(0.76); root.add(ringA);
-    const ringB = new THREE.Mesh(TORUS_THIN, rimMat); ringB.scale.setScalar(0.95); root.add(ringB);
+    // Living vertex-displaced solar magma sphere + turbulent flame corona + counter-rotating fire rings + 6 flame fins
+    const solarMat = makeSolarOrbMat(0.96);
+    const flameMat = makeFireBladeMat(0xfff5c0, info.color, 0xc81a00, 0.88);
+    mats.push(solarMat, flameMat);
+
+    const solarBody = new THREE.Mesh(LIQUID_SPHERE, solarMat); solarBody.scale.setScalar(0.54); root.add(solarBody);
+    const ringA = new THREE.Mesh(TORUS, flameMat); ringA.scale.setScalar(0.8); root.add(ringA);
+    const ringB = new THREE.Mesh(TORUS_THIN, rimMat); ringB.scale.setScalar(0.98); root.add(ringB);
     const fins = new THREE.Group();
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
-      const fin = new THREE.Mesh(CONE, i % 2 ? bodyMat : rimMat);
-      fin.position.set(Math.cos(a) * 0.62, Math.sin(a) * 0.62, -0.18);
+      const fin = new THREE.Mesh(CONE, flameMat);
+      fin.position.set(Math.cos(a) * 0.64, Math.sin(a) * 0.64, -0.2);
       fin.rotation.set(-Math.PI * 0.35, 0, a - Math.PI / 2);
-      fin.scale.set(0.36, 0.65, 0.36);
+      fin.scale.set(0.38, 0.72, 0.38);
       fins.add(fin);
     }
     root.add(fins);
     return {
       root, mats,
       animate(dt, t) {
-        const pulse = 1 + 0.12 * Math.sin(t * 28);
-        core.scale.setScalar(0.38 * pulse);
-        core.rotation.x += dt * 7; core.rotation.y += dt * 9;
-        shell.scale.setScalar(0.56 * (1 + 0.08 * Math.cos(t * 22)));
-        ringA.rotation.x += dt * 6.5; ringA.rotation.y += dt * 4.5;
-        ringB.rotation.y -= dt * 8; ringB.rotation.z += dt * 5;
-        fins.rotation.z += dt * 9;
+        const pulse = 1 + 0.09 * Math.sin(t * 24);
+        solarBody.scale.setScalar(0.54 * pulse);
+        solarBody.rotation.x += dt * 4.5; solarBody.rotation.y += dt * 6.5;
+        ringA.rotation.x += dt * 7; ringA.rotation.y += dt * 5;
+        ringB.rotation.y -= dt * 8.5; ringB.rotation.z += dt * 5.5;
+        fins.rotation.z += dt * 10;
       },
     };
   }
 
   if (el === 'rayo') {
-    // High-voltage plasma sphere + 3 snapping electric orbital rings + 4 crackling static needles
-    const core = new THREE.Mesh(SPHERE, coreMat); core.scale.setScalar(0.34); root.add(core);
-    const cage = new THREE.Mesh(ICO, bodyMat); cage.scale.setScalar(0.54); root.add(cage);
+    // High-voltage vertex-displaced plasma core + crackling electric veins + 3 orbital rings + 5 snapping arcs
+    const plasmaMat = makePlasmaOrbMat(0.96);
+    mats.push(plasmaMat);
+    const core = new THREE.Mesh(SPHERE, coreMat); core.scale.setScalar(0.28); root.add(core);
+    const plasma = new THREE.Mesh(LIQUID_SPHERE, plasmaMat); plasma.scale.setScalar(0.56); root.add(plasma);
     const arcs: THREE.Mesh[] = [];
     for (let i = 0; i < 3; i++) {
       const r = new THREE.Mesh(TORUS_THIN, i === 0 ? coreMat : bodyMat);
-      r.scale.setScalar(0.68 + i * 0.16);
+      r.scale.setScalar(0.72 + i * 0.16);
       r.rotation.set(i * 1.1, i * 0.8, 0);
       root.add(r);
       arcs.push(r);
     }
     const needles: THREE.Mesh[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       const n = new THREE.Mesh(BOX, i % 2 ? coreMat : rimMat);
-      n.scale.set(0.05, 0.05, 1.35);
+      n.scale.set(0.045, 0.045, 1.48);
       root.add(n);
       needles.push(n);
     }
     return {
       root, mats,
       animate(dt, t) {
-        const snap = Math.sin(t * 60) > 0 ? 1.1 : 0.9;
-        core.scale.setScalar(0.34 * snap);
-        cage.rotation.x += dt * 14; cage.rotation.y -= dt * 11;
+        const snap = Math.sin(t * 62) > 0 ? 1.12 : 0.9;
+        core.scale.setScalar(0.28 * snap);
+        plasma.rotation.x += dt * 10; plasma.rotation.y -= dt * 8;
         arcs.forEach((a, i) => {
-          a.rotation.x += dt * (12 + i * 5) * (i % 2 ? -1 : 1);
-          a.rotation.y += dt * (9 + i * 4);
+          a.rotation.x += dt * (13 + i * 5) * (i % 2 ? -1 : 1);
+          a.rotation.y += dt * (10 + i * 4);
         });
         for (const n of needles) {
-          if (Math.random() < 0.55) n.rotation.set(rnd(0, Math.PI), rnd(0, Math.PI), rnd(0, Math.PI));
+          if (Math.random() < 0.6) n.rotation.set(rnd(0, Math.PI), rnd(0, Math.PI), rnd(0, Math.PI));
         }
       },
     };
   }
 
   if (el === 'agua') {
-    // Abyssal crystal sphere + faceted hydro-octahedron + 2 spiraling wave crescents + 5 orbiting droplets
-    const core = new THREE.Mesh(SPHERE, coreMat); core.scale.setScalar(0.36); root.add(core);
-    const crystal = new THREE.Mesh(OCTA, bodyMat); crystal.scale.setScalar(0.58); root.add(crystal);
+    // Living vertex-displaced liquid water sphere + spiraling tidal ribbons + undulating teardrop droplets
+    const liquidMat = makeLiquidOrbMat(0.94);
+    const ribbonMat = makeWaterWaveBodyMat({ opacity: 0.88, seed: 2.1, fanFade: true });
+    mats.push(liquidMat, ribbonMat);
+
+    const hydroBody = new THREE.Mesh(LIQUID_SPHERE, liquidMat);
+    hydroBody.scale.setScalar(0.56);
+    root.add(hydroBody);
+
+    const innerGlow = new THREE.Mesh(SPHERE, coreMat);
+    innerGlow.scale.setScalar(0.24);
+    root.add(innerGlow);
+
     const ribbons = new THREE.Group();
     for (let i = 0; i < 2; i++) {
-      const arc = new THREE.Mesh(ARC, i === 0 ? bodyMat : rimMat);
-      arc.scale.setScalar(0.86);
-      arc.rotation.set(Math.PI * 0.32 * (i ? -1 : 1), i * Math.PI, 0);
+      const arc = new THREE.Mesh(ARC, ribbonMat);
+      arc.scale.setScalar(0.96);
+      arc.rotation.set(Math.PI * 0.34 * (i ? -1 : 1), i * Math.PI, 0);
       ribbons.add(arc);
     }
     root.add(ribbons);
+
     const drops = new THREE.Group();
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      const d = new THREE.Mesh(SPHERE, coreMat);
-      d.scale.setScalar(0.11);
-      d.position.set(Math.cos(a) * 0.82, Math.sin(a) * 0.35, Math.sin(a) * 0.82);
+    const dropMeshes: THREE.Mesh[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const d = new THREE.Mesh(DROP_GEO, i % 2 ? coreMat : bodyMat);
+      d.scale.set(0.095, 0.095, 0.18);
+      d.position.set(Math.cos(a) * 0.86, Math.sin(a * 2) * 0.28, Math.sin(a) * 0.86);
+      d.rotation.y = -a;
       drops.add(d);
+      dropMeshes.push(d);
     }
     root.add(drops);
+
     return {
       root, mats,
       animate(dt, t) {
-        core.scale.setScalar(0.36 * (1 + 0.08 * Math.sin(t * 14)));
-        crystal.rotation.y += dt * 5; crystal.rotation.x += dt * 3;
-        ribbons.rotation.z += dt * 8.5; ribbons.rotation.y += dt * 4;
-        drops.rotation.y -= dt * 7; drops.rotation.x += dt * 3.5;
+        // Organic liquid breathing & slosh wobble
+        hydroBody.scale.set(
+          0.56 * (1 + 0.07 * Math.sin(t * 11)),
+          0.56 * (1 + 0.07 * Math.cos(t * 13)),
+          0.56 * (1 + 0.06 * Math.sin(t * 9 + 1.2)),
+        );
+        hydroBody.rotation.y += dt * 3.2;
+        hydroBody.rotation.x += dt * 1.8;
+        innerGlow.scale.setScalar(0.24 * (1 + 0.12 * Math.sin(t * 16)));
+        ribbons.rotation.z += dt * 7.5;
+        ribbons.rotation.y += dt * 4.2;
+        drops.rotation.y -= dt * 6.5;
+        drops.rotation.x = Math.sin(t * 4.5) * 0.32;
+        for (let i = 0; i < dropMeshes.length; i++) {
+          dropMeshes[i].position.y = Math.sin(t * 9 + i * 1.1) * 0.32;
+        }
       },
     };
   }
 
-  // viento: compressed emerald eye + 3 razor spinning crescent wind-blades + outer vortex torus
-  const core = new THREE.Mesh(SPHERE, coreMat); core.scale.setScalar(0.3); root.add(core);
-  const vortex = new THREE.Mesh(TORUS_THIN, rimMat); vortex.scale.setScalar(0.88); root.add(vortex);
+  // viento: compressed aerodynamic emerald cyclone + 3 razor-sharp gale blades + spiral slipstream vortex
+  const windMat = makeWindGaleMat({ opacity: 0.94, seed: 1.7 });
+  const eyeMat = makeFresnelShellMat(0xf4fff9, info.color, 0.85, 1.8);
+  mats.push(windMat, eyeMat);
+  const core = new THREE.Mesh(SPHERE, eyeMat); core.scale.setScalar(0.38); root.add(core);
+  const vortex = new THREE.Mesh(TORUS_THIN, windMat); vortex.scale.setScalar(0.92); root.add(vortex);
   const blades = new THREE.Group();
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
-    const b = new THREE.Mesh(ARC, i === 0 ? coreMat : bodyMat);
-    b.scale.setScalar(0.95);
+    const b = new THREE.Mesh(ARC, windMat);
+    b.scale.setScalar(1.06);
     b.rotation.set(Math.PI / 2, 0, a);
     blades.add(b);
   }
   root.add(blades);
-  const halo = new THREE.Mesh(TORUS_THIN, bodyMat); halo.scale.setScalar(0.62); halo.rotation.x = Math.PI / 2; root.add(halo);
+  const halo = new THREE.Mesh(TORUS_THIN, bodyMat); halo.scale.setScalar(0.66); halo.rotation.x = Math.PI / 2; root.add(halo);
   return {
     root, mats,
     animate(dt, t) {
-      core.scale.setScalar(0.3 * (1 + 0.1 * Math.sin(t * 26)));
-      blades.rotation.y += dt * 18;
-      blades.rotation.z = Math.sin(t * 10) * 0.25;
-      vortex.rotation.x += dt * 10; vortex.rotation.y -= dt * 7;
-      halo.rotation.z -= dt * 14;
+      core.scale.setScalar(0.38 * (1 + 0.1 * Math.sin(t * 26)));
+      blades.rotation.y += dt * 20;
+      blades.rotation.z = Math.sin(t * 11) * 0.28;
+      vortex.rotation.x += dt * 11; vortex.rotation.y -= dt * 8;
+      halo.rotation.z -= dt * 15;
     },
   };
 }
@@ -448,12 +471,11 @@ function detonateOrb(orb: FlyingOrb, directHit: Enemy | null) {
   impactFlash(info.color, 0.2);
 
   if (orb.el === 'fuego') {
-    // Fiery shockwave dome + rising ember pillar + AoE blast + burning DoT
-    spawnDome(groundAt, info.color, info.radius, 0.48, 0.56);
-    spawnRing(groundAt, info.core, info.radius * 1.15, 0.44, 0.9);
-    spawnPillar(groundAt, info.rim, 5.5, 1.35, 0.45, 0.55);
-    burst(at, info.color, 44, 8, 0.17);
-    burst(at, info.core, 22, 5, 0.13);
+    // Roaring 3D fire crown detonation + magma dome + scorched crater + rising ember pillar + burn DoT
+    spawnFireOrbDetonation(groundAt, info.radius);
+    spawnPillar(groundAt, info.rim, 5.8, 1.45, 0.45, 0.6);
+    burst(at, info.color, 48, 8.5, 0.18);
+    burst(at, info.core, 26, 5.5, 0.14);
     for (const e of enemies) {
       if (e.hp <= 0) continue;
       if (flatDist(e.g.position.x, e.g.position.z, at.x, at.z) > info.radius + 0.5 * e.scale) continue;
@@ -498,12 +520,11 @@ function detonateOrb(orb: FlyingOrb, directHit: Enemy | null) {
   }
 
   if (orb.el === 'agua') {
-    // Crashing tidal dome + double concentric ripple rings + heavy pushback + healing tide
-    spawnDome(groundAt, info.color, info.radius, 0.52, 0.5);
-    spawnRing(groundAt, info.core, info.radius * 1.1, 0.45, 0.9);
-    spawnRing(groundAt, info.rim, info.radius * 1.45, 0.62, 0.65);
-    burst(at, info.core, 36, 7.5, 0.16);
-    burst(at, info.color, 44, 6, 0.15);
+    // Crashing 3D liquid crown splash + concentric water-ripple caustic pool + foaming hydro-dome + healing tide
+    spawnWaterSplashCrown(groundAt, info.radius);
+    burst(at, info.core, 44, 8.2, 0.16);
+    burst(at, info.color, 56, 6.8, 0.17);
+    burst(groundAt, 0x1888ff, 30, 5.2, 0.15);
     let healed = 0;
     for (const e of enemies) {
       if (e.hp <= 0) continue;
@@ -524,9 +545,9 @@ function detonateOrb(orb: FlyingOrb, directHit: Enemy | null) {
   }
 
   // viento dissipation burst at end of path
-  spawnRing(groundAt, info.color, 3.2, 0.4, 0.85);
-  spawnCrescent(at, info.core, 2.4, Math.atan2(orb.dir.x, orb.dir.z), 0.25, 0.35);
-  burst(at, info.color, 34, 7.5, 0.14);
+  spawnWindGaleBurst(at, orb.dir, 1.0);
+  spawnCrescent(at, info.core, 2.7, Math.atan2(orb.dir.x, orb.dir.z), 0.25, 0.36);
+  burst(at, info.color, 38, 8, 0.14);
 }
 
 // ------------------------------------------------------------ public API
@@ -726,12 +747,25 @@ export function updateElementalOrbs(dt: number) {
       if (o.el === 'rayo') {
         const back = o.pos.clone().addScaledVector(o.dir, -1.6);
         spawnArc(back, o.pos, info.color, info.core, 3, 0.32, 0.14);
+        burst(o.pos.clone(), info.core, 3, 3.2, 0.1);
+      } else if (o.el === 'agua') {
+        // Liquid spray droplets & ground water ripple wake trailing beneath the hydro-orb
+        burst(o.pos.clone(), 0x45d8ff, 5, 2.8, 0.12);
+        burst(o.pos.clone(), 0xf0fcff, 3, 2.1, 0.09);
+        const wakeAt = new THREE.Vector3(o.pos.x, surfaceY(o.pos.x, o.pos.z) + 0.09, o.pos.z);
+        spawnRing(wakeAt, info.color, 1.35, 0.34, 0.55);
+      } else if (o.el === 'fuego') {
+        // Blazing embers & glowing heat streaks trailing the solar fireball
+        burst(o.pos.clone(), 0xff7a1e, 5, 3.2, 0.14);
+        burst(o.pos.clone(), 0xfff0b8, 3, 2.4, 0.1);
       } else {
-        const streakMat = glowMat(info.core, 0.75);
+        // Emerald wind-shear streaks & razor slipstream
+        burst(o.pos.clone(), 0x7effc4, 4, 3.0, 0.11);
+        const streakMat = glowMat(info.core, 0.78);
         const streak = new THREE.Mesh(BOX, streakMat);
-        const back = o.pos.clone().addScaledVector(o.dir, -1.3).add(new THREE.Vector3(rnd(-0.28, 0.28), rnd(-0.22, 0.22), rnd(-0.28, 0.28)));
+        const back = o.pos.clone().addScaledVector(o.dir, -1.5).add(new THREE.Vector3(rnd(-0.32, 0.32), rnd(-0.22, 0.22), rnd(-0.32, 0.32)));
         orient(streak, back, o.pos, 0.055);
-        addProp(streak, [streakMat], 0.18, p => { streakMat.opacity = 0.75 * (1 - p.t / p.life); });
+        addProp(streak, [streakMat], 0.18, p => { streakMat.opacity = 0.78 * (1 - p.t / p.life); });
       }
     }
 

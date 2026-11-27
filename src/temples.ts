@@ -40,7 +40,7 @@ function lessonRow(id: TempleTechniqueId, temple: TemplePlace) {
     note: move.description,
     act() {
       if (!learned && trial) {
-        sfx.warn(); return menuStatus(`${KINDS[trial].name} custodia el patio. Derrótalo y el rayo será tuyo.`);
+        sfx.warn(); return menuStatus(`${KINDS[trial].name} custodia el patio. Derrótalo y ${move.name} será tuya.`);
       }
       if (!learned && state.jade < cost) {
         sfx.warn(); return menuStatus(`Te faltan ${jadeLabel(cost - state.jade)}. Búscalos en cofres.`);
@@ -101,7 +101,9 @@ export function tryTalkTemple() {
       orbRow(temple.orb),
       {
         label: 'Despedirse',
-        note: temple.guardian ? 'El rayo se gana en combate; el resto se aprende con sellos de jade.' : 'Los sellos de jade se encuentran en cofres del mundo.',
+        note: temple.guardian
+          ? (temple.technique === 'rayo' ? 'El rayo se gana en combate; el resto se aprende con sellos de jade.' : 'Vence al guardián del patio para ganar su técnica principal, o aprende con sellos de jade.')
+          : 'Los sellos de jade se encuentran en cofres del mundo.',
         act: closeMenu,
     }],
   });

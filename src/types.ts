@@ -64,7 +64,7 @@ export type Wildlife = 'lobos' | 'oso' | 'jabalies' | 'aranas' | 'escorpiones';
 export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 'acechador' | 'hechicero'
   | 'guadanero' | 'piromante' | 'duelista' | 'tambor' | 'sombra' | 'coloso'
   | 'lobo' | 'loboAlfa' | 'oso' | 'jabali' | 'arana' | 'escorpion' | 'espectro'
-  | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianRayo' | 'shuten' | 'enma' | 'senorBosque' | 'yukiOnna'
+  | 'jefe' | 'kuro' | 'tenguMayor' | 'raijinMayor' | 'guardianViento' | 'guardianFuego' | 'guardianAgua' | 'guardianRayo' | 'shuten' | 'enma' | 'senorBosque' | 'yukiOnna'
   | 'kagutsuchi' | 'daimyoHueso' | 'taikoDemonio'
   | 'gashadokuro' | 'susanooTempestad' | 'amaterasuCeniza'
   | 'kensei' | 'tengu' | 'raijin';
@@ -95,6 +95,8 @@ interface EnemyBase {
   /** attacks done in the current fight */
   swings: number;
   enraged: boolean;
+  /** boss phase (1 = base, 2 = enraged, 3 = final phase for 3-phase colossal bosses) */
+  phase?: number;
   attack?: EnemyAttack;
   strikeT: number;
   /** cooldown of a blink or flank */
@@ -151,6 +153,8 @@ export interface Camp {
   chest?: Chest;
   /** a temple guardian: beating it teaches this technique, and it does not come back this run */
   technique?: TechniqueId;
+  /** guards a temple or sacred shrine: tougher stats, extra affixes and stronger reinforcements */
+  templeGuard?: boolean;
   /** town liberation mission this occupation camp belongs to (liberation.ts) */
   town?: 'aldea' | 'pueblo';
   /** random colossal boss world event id (world-events.ts) */

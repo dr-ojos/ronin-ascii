@@ -138,16 +138,18 @@ const lens = new Map<Camp, number>();
 
 function buildCamps() {
   // Offset bosses into their courtyards so they have room to move and telegraph their attacks.
+  const TEMPLE_SITES = new Set(['pagoda', 'inari', 'torii']);
   const guarded: [string, EnemyKind[], P2?][] = [
     ['castillo', ['kuro', 'escudero', 'escudero', 'ashigaru', 'arquero', 'oni'], [0, 25]],
     ['cementerio', ['jefe', 'hechicero', 'espectro', 'oni', 'acechador']],
-    ['pagoda', ['tenguMayor', 'arquero', 'acechador', 'ashigaru'], [0, 13]],
-    ['inari', ['raijinMayor', 'bruto', 'ashigaru'], [-2, -10]],
+    ['pagoda', ['tenguMayor', 'sombra', 'duelista', 'arquero', 'hechicero', 'escudero'], [0, 13]],
+    ['inari', ['raijinMayor', 'coloso', 'tambor', 'bruto', 'hechicero', 'escudero'], [-2, -10]],
     ['campamento', ['shuten', 'ashigaru', 'acechador', 'escudero', 'arquero', 'bruto']],
-    ['torii', ['yukiOnna', 'acechador', 'piromante', 'ashigaru']]
+    ['torii', ['yukiOnna', 'espectro', 'sombra', 'piromante', 'duelista', 'hechicero']]
   ];
   for (const [id, kinds, [dx, dz] = [0, 0]] of guarded) {
-    const p = place(id), r = Math.min(24, p.r * 0.5), c = makeCamp(p.x + dx, p.z + dz, kinds, r, { name: p.name });
+    const p = place(id), r = Math.min(24, p.r * 0.5);
+    const c = makeCamp(p.x + dx, p.z + dz, kinds, r, { name: p.name, templeGuard: TEMPLE_SITES.has(id) });
     const [cx, cz, ry] = chestSpot(c.x, c.z, 4, r * 0.8);
     c.chest = makeChest(cx, cz, ry, c.boss ? 'jefe' : 'guarida', c.tier, true);
     camps.push(c);
@@ -204,10 +206,17 @@ function buildCamps() {
     c.chest = makeChest(x, z, ry, 'guardian', tier, true);
     camps.push(c);
   }
-  // a temple whose technique is won in battle: its guardian waits in the courtyard, between master and torii
+  // each elemental temple has its guardian and thematic guard squad waiting in the courtyard, between master and torii
+  const TEMPLE_GUARDS: Partial<Record<EnemyKind, EnemyKind[]>> = {
+    guardianViento: ['sombra', 'duelista', 'arquero', 'escudero'],
+    guardianFuego: ['piromante', 'bruto', 'guadanero', 'escudero'],
+    guardianAgua: ['espectro', 'hechicero', 'duelista', 'escudero'],
+    guardianRayo: ['espectro', 'duelista', 'hechicero', 'escudero']
+  };
   for (const t of TEMPLES) if (t.guardian) {
     const [x, z] = toWorld(t.x, t.z, t.facing, 0, 14);
-    camps.push(makeCamp(x, z, [t.guardian], 9, { name: t.name, technique: t.technique }));
+    const squad: EnemyKind[] = [t.guardian, ...(TEMPLE_GUARDS[t.guardian] ?? ['espectro', 'duelista', 'hechicero', 'escudero'])];
+    camps.push(makeCamp(x, z, squad, 10, { name: t.name, technique: t.technique, templeGuard: true }));
   }
   for (const { x, z, r, wildlife } of WILDLIFE_SPOTS) {
     let kinds: EnemyKind[];

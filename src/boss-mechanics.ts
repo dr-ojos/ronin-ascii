@@ -45,12 +45,13 @@ export function affixesOf(en: Enemy): Affix[] {
   const rank = strong(en);
   if (!rank) return [];
   if (en.affixes) return en.affixes;
-  const tier = en.camp.tier, n = rank === 'elite' ? 1 : 1 + (tier > 0.5 ? 1 : 0) + (tier > 0.8 ? 1 : 0);
+  const tier = en.camp.tier, colossal = !!KINDS[en.kind].boss?.phase3, temple = !!en.camp.templeGuard;
+  const n = rank === 'elite' ? 1 : colossal ? 3 : Math.max(temple ? 2 : 1, 1 + (tier > 0.5 ? 1 : 0) + (tier > 0.8 ? 1 : 0) + (temple && tier > 0.6 ? 1 : 0));
   const pool = ALL.slice(), out: Affix[] = [];
   while (out.length < n && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   en.affixes = out;
-  en.stagger = 0; en.staggerNeed = en.maxHp * NEED[rank]; en.dazedT = 0;
-  en.affixT = state.time + rnd(3, 6);
+  en.stagger = 0; en.staggerNeed = en.maxHp * NEED[rank] * (colossal ? 1.35 : temple ? 1.25 : 1); en.dazedT = 0;
+  en.affixT = state.time + (temple ? rnd(2.5, 4.5) : rnd(3, 6));
   if (out.includes('furioso')) { en.speed *= 1.25; en.windup *= 0.85; en.dmg = Math.round(en.dmg * 1.1); }
   return out;
 }
@@ -72,7 +73,7 @@ export function addStagger(en: Enemy, amount: number) {
   lastStagger.set(en, state.time);
   if (en.stagger < en.staggerNeed!) return;
   en.stagger = 0; en.staggerNeed! *= NEED_GROWTH;
-  en.dazedT = DAZE[rank];
+  en.dazedT = KINDS[en.kind].boss?.phase3 ? 2.4 : en.camp.templeGuard ? 2.6 : DAZE[rank];
   staggerEnemy(en, en.dazedT);
   en.knock.set(0, 0, 0);
   const p = en.g.position, at = new THREE.Vector3(p.x, p.y + 2 * en.scale, p.z);
@@ -138,7 +139,7 @@ export function updateBossMechanics(dt: number) {
     // one affix acts at a time, every few seconds
     const d = Math.hypot(player.pos.x - p.x, player.pos.z - p.z);
     const active = affixes.filter(a => a === 'gelido' || a === 'invocador' || (a === 'errante' && d > 4));
-    en.affixT = state.time + rnd(5, 8);
+    en.affixT = state.time + (en.camp.templeGuard ? rnd(3.8, 6.2) : rnd(5, 8));
     if (!active.length) continue;
     const a = active[Math.floor(Math.random() * active.length)];
     if (a === 'gelido') {

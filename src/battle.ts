@@ -24,8 +24,12 @@ const SUMMARY_DELAY = 2.4;     // the summary waits for the camp's own message
 
 /** who a boss calls when it is enraged */
 const REINFORCE: Partial<Record<EnemyKind, EnemyKind[]>> = {
-  jefe: ['oni', 'bruto', 'oni'], kuro: ['escudero', 'duelista', 'ashigaru'], tenguMayor: ['arquero', 'acechador', 'acechador'],
-  raijinMayor: ['bruto', 'tambor', 'oni'], guardianRayo: ['espectro', 'duelista', 'ashigaru'],
+  jefe: ['oni', 'bruto', 'oni'], kuro: ['escudero', 'duelista', 'ashigaru'], tenguMayor: ['sombra', 'arquero', 'hechicero'],
+  raijinMayor: ['coloso', 'tambor', 'bruto'],
+  guardianViento: ['sombra', 'duelista', 'arquero'],
+  guardianFuego: ['piromante', 'guadanero', 'bruto'],
+  guardianAgua: ['espectro', 'hechicero', 'duelista'],
+  guardianRayo: ['espectro', 'duelista', 'sombra'],
   shuten: ['bruto', 'oni', 'coloso'], enma: ['piromante', 'acechador', 'sombra'],
   senorBosque: ['guadanero', 'arana', 'acechador'], yukiOnna: ['espectro', 'hechicero', 'sombra'],
   kagutsuchi: ['piromante', 'guadanero', 'escudero'], daimyoHueso: ['ashigaru', 'escudero', 'duelista'],
@@ -123,7 +127,7 @@ export function onKill(en: Enemy) {
 }
 /** a boss reached its second phase: it calls reinforcements around it */
 export function onEnrage(boss: Enemy) {
-  summon(boss, REINFORCE[boss.kind] ?? ['oni', 'ashigaru'], boss.camp.tier > 0.6 ? 3 : 2);
+  summon(boss, REINFORCE[boss.kind] ?? ['oni', 'ashigaru'], boss.camp.templeGuard || boss.camp.tier > 0.6 ? 3 : 2);
   sfx.waveStart(true);
 }
 

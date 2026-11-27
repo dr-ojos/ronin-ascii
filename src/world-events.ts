@@ -7,6 +7,7 @@ import { scene } from './renderer';
 import { CLS, tagMat } from './materials';
 import { addLight, removeLights, type LightAnchor } from './lights';
 import { enemies, spawnEnemy, despawn } from './enemies';
+import { summon } from './boss-mechanics';
 import { camps } from './encounters';
 import { collide, isFree } from './physics';
 import { WORLD_R, PLACES, RIVER, inLake, lineDist } from './map';
@@ -31,9 +32,12 @@ export interface WorldEventDef {
   boss: EnemyKind;
   bossTitle: string;
   escort: EnemyKind[];
+  phase2Wave: EnemyKind[];
+  phase3Wave: EnemyKind[];
   kanji: string;
   subtitle: string;
   phase2Sub: string;
+  phase3Sub: string;
   color: number;
   colorHex: string;
   rewardPoints: number;
@@ -47,13 +51,16 @@ export const WORLD_EVENTS: readonly WorldEventDef[] = [
     name: 'Eclipse Carmesí',
     boss: 'gashadokuro',
     bossTitle: 'Gashadokuro, Soberano del Eclipse',
-    escort: ['espectro', 'sombra', 'duelista'],
+    escort: ['oni', 'ashigaru', 'arquero', 'acechador'],
+    phase2Wave: ['oni', 'escudero', 'acechador', 'guadanero', 'arquero'],
+    phase3Wave: ['oni', 'oni', 'ashigaru', 'escudero', 'acechador', 'guadanero', 'arquero'],
     kanji: '蝕',
     subtitle: 'El cielo se tiñe de sangre · un soberano colosal despierta',
-    phase2Sub: 'La luna sangrienta consume el campo de batalla',
+    phase2Sub: 'La luna sangrienta invoca una nueva oleada de guerreros',
+    phase3Sub: 'Eclipse total · la horda final surge de las sombras',
     color: 0xff2848,
     colorHex: '#ff3b58',
-    rewardPoints: 2800,
+    rewardPoints: 3400,
     rewardJade: 2
   },
   {
@@ -61,13 +68,16 @@ export const WORLD_EVENTS: readonly WorldEventDef[] = [
     name: 'Tormenta del Dios Tronante',
     boss: 'susanooTempestad',
     bossTitle: 'Susanoo, Titán de la Tempestad',
-    escort: ['hechicero', 'guadanero', 'tambor'],
+    escort: ['ashigaru', 'arquero', 'oni', 'escudero'],
+    phase2Wave: ['ashigaru', 'arquero', 'guadanero', 'oni', 'hechicero'],
+    phase3Wave: ['ashigaru', 'ashigaru', 'arquero', 'escudero', 'guadanero', 'oni', 'hechicero'],
     kanji: '嵐',
     subtitle: 'Los cielos se desgarran · el titán desciende entre relámpagos',
-    phase2Sub: 'Sus tambores convocan la furia del cielo',
+    phase2Sub: 'Sus tambores convocan refuerzos bajo la tormenta',
+    phase3Sub: 'Furia del cielo · la tempestad desata su legión final',
     color: 0x5ce1ff,
     colorHex: '#5ce1ff',
-    rewardPoints: 2700,
+    rewardPoints: 3300,
     rewardJade: 2,
     storm: true
   },
@@ -76,13 +86,16 @@ export const WORLD_EVENTS: readonly WorldEventDef[] = [
     name: 'Forja del Cataclismo',
     boss: 'amaterasuCeniza',
     bossTitle: 'Kijin Kōtei, Emperador de la Forja',
-    escort: ['coloso', 'piromante', 'escudero'],
+    escort: ['oni', 'escudero', 'bruto', 'arquero'],
+    phase2Wave: ['oni', 'escudero', 'piromante', 'bruto', 'ashigaru'],
+    phase3Wave: ['oni', 'oni', 'escudero', 'bruto', 'piromante', 'ashigaru', 'arquero'],
     kanji: '劫',
     subtitle: 'La tierra ruge bajo ceniza ardiente · el coloso solar emerge',
-    phase2Sub: 'El fuego primordial funde la tierra',
+    phase2Sub: 'La forja ardiente despierta más sirvientes de ceniza',
+    phase3Sub: 'Cataclismo solar · el ejército de brasas rodea la arena',
     color: 0xff9828,
     colorHex: '#ff9e3d',
-    rewardPoints: 3200,
+    rewardPoints: 3800,
     rewardJade: 2
   }
 ];
@@ -306,28 +319,32 @@ function revealBossCinematic(ev: ActiveEvent, boss: Enemy) {
   });
 }
 
-/** Called from enemy-ai.ts when a colossal world-event boss reaches Phase II (50% HP). */
-export function onWorldEventBossEnrage(boss: Enemy) {
+/** Called from enemy-ai.ts when a colossal 3-phase world-event boss enters Phase II (66% HP) or Phase III (33% HP). */
+export function onWorldEventBossPhase(boss: Enemy, phase: 2 | 3) {
   if (!active || boss.camp !== active.camp) return;
   const { def } = active;
   const p = boss.g.position;
-  impactRing(new THREE.Vector3(p.x, p.y + 0.14, p.z), def.color, 9.5);
-  if (def.storm) bolt(p.clone());
-  skyFlash(0.55);
-  impactFlash(def.color, 0.5);
-  state.shake = Math.max(state.shake, 0.75);
-  sfx.taiko(1.35);
+  const wave = phase === 3 ? def.phase3Wave : def.phase2Wave;
+  summon(boss, wave, wave.length);
+  impactRing(new THREE.Vector3(p.x, p.y + 0.14, p.z), def.color, phase === 3 ? 12 : 9.5);
+  burst(new THREE.Vector3(p.x, p.y + 2.6, p.z), def.color, phase === 3 ? 160 : 110, phase === 3 ? 11 : 8.5, 0.2);
+  if (def.storm || phase === 3) bolt(p.clone());
+  skyFlash(phase === 3 ? 0.72 : 0.55);
+  impactFlash(def.color, phase === 3 ? 0.62 : 0.5);
+  state.shake = Math.max(state.shake, phase === 3 ? 0.9 : 0.75);
+  sfx.waveStart(true);
+  sfx.taiko(phase === 3 ? 1.45 : 1.35);
   bossEventBanner({
-    eyebrow: `FASE II · DESPERTAR COLOSAL`,
+    eyebrow: phase === 3 ? `FASE III · IRA FINAL (+${wave.length} ENEMIGOS)` : `FASE II · DESPERTAR COLOSAL (+${wave.length} ENEMIGOS)`,
     kanji: def.kanji,
     title: def.bossTitle,
-    subtitle: def.phase2Sub,
+    subtitle: phase === 3 ? def.phase3Sub : def.phase2Sub,
     color: def.color,
-    hold: 1.9,
-    slow: 0.32,
-    slowDur: 0.9,
+    hold: phase === 3 ? 2.2 : 1.9,
+    slow: phase === 3 ? 0.28 : 0.32,
+    slowDur: phase === 3 ? 1.05 : 0.9,
     focus: p,
-    slashes: 2,
+    slashes: phase === 3 ? 3 : 2,
     gather: true
   });
 }

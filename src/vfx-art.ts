@@ -1347,6 +1347,858 @@ export function spawnFireRingIgnition(origin: THREE.Vector3, maxRadius = 10) {
   });
 }
 
+// ------------------------------------------------------------ fluid water shaders & tidal splash VFX
+const WATER_CAUSTIC_GLSL = /* glsl */`
+float waterCaustic(vec2 uv, float t) {
+  vec2 p1 = uv * 6.0 + vec2(t * 0.9, -t * 1.6);
+  vec2 p2 = uv * 9.5 + vec2(-t * 1.3, -t * 2.1);
+  float a = abs(vnoise(p1) * 2.0 - 1.0);
+  float b = abs(vnoise(p2) * 2.0 - 1.0);
+  float c = pow(1.0 - min(a, b), 3.4);
+  return clamp(c, 0.0, 1.0);
+}
+`;
+
+/** Volumetric breaking tsunami / tidal wave body shader:
+ *  Deep ocean indigo base -> luminous cerulean swell -> dancing caustics -> lacy white sea-foam at the curling crest. */
+export function makeWaterWaveBodyMat(opts: { opacity?: number; seed?: number; fanFade?: boolean } = {}) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opts.opacity ?? 0.94 },
+      uSeed: { value: opts.seed ?? 0 },
+      uFanFade: { value: opts.fanFade === false ? 0.0 : 1.0 },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vNormalW = normalize(mat3(modelMatrix) * normal);
+        vViewDir = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      ${WATER_CAUSTIC_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform float uSeed;
+      uniform float uFanFade;
+      varying vec2 vUv;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      void main() {
+        float t = uTime * 1.45 + uSeed;
+        // Flowing water coordinates climbing up the wave face toward the breaking lip
+        vec2 flowUv = vec2(vUv.x * 4.2, vUv.y * 1.6);
+        float swell = vnoise(flowUv * vec2(2.4, 3.2) + vec2(sin(t * 0.7) * 0.4, -t * 2.8));
+        float detail = vnoise(flowUv * vec2(6.5, 8.0) + vec2(swell * 1.3, -t * 5.2));
+        float caust = waterCaustic(flowUv + vec2(swell * 0.25, 0.0), t);
+
+        // Fresnel moonlight sheen across curved water surface
+        float ndv = abs(dot(normalize(vNormalW), normalize(vViewDir)));
+        float fresnel = pow(1.0 - clamp(ndv, 0.0, 1.0), 2.1);
+
+        // Deep abyssal blue -> rich ocean cerulean -> luminous aqua -> frothy white sea-foam lip
+        vec3 deepCol = vec3(0.03, 0.20, 0.56);
+        vec3 midCol  = vec3(0.09, 0.58, 0.94);
+        vec3 aquaCol = vec3(0.32, 0.88, 1.00);
+        vec3 foamCol = vec3(0.95, 0.99, 1.00);
+
+        float grad = clamp(vUv.y * 1.1 + swell * 0.22 - 0.08, 0.0, 1.0);
+        vec3 col = mix(deepCol, midCol, smoothstep(0.0, 0.48, grad));
+        col = mix(col, aquaCol, smoothstep(0.42, 0.84, grad));
+
+        // Shimmering caustic web & specular water streaks
+        col += vec3(0.45, 0.92, 1.0) * caust * (0.42 + 0.45 * vUv.y);
+        col += vec3(0.75, 0.96, 1.0) * fresnel * 0.65;
+
+        // Churning lacy white sea-foam at the curling crest (vUv.y > 0.66) + subtle trough foam
+        float foamNoise = detail * 0.65 + swell * 0.35;
+        float crestFoam = smoothstep(0.60, 0.90, vUv.y + (foamNoise - 0.45) * 0.28);
+        float lace = smoothstep(0.46, 0.78, foamNoise) * smoothstep(0.32, 0.78, vUv.y);
+        float foam = clamp(crestFoam + lace * 0.55, 0.0, 1.0);
+        col = mix(col, foamCol, foam);
+
+        // Soft feathery edge fade at fan tips & ragged foam lip breakup at the very top
+        float fanMask = mix(1.0, pow(sin(clamp(vUv.x, 0.0, 1.0) * 3.14159265), 0.48), uFanFade);
+        float baseFade = smoothstep(0.0, 0.14, vUv.y);
+        float topEdge = smoothstep(1.0, 0.84 - foamNoise * 0.12, vUv.y);
+        float alpha = clamp((0.68 + 0.32 * foam + 0.18 * fresnel) * baseFade * topEdge * fanMask * uOpacity, 0.0, 1.0);
+        if (alpha < 0.01) discard;
+        gl_FragColor = vec4(col * (1.05 + 0.35 * foam), alpha);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.NormalBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Trailing wet tidal wash hugging the ground behind a wave: dancing caustics + receding sea-foam streaks */
+export function makeWaterGroundMat(opacity = 0.85) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      ${WATER_CAUSTIC_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        float t = uTime * 1.4;
+        vec2 q = vec2(vUv.x * 5.5, vUv.y * 2.2);
+        float n = vnoise(q * vec2(2.2, 3.0) + vec2(0.0, -t * 2.6));
+        float streaks = vnoise(vec2(vUv.x * 16.0, vUv.y * 5.0 - t * 4.5));
+        float caust = waterCaustic(q, t);
+
+        // Leading edge (vUv.y near 1) is bright white surf; trailing wash is glowing caustic turquoise
+        float leadSurf = exp(-pow((vUv.y - 0.86) / 0.11, 2.0)) * (0.65 + 0.5 * streaks);
+        float trailFade = smoothstep(0.0, 0.45, vUv.y) * smoothstep(1.0, 0.91, vUv.y);
+        float fanMask = pow(sin(clamp(vUv.x, 0.0, 1.0) * 3.14159265), 0.55);
+
+        vec3 waterCol = mix(vec3(0.06, 0.42, 0.86), vec3(0.32, 0.88, 1.0), caust * 0.75 + n * 0.35);
+        vec3 col = mix(waterCol, vec3(0.95, 0.99, 1.0), clamp(leadSurf + caust * 0.35, 0.0, 1.0));
+        float a = clamp((trailFade * (0.42 + 0.45 * caust + 0.22 * streaks) + leadSurf * 0.85) * fanMask * uOpacity, 0.0, 1.0);
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(col * 1.25 * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Instanced 3D curling water spray plumes & foam claws leaping off a breaking wave or splash crown */
+export function makeWaterSplashPlumeMat(opacity = 0.9) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+    },
+    vertexShader: /* glsl */`
+      attribute float aPhase;
+      varying vec2 vUv;
+      varying float vPhase;
+      void main() {
+        vUv = uv;
+        vPhase = aPhase;
+        vec3 p = position;
+        // Organic liquid whip along the arching spray plume
+        float t = aPhase + p.y * 3.5;
+        p.x += sin(t * 2.2) * 0.08 * p.y;
+        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      varying float vPhase;
+      void main() {
+        float x = vUv.x * 2.0 - 1.0;
+        float y = vUv.y;
+        // Tapered water-claw silhouette: wider liquid base tapering into lacy droplets at the tip
+        float halfW = mix(0.88, 0.18, pow(y, 0.85));
+        float n1 = vnoise(vec2(vUv.x * 5.0 + vPhase, y * 5.0 - uTime * 7.5));
+        float n2 = vnoise(vec2(vUv.x * 11.0 - vPhase, y * 9.0 - uTime * 11.0));
+        float spray = n1 * 0.6 + n2 * 0.4;
+        float shape = smoothstep(halfW, halfW * 0.25, abs(x) + (spray - 0.5) * 0.35);
+        float tipFade = smoothstep(1.0, 0.68, y) * smoothstep(0.0, 0.14, y);
+        // Translucent cyan water body turning into pure white frothy foam at the tip
+        vec3 col = mix(vec3(0.18, 0.72, 1.0), vec3(0.95, 0.99, 1.0), smoothstep(0.28, 0.82, y + spray * 0.25));
+        float a = clamp(shape * tipFade * (0.55 + 0.55 * spray) * uOpacity, 0.0, 1.0);
+        if (a < 0.02) discard;
+        gl_FragColor = vec4(col * 1.25 * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Vertex-displaced living liquid water sphere shader (for Esfera de Agua):
+ *  Physically undulates and ripples in 3D with deep sapphire core, dancing caustics, and glossy Fresnel rim. */
+export function makeLiquidOrbMat(opacity = 0.92) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+    },
+    vertexShader: /* glsl */`
+      uniform float uTime;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      varying vec3 vLocalPos;
+      varying float vDisp;
+      void main() {
+        float t = uTime * 5.2;
+        vec3 p = position;
+        // Multi-directional harmonic liquid sloshing & surface ripples
+        float w1 = sin(p.x * 4.5 + t) * cos(p.y * 4.2 - t * 0.85);
+        float w2 = sin(p.z * 5.4 - t * 1.2) * sin(p.y * 3.6 + t * 0.7);
+        float disp = (w1 * 0.6 + w2 * 0.4) * 0.11;
+        p += normal * disp;
+        vDisp = disp;
+        vLocalPos = p;
+        vec4 wp = modelMatrix * vec4(p, 1.0);
+        // Perturb normal slightly to catch moving liquid highlights
+        vec3 nPerturb = normalize(normal + vec3(w2, w1, -w1) * 0.28);
+        vNormalW = normalize(mat3(modelMatrix) * nPerturb);
+        vViewDir = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      ${WATER_CAUSTIC_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      varying vec3 vLocalPos;
+      varying float vDisp;
+      void main() {
+        vec3 N = normalize(vNormalW);
+        vec3 V = normalize(vViewDir);
+        float ndv = abs(dot(N, V));
+        float fresnel = pow(1.0 - clamp(ndv, 0.0, 1.0), 1.9);
+
+        // Spherical caustic projection flowing around the living water orb
+        vec2 sphUv = vec2(atan(vLocalPos.z, vLocalPos.x) * 0.35, vLocalPos.y * 0.65);
+        float caust = waterCaustic(sphUv, uTime * 1.6);
+        float foamCrest = smoothstep(0.04, 0.11, vDisp) * (0.55 + 0.45 * caust);
+
+        vec3 deepCol = vec3(0.04, 0.26, 0.72);
+        vec3 aquaCol = vec3(0.22, 0.82, 1.00);
+        vec3 rimCol  = vec3(0.85, 0.98, 1.00);
+
+        vec3 col = mix(deepCol, aquaCol, clamp(0.32 + caust * 0.65 + fresnel * 0.55, 0.0, 1.0));
+        col = mix(col, rimCol, clamp(fresnel * 0.85 + foamCrest * 0.75, 0.0, 1.0));
+        float a = clamp((0.68 + 0.32 * fresnel + 0.2 * foamCrest) * uOpacity, 0.0, 1.0);
+        gl_FragColor = vec4(col * (1.15 + 0.45 * fresnel), a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.NormalBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Expanding circular pool of liquid water with multiple concentric traveling ripples & caustic reflections */
+export function makeWaterRipplePoolMat(opacity = 0.9) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+      uProgress: { value: 0 },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      ${WATER_CAUSTIC_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform float uProgress;
+      varying vec2 vUv;
+      void main() {
+        vec2 p = vUv * 2.0 - 1.0;
+        float r = length(p);
+        if (r > 1.0) discard;
+        float ang = atan(p.y, p.x);
+        // Three concentric traveling water ripples radiating outward
+        float rip1 = exp(-pow((r - 0.88) / 0.05, 2.0));
+        float rip2 = exp(-pow((r - 0.64) / 0.045, 2.0)) * 0.72;
+        float rip3 = exp(-pow((r - 0.40) / 0.04, 2.0)) * 0.48;
+        float ripples = rip1 + rip2 + rip3;
+
+        float caust = waterCaustic(p * 1.4, uTime * 1.5);
+        float splashFoam = vnoise(vec2(ang * 5.0, r * 8.0 - uTime * 6.0));
+        float pool = smoothstep(1.0, 0.72, r) * (0.28 + 0.55 * caust);
+
+        vec3 waterCol = mix(vec3(0.06, 0.46, 0.92), vec3(0.35, 0.90, 1.0), caust);
+        vec3 col = mix(waterCol, vec3(0.95, 0.99, 1.0), clamp(ripples * (0.75 + 0.35 * splashFoam), 0.0, 1.0));
+        float a = clamp((pool * 0.65 + ripples * 0.95) * uOpacity, 0.0, 1.0);
+        gl_FragColor = vec4(col * 1.25 * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+// Sculpted curved liquid plume geometry for crown splashes
+const SPLASH_JET_GEO = (() => {
+  const g = new THREE.PlaneGeometry(0.9, 1.0, 3, 6);
+  g.translate(0, 0.5, 0);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i);
+    // Arching outward parabola like a real water splash crown
+    const arch = y * y * 0.55;
+    const cup = (0.12 - x * x * 0.3) * Math.sin(y * Math.PI);
+    pos.setZ(i, arch + cup);
+  }
+  g.computeVertexNormals();
+  return g;
+})();
+const _splashDummy = new THREE.Object3D();
+
+/** Spawns a cinematic crashing tidal crown splash at `at` (for Esfera de Agua impact & Marea Lunar surge):
+ *  - Expanding concentric water-ripple caustic pool on the ground
+ *  - 14 ballistic 3D liquid crown jets arching outward & cascading down
+ *  - Translucent foaming hydro-dome swelling and breaking into sea-spray */
+export function spawnWaterSplashCrown(at: THREE.Vector3, radius = 4.5) {
+  const gy = surfaceY(at.x, at.z);
+
+  // 1. Expanding concentric water-ripple caustic pool on the ground
+  const poolMat = makeWaterRipplePoolMat(0.94);
+  const pool = new THREE.Mesh(PLANE, poolMat);
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.set(at.x, gy + 0.09, at.z);
+  addVfxProp(pool, [poolMat], 0.72, p => {
+    const u = p.t / p.life;
+    const e = 1 - (1 - u) ** 2.6;
+    pool.scale.setScalar(0.8 + radius * 2.55 * e);
+    poolMat.uniforms.uProgress.value = u;
+    poolMat.uniforms.uOpacity.value = 0.94 * (1 - u) ** 1.35;
+  });
+
+  // 2. Foaming translucent hydro-dome swelling outward
+  const domeMat = makeWaterWaveBodyMat({ opacity: 0.78, seed: Math.random() * 10, fanFade: false });
+  const hydroDome = new THREE.Mesh(DOME_GEO, domeMat);
+  hydroDome.position.set(at.x, gy, at.z);
+  addVfxProp(hydroDome, [domeMat], 0.52, p => {
+    const u = p.t / p.life, e = 1 - (1 - u) ** 2.8;
+    const r = 0.35 + radius * 0.95 * e;
+    // Rises quickly into a liquid bell, then collapses downward like real water under gravity
+    const h = r * (0.92 * Math.sin(Math.min(1, u * 1.45) * Math.PI * 0.5) * (1 - 0.52 * u * u));
+    hydroDome.scale.set(r, Math.max(0.05, h), r);
+    domeMat.uniforms.uOpacity.value = 0.78 * (1 - u) ** 1.4;
+  });
+
+  // 3. 14 ballistic 3D water crown splash plumes arching outward and splashing down
+  const jetCount = 14;
+  const jetGeo = SPLASH_JET_GEO.clone();
+  const phases = new Float32Array(jetCount);
+  const seeds = Array.from({ length: jetCount }, (_, i) => {
+    phases[i] = i * 1.9 + Math.random() * 6.28;
+    return {
+      angle: (i / jetCount) * Math.PI * 2 + rnd(-0.14, 0.14),
+      dist: radius * rnd(0.55, 0.92),
+      peakH: radius * rnd(0.52, 0.85),
+      width: rnd(0.75, 1.35),
+      pitch: rnd(0.18, 0.42),
+    };
+  });
+  jetGeo.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phases, 1));
+  const jetMat = makeWaterSplashPlumeMat(0.92);
+  const jets = new THREE.InstancedMesh(jetGeo, jetMat, jetCount);
+  jets.frustumCulled = false;
+
+  addVfxProp(jets, [jetMat], 0.58, p => {
+    const u = p.t / p.life;
+    // Parabolic ballistic rise & fall of a real liquid crown splash
+    const rise = Math.sin(Math.min(1, u * 1.15) * Math.PI * 0.82);
+    const spread = 1 - (1 - u) ** 2.2;
+    for (let i = 0; i < jetCount; i++) {
+      const s = seeds[i];
+      const r = 0.35 + s.dist * spread;
+      const x = at.x + Math.cos(s.angle) * r;
+      const z = at.z + Math.sin(s.angle) * r;
+      const y = surfaceY(x, z) + 0.04;
+      _splashDummy.position.set(x, y, z);
+      _splashDummy.rotation.set(s.pitch + u * 0.55, -s.angle + Math.PI * 0.5, 0, 'YXZ');
+      _splashDummy.scale.set(s.width * (0.55 + 0.65 * spread), Math.max(0.08, s.peakH * rise), 1);
+      _splashDummy.updateMatrix();
+      jets.setMatrixAt(i, _splashDummy.matrix);
+    }
+    jets.instanceMatrix.needsUpdate = true;
+    jetMat.uniforms.uOpacity.value = 0.92 * (1 - u) ** 1.25;
+  }, [jetGeo]);
+}
+
+// ------------------------------------------------------------ wind, fire-orb, lightning-orb, bell & sakura shaders
+/** Aerodynamic razor-wind gale shader (Corte del Vendaval & Ciclón de Viento):
+ *  High-speed slipstream shear lines, razor-white pressurized leading edge, translucent emerald-jade tail. */
+export function makeWindGaleMat(opts: { opacity?: number; seed?: number } = {}) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opts.opacity ?? 0.92 },
+      uSeed: { value: opts.seed ?? 0 },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vNormalW = normalize(mat3(modelMatrix) * normal);
+        vViewDir = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform float uSeed;
+      varying vec2 vUv;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      void main() {
+        float t = uTime * 3.8 + uSeed;
+        // High-speed aerodynamic slipstream streaks shooting backward from the razor edge
+        float s1 = vnoise(vec2(vUv.x * 14.0, vUv.y * 5.0 - t * 3.2));
+        float s2 = vnoise(vec2(vUv.x * 28.0 + 2.4, vUv.y * 9.0 - t * 5.8));
+        float shear = s1 * 0.6 + s2 * 0.4;
+
+        float ndv = abs(dot(normalize(vNormalW), normalize(vViewDir)));
+        float fresnel = pow(1.0 - clamp(ndv, 0.0, 1.0), 1.8);
+
+        // Razor-hot pressurized leading edge near vUv.y = 0.85, trailing emerald vacuum wake behind
+        float lead = exp(-pow((vUv.y - 0.85) / 0.08, 2.0));
+        float fanMask = pow(sin(clamp(vUv.x, 0.0, 1.0) * 3.14159265), 0.45);
+        float trailFade = smoothstep(0.0, 0.35, vUv.y) * smoothstep(1.0, 0.90, vUv.y);
+
+        vec3 deepJade = vec3(0.06, 0.62, 0.46);
+        vec3 mintWind = vec3(0.42, 1.00, 0.82);
+        vec3 razorCol = vec3(0.95, 1.00, 0.98);
+
+        vec3 col = mix(deepJade, mintWind, clamp(shear * 0.85 + vUv.y * 0.45, 0.0, 1.0));
+        col = mix(col, razorCol, clamp(lead * 1.25 + fresnel * 0.45, 0.0, 1.0));
+
+        float a = clamp((trailFade * (0.35 + 0.65 * shear) + lead * 1.15) * fanMask * uOpacity, 0.0, 1.0);
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(col * (1.25 + 0.55 * lead) * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Acoustic bronze sound-wave shader (Campana del Templo):
+ *  Standing harmonic sine-wave bands & shimmering golden-bronze dharma resonance. */
+export function makeAcousticWaveMat(opts: { opacity?: number; seed?: number } = {}) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opts.opacity ?? 0.9 },
+      uSeed: { value: opts.seed ?? 0 },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform float uSeed;
+      varying vec2 vUv;
+      void main() {
+        float t = uTime * 2.4 + uSeed;
+        // Standing harmonic acoustic bands vibrating vertically
+        float harmonic = sin(vUv.y * 22.0 - t * 9.0) * 0.5 + 0.5;
+        float ripple = sin(vUv.x * 37.699 + t * 5.0) * 0.5 + 0.5;
+        float shimmer = vnoise(vec2(vUv.x * 16.0, vUv.y * 6.0 - t * 3.0));
+        float band = pow(harmonic, 2.2) * (0.65 + 0.35 * ripple);
+
+        float vFade = smoothstep(0.0, 0.16, vUv.y) * smoothstep(1.0, 0.25, vUv.y);
+        float rim = exp(-pow((vUv.y - 0.78) / 0.09, 2.0));
+
+        vec3 bronze = vec3(0.82, 0.48, 0.12);
+        vec3 gold   = vec3(1.00, 0.82, 0.38);
+        vec3 core   = vec3(1.00, 0.98, 0.88);
+
+        vec3 col = mix(bronze, gold, clamp(band * 0.9 + shimmer * 0.35, 0.0, 1.0));
+        col = mix(col, core, clamp(rim * 1.1 + pow(band, 3.0) * 0.5, 0.0, 1.0));
+
+        float a = clamp((vFade * (0.28 + 0.65 * band) + rim * 0.95) * uOpacity, 0.0, 1.0);
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(col * 1.3 * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Swirling sakura blossom wind-curtain shader (Tormenta de Pétalos):
+ *  Silky rose-pink & moonlit-white helical wind ribbons swirling radially. */
+export function makePetalVortexMat(opacity = 0.86) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        float t = uTime * 2.2;
+        float ribbon = sin(vUv.x * 25.1327 + vUv.y * 9.0 - t * 8.0) * 0.5 + 0.5;
+        float silk = vnoise(vec2(vUv.x * 12.0 - t * 2.5, vUv.y * 5.0 - t * 3.5));
+        float band = pow(ribbon, 1.9) * (0.45 + 0.65 * silk);
+        float vFade = smoothstep(0.0, 0.18, vUv.y) * smoothstep(1.0, 0.2, vUv.y);
+
+        vec3 rose  = vec3(1.00, 0.42, 0.68);
+        vec3 blush = vec3(1.00, 0.78, 0.88);
+        vec3 white = vec3(1.00, 0.96, 0.98);
+
+        vec3 col = mix(rose, blush, clamp(band + silk * 0.3, 0.0, 1.0));
+        col = mix(col, white, smoothstep(0.65, 0.98, band));
+
+        float a = clamp(vFade * (0.22 + 0.85 * band) * uOpacity, 0.0, 1.0);
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(col * 1.3 * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Vertex-displaced living solar fireball shader (for Bola de Fuego):
+ *  Physically roiling molten plasma surface with white-gold convection core, orange flames & crimson crust. */
+export function makeSolarOrbMat(opacity = 0.96) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+    },
+    vertexShader: /* glsl */`
+      uniform float uTime;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      varying vec3 vLocalPos;
+      varying float vDisp;
+      void main() {
+        float t = uTime * 6.5;
+        vec3 p = position;
+        float f1 = sin(p.x * 5.2 + t) * cos(p.y * 5.0 - t * 1.1);
+        float f2 = sin(p.z * 6.4 - t * 1.4) * sin(p.y * 4.5 + t * 0.9);
+        float disp = (f1 * 0.55 + f2 * 0.45) * 0.13;
+        p += normal * disp;
+        vDisp = disp;
+        vLocalPos = p;
+        vec4 wp = modelMatrix * vec4(p, 1.0);
+        vNormalW = normalize(mat3(modelMatrix) * normalize(normal + vec3(f2, -f1, f1) * 0.25));
+        vViewDir = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      varying vec3 vLocalPos;
+      varying float vDisp;
+      void main() {
+        float ndv = abs(dot(normalize(vNormalW), normalize(vViewDir)));
+        float fresnel = pow(1.0 - clamp(ndv, 0.0, 1.0), 1.6);
+        vec2 uv = vec2(atan(vLocalPos.z, vLocalPos.x) * 0.5, vLocalPos.y * 0.85);
+        float n1 = vnoise(uv * 5.0 - vec2(0.0, uTime * 4.2));
+        float n2 = vnoise(uv * 11.0 + vec2(uTime * 2.4, -uTime * 6.5));
+        float heat = clamp(n1 * 0.6 + n2 * 0.4 + vDisp * 2.8 + 0.12, 0.0, 1.0);
+
+        vec3 crimson = vec3(0.88, 0.12, 0.02);
+        vec3 orange  = vec3(1.00, 0.46, 0.06);
+        vec3 gold    = vec3(1.00, 0.88, 0.36);
+        vec3 white   = vec3(1.00, 0.99, 0.90);
+
+        vec3 col = mix(crimson, orange, smoothstep(0.12, 0.48, heat));
+        col = mix(col, gold, smoothstep(0.45, 0.76, heat));
+        col = mix(col, white, smoothstep(0.75, 0.98, heat + fresnel * 0.25));
+        float a = clamp((0.78 + 0.22 * fresnel) * uOpacity, 0.0, 1.0);
+        gl_FragColor = vec4(col * (1.28 + 0.55 * fresnel), a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.NormalBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Vertex-displaced high-voltage plasma sphere shader (for Orbe de Rayo):
+ *  Crackling electric veins arcing across a jagged pulsing plasma core. */
+export function makePlasmaOrbMat(opacity = 0.95) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: vfxTime,
+      uOpacity: { value: opacity },
+    },
+    vertexShader: /* glsl */`
+      uniform float uTime;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      varying vec3 vLocalPos;
+      void main() {
+        float t = uTime * 16.0;
+        vec3 p = position;
+        float snap = sin(p.x * 8.0 + t) * cos(p.y * 7.5 - t * 1.2) * sin(p.z * 8.5 + t * 0.7);
+        p += normal * snap * 0.09;
+        vLocalPos = p;
+        vec4 wp = modelMatrix * vec4(p, 1.0);
+        vNormalW = normalize(mat3(modelMatrix) * normal);
+        vViewDir = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      ${NOISE_GLSL}
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec3 vNormalW;
+      varying vec3 vViewDir;
+      varying vec3 vLocalPos;
+      void main() {
+        float ndv = abs(dot(normalize(vNormalW), normalize(vViewDir)));
+        float fresnel = pow(1.0 - clamp(ndv, 0.0, 1.0), 1.75);
+        vec2 uv = vec2(atan(vLocalPos.z, vLocalPos.x) * 0.65, vLocalPos.y * 1.1);
+        float a1 = abs(vnoise(uv * 6.0 + vec2(uTime * 5.0, -uTime * 7.0)) * 2.0 - 1.0);
+        float a2 = abs(vnoise(uv * 11.0 + vec2(-uTime * 8.0, uTime * 4.5)) * 2.0 - 1.0);
+        float arc = pow(1.0 - min(a1, a2), 5.0);
+
+        vec3 indigo = vec3(0.12, 0.28, 0.95);
+        vec3 cyan   = vec3(0.46, 0.86, 1.00);
+        vec3 white  = vec3(1.00, 1.00, 1.00);
+
+        vec3 col = mix(indigo, cyan, clamp(fresnel * 1.15 + arc * 0.6, 0.0, 1.0));
+        col = mix(col, white, clamp(arc * 1.35 + pow(fresnel, 2.4) * 0.75, 0.0, 1.0));
+        float a = clamp((0.55 + 0.45 * fresnel + 0.55 * arc) * uOpacity, 0.0, 1.0);
+        gl_FragColor = vec4(col * (1.35 + 0.9 * arc) * a, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  return tagMat(mat, CLS.fx);
+}
+
+/** Majestic phantom Japanese temple bell (bonshō) that rings overhead during Campana del Templo */
+const BELL_BODY_GEO = new THREE.CylinderGeometry(0.62, 0.98, 1.85, 20, 1, true);
+const BELL_CROWN_GEO = new THREE.SphereGeometry(0.62, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+const BELL_LIP_GEO = new THREE.TorusGeometry(0.98, 0.08, 8, 28);
+
+export function spawnPhantomBell(origin: THREE.Vector3) {
+  const gy = surfaceY(origin.x, origin.z);
+  const g = new THREE.Group();
+  const bodyMat = makeFresnelShellMat(0xfff6d2, 0xffb83c, 0.85, 1.7);
+  const lipMat = makeAcousticWaveMat({ opacity: 0.95 });
+
+  const body = new THREE.Mesh(BELL_BODY_GEO, bodyMat);
+  body.position.y = 0.92;
+  const crown = new THREE.Mesh(BELL_CROWN_GEO, bodyMat);
+  crown.position.y = 1.84;
+  const lip = new THREE.Mesh(BELL_LIP_GEO, lipMat);
+  lip.rotation.x = Math.PI / 2;
+  lip.position.y = 0.04;
+
+  // Golden mandala halo behind the bell
+  const haloMat = tagMat(new THREE.MeshBasicMaterial({
+    map: mandalaTex, color: 0xffcf6e, transparent: true, opacity: 0.8,
+    depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), CLS.fx);
+  const halo = new THREE.Mesh(PLANE, haloMat);
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.y = 0.08;
+  halo.scale.setScalar(3.4);
+
+  g.add(body, crown, lip, halo);
+  g.position.set(origin.x, gy + 2.6, origin.z);
+  g.scale.setScalar(0.2);
+
+  addVfxProp(g, [bodyMat, lipMat, haloMat], 1.15, (p, dt) => {
+    const u = p.t / p.life;
+    const open = Math.min(1, p.t / 0.14);
+    const fade = Math.min(1, (p.life - p.t) / 0.45);
+    // Swells into place and vibrates softly as it resonates
+    const vib = 1 + Math.sin(p.t * 48) * 0.04 * (1 - u);
+    const sc = (0.2 + 1.05 * (1 - (1 - open) ** 3)) * vib;
+    g.scale.setScalar(sc);
+    g.position.y = gy + 2.6 + u * 0.9;
+    halo.rotation.z += dt * 1.8;
+    bodyMat.uniforms.uOpacity.value = 0.85 * fade;
+    lipMat.uniforms.uOpacity.value = 0.95 * fade;
+    haloMat.opacity = 0.8 * fade;
+  });
+}
+
+/** Fiery crown detonation for Bola de Fuego (sculpted leaping flames + molten scorch + shockwave) */
+export function spawnFireOrbDetonation(at: THREE.Vector3, radius = 4.2) {
+  const gy = surfaceY(at.x, at.z);
+  // 1. Charred scorch decal
+  const sMat = tagMat(new THREE.MeshBasicMaterial({
+    map: scorchTex, transparent: true, opacity: 0.72, depthWrite: false,
+  }), CLS.ground);
+  const scorch = new THREE.Mesh(PLANE, sMat);
+  scorch.rotation.x = -Math.PI / 2;
+  scorch.rotation.z = rnd(0, Math.PI * 2);
+  scorch.position.set(at.x, gy + 0.05, at.z);
+  scorch.scale.setScalar(radius * 1.45);
+  addVfxProp(scorch, [sMat], 2.8, p => {
+    sMat.opacity = 0.72 * Math.min(1, (p.life - p.t) / 0.85);
+  });
+
+  // 2. Incandescent magma dome
+  const dMat = makeFresnelShellMat(0xfff5c0, 0xff5a12, 0.82, 1.6);
+  const dom = new THREE.Mesh(DOME_GEO, dMat);
+  dom.position.set(at.x, gy, at.z);
+  addVfxProp(dom, [dMat], 0.48, p => {
+    const u = p.t / p.life, e = 1 - (1 - u) ** 2.6;
+    const r = 0.35 + radius * 1.02 * e;
+    dom.scale.set(r, r * (0.88 - 0.32 * u), r);
+    dMat.uniforms.uOpacity.value = 0.82 * (1 - u) ** 1.4;
+  });
+
+  // 3. 12 instanced 3D leaping flame tongues bursting outward in a fiery crown
+  const count = 12;
+  const tGeo = SPLASH_JET_GEO.clone();
+  const phases = new Float32Array(count);
+  const seeds = Array.from({ length: count }, (_, i) => {
+    phases[i] = i * 2.1 + Math.random() * 6.28;
+    return {
+      angle: (i / count) * Math.PI * 2 + rnd(-0.15, 0.15),
+      dist: radius * rnd(0.45, 0.88),
+      height: radius * rnd(0.55, 0.92),
+      width: rnd(0.85, 1.4),
+    };
+  });
+  tGeo.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phases, 1));
+  const tMat = makeFireTongueMat(0.95);
+  const flames = new THREE.InstancedMesh(tGeo, tMat, count);
+  flames.frustumCulled = false;
+
+  addVfxProp(flames, [tMat], 0.56, p => {
+    const u = p.t / p.life;
+    const rise = Math.sin(Math.min(1, u * 1.25) * Math.PI * 0.78);
+    const spread = 1 - (1 - u) ** 2.1;
+    for (let i = 0; i < count; i++) {
+      const s = seeds[i];
+      const r = 0.3 + s.dist * spread;
+      const x = at.x + Math.cos(s.angle) * r;
+      const z = at.z + Math.sin(s.angle) * r;
+      _splashDummy.position.set(x, surfaceY(x, z) + 0.04, z);
+      _splashDummy.rotation.set(0.2 + u * 0.35, -s.angle + Math.PI * 0.5, 0, 'YXZ');
+      _splashDummy.scale.set(s.width * (0.6 + 0.5 * spread), Math.max(0.1, s.height * rise), 1);
+      _splashDummy.updateMatrix();
+      flames.setMatrixAt(i, _splashDummy.matrix);
+    }
+    flames.instanceMatrix.needsUpdate = true;
+    tMat.uniforms.uOpacity.value = 0.95 * (1 - u) ** 1.3;
+  }, [tGeo]);
+
+  // 4. Expanding double heat shockwave ring
+  const rMat = makeShockRingMat(0xfff2ba, 0xff5a12, 0.95);
+  const ring = new THREE.Mesh(PLANE, rMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(at.x, gy + 0.1, at.z);
+  addVfxProp(ring, [rMat], 0.5, p => {
+    const u = p.t / p.life;
+    ring.scale.setScalar(0.8 + radius * 2.5 * (1 - (1 - u) ** 2.6));
+    rMat.uniforms.uOpacity.value = 0.95 * (1 - u) ** 1.35;
+  });
+}
+
+/** Pressurized aerodynamic wind burst (for Corte del Vendaval launch & Ciclón de Viento end) */
+export function spawnWindGaleBurst(at: THREE.Vector3, forward: THREE.Vector3, scale = 1) {
+  const gy = surfaceY(at.x, at.z);
+  const rMat = makeShockRingMat(0xf0fff8, 0x4dffb8, 0.88);
+  const ring = new THREE.Mesh(PLANE, rMat);
+  ring.position.set(at.x, gy + 1.15, at.z);
+  ring.lookAt(at.x + forward.x, gy + 1.15, at.z + forward.z);
+  addVfxProp(ring, [rMat], 0.38, p => {
+    const u = p.t / p.life;
+    ring.scale.setScalar((0.6 + 4.4 * (1 - (1 - u) ** 2.6)) * scale);
+    rMat.uniforms.uOpacity.value = 0.88 * (1 - u) ** 1.4;
+  });
+
+  const gMat = makeShockRingMat(0xc8ffe8, 0x26d496, 0.72);
+  const gRing = new THREE.Mesh(PLANE, gMat);
+  gRing.rotation.x = -Math.PI / 2;
+  gRing.position.set(at.x, gy + 0.09, at.z);
+  addVfxProp(gRing, [gMat], 0.48, p => {
+    const u = p.t / p.life;
+    gRing.scale.setScalar((0.8 + 5.8 * (1 - (1 - u) ** 2.4)) * scale);
+    gMat.uniforms.uOpacity.value = 0.72 * (1 - u) ** 1.4;
+  });
+}
+
 // ------------------------------------------------------------ per-frame update & cleanup
 export function updateVfxArt(dt: number) {
   vfxTime.value += dt;

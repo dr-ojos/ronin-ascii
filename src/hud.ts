@@ -265,7 +265,7 @@ function updateTHud() {
     const def = KINDS[foe.kind];
     r.bossName.textContent = def.name.toUpperCase();
     r.bossPhase.hidden = !def.boss;
-    if (def.boss) r.bossPhase.textContent = `FASE ${foe.enraged ? 'II' : 'I'}`;
+    if (def.boss) r.bossPhase.textContent = `FASE ${foe.phase === 3 ? 'III' : foe.enraged ? 'II' : 'I'}`;
     const affix = affixLabel(foe);
     r.bossAffix.hidden = !affix;
     r.bossAffix.textContent = affix;
@@ -331,7 +331,7 @@ export function updateHud(dt: number) {
   const foe = findTrackedFoe();
   const ff = foe ? Math.max(0, Math.ceil(foe.hp / foe.maxHp * 16)) : 0;
   const foeBar = foe
-    ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>${KINDS[foe.kind].boss ? ` · FASE ${foe.enraged ? 'II' : 'I'}` : ''}\n  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n${bossHud(foe)}`
+    ? `<span class="r">${KINDS[foe.kind].name.toUpperCase()}</span>${KINDS[foe.kind].boss ? ` · FASE ${foe.phase === 3 ? 'III' : foe.enraged ? 'II' : 'I'}` : ''}\n  [<span class="r">${'#'.repeat(ff)}</span>${'-'.repeat(16 - ff)}]\n${bossHud(foe)}`
     : '';
   // the level and the road to the next one (progression.ts); the bar glows for a moment after a level-up
   const xf = Math.floor(xpFrac() * 14), lv = level(), free = freePoints();

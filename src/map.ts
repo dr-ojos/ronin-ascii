@@ -26,11 +26,11 @@ export interface TemplePlace extends Place {
 export const TEMPLE_GLYPH = '◆';
 export const TEMPLES: TemplePlace[] = [
   { id: 'templo-viento', name: 'TEMPLO DEL VIENTO', x: -181, z: -72, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'viento', orb: 'viento', lessons: ['tornado'], monkLesson: 'sutras', master: 'Haru', facing: Math.PI / 2, crest: '風' },
+    technique: 'viento', orb: 'viento', lessons: ['tornado'], monkLesson: 'sutras', master: 'Haru', facing: Math.PI / 2, crest: '風', guardian: 'guardianViento' },
   { id: 'templo-brasas', name: 'TEMPLO DE LAS BRASAS', x: 238, z: -21, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'fuego', orb: 'fuego', lessons: ['cuatroLlamas', 'meteoro'], master: 'Enji', facing: -Math.PI / 2, crest: '火' },
+    technique: 'fuego', orb: 'fuego', lessons: ['cuatroLlamas', 'meteoro'], master: 'Enji', facing: -Math.PI / 2, crest: '火', guardian: 'guardianFuego' },
   { id: 'templo-marea', name: 'TEMPLO DE LA MAREA', x: 97, z: 272, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
-    technique: 'agua', orb: 'agua', lessons: ['hielo', 'espectros'], master: 'Nami', facing: Math.PI / 2, crest: '水' },
+    technique: 'agua', orb: 'agua', lessons: ['hielo', 'espectros'], master: 'Nami', facing: Math.PI / 2, crest: '水', guardian: 'guardianAgua' },
   { id: 'templo-rayo', name: 'TEMPLO DEL RAYO', x: 345, z: -305, r: 29, flat: 32, blend: 26, glyph: TEMPLE_GLYPH,
     technique: 'rayo', orb: 'rayo', lessons: ['tierra'], master: 'Shiden', facing: 0, crest: '雷', guardian: 'guardianRayo' },
 ];

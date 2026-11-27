@@ -24,8 +24,8 @@ type KindDef = {
   ranged?: boolean;
   /** a sub-boss: guards a chest, glows with its own colour, its name shows over the life bar */
   elite?: { aura: number };
-  /** a major boss changes its attack cycle at half health */
-  boss?: { aura: number; enraged: readonly EnemyMove[] };
+  /** a major boss changes its attack cycle at half health (or across 3 phases when phase3 is set) */
+  boss?: { aura: number; enraged: readonly EnemyMove[]; phase3?: readonly EnemyMove[] };
   moves?: readonly EnemyMove[];
 } & (
   | { beast: BeastLook; look?: never }
@@ -88,16 +88,25 @@ export const KINDS: Record<EnemyKind, KindDef> = {
   kuro:     { name: 'señor Kuro', scale: 1.44, hp: 31, speed: [3.6, 3.8], dmg: 26, reach: 3.6, windup: 0.64, heavy: true, points: 1100, glyph: 'D',
               look: { tint: 0x281e24, mask: 0x9a2830, eye: 0xff503d, weapon: 'sword', crest: 'crescent' }, robe: 0x301923, maskC: 0xac382b,
               moves: ['bladeRush', 'blade', 'blade'], boss: { aura: 0xff453c, enraged: ['whirlwind', 'bladeRush', 'blade', 'bladeRush'] } },
-  tenguMayor: { name: 'tengu de los Cinco Vientos', scale: 1.36, hp: 23, speed: [3.5, 3.7], dmg: 17, reach: 15, windup: 0.83, heavy: false, points: 900, glyph: 'V', ranged: true,
+  tenguMayor: { name: 'tengu de los Cinco Vientos', scale: 1.36, hp: 32, speed: [3.8, 4.1], dmg: 24, reach: 15, windup: 0.72, heavy: false, points: 1250, glyph: 'V', ranged: true,
                 look: { tint: 0x193f39, mask: 0x57bba5, eye: 0xc0ffbe, weapon: 'bow', tengu: true, crest: 'feathers' }, robe: 0x1d5447, maskC: 0x70cdad,
-                moves: ['arrows', 'gust'], boss: { aura: 0x74ffd1, enraged: ['arrowStorm', 'gust', 'arrows', 'gust'] } },
-  raijinMayor: { name: 'Raijin de la Cumbre', scale: 1.6, hp: 28, speed: [2.7, 2.9], dmg: 25, reach: 3.8, windup: 0.9, heavy: true, points: 1000, glyph: 'J',
+                moves: ['arrowStorm', 'gust', 'arrows'], boss: { aura: 0x74ffd1, enraged: ['arrowStorm', 'gust', 'arrowStorm', 'storm'] } },
+  raijinMayor: { name: 'Raijin de la Cumbre', scale: 1.6, hp: 38, speed: [3.0, 3.3], dmg: 32, reach: 3.8, windup: 0.78, heavy: true, points: 1400, glyph: 'J',
                  look: { tint: 0x222f6c, mask: 0x6876d8, eye: 0xd0eaff, weapon: 'bigclub', crest: 'halo' }, robe: 0x222f6c, maskC: 0x8695df,
-                 moves: ['thunder', 'slam', 'crush'], boss: { aura: 0x8ca9ff, enraged: ['storm', 'quake', 'thunder'] } },
-  // the guardian of the Templo del Rayo: a swordsman who calls the storm. Beat it to earn Raijin's lightning
-  guardianRayo: { name: 'Ikazuchi, guardián del rayo', scale: 1.42, hp: 22, speed: [3.3, 3.5], dmg: 20, reach: 3.6, windup: 0.72, heavy: true, points: 1000, glyph: 'Z',
+                 moves: ['thunder', 'quake', 'slam', 'crush'], boss: { aura: 0x8ca9ff, enraged: ['storm', 'shockwave', 'quake', 'thunder'] } },
+  // the elemental temple guardians: fierce bosses who defend each temple courtyard with their guard squad
+  guardianViento: { name: 'Fūjin, guardián del viento', scale: 1.44, hp: 31, speed: [3.9, 4.2], dmg: 25, reach: 3.6, windup: 0.60, heavy: true, points: 1350, glyph: 'W',
+                    look: { tint: 0x163832, mask: 0x9cf2d4, eye: 0x81ffcc, weapon: 'sword', crest: 'feathers', plated: true }, robe: 0x204f46, maskC: 0x81ffcc,
+                    moves: ['bladeRush', 'gust', 'shadowCut', 'blade'], boss: { aura: 0x81ffcc, enraged: ['gust', 'whirlwind', 'bladeRush', 'shadowCut', 'gust'] } },
+  guardianFuego: { name: 'Homura, guardián de las brasas', scale: 1.50, hp: 35, speed: [3.4, 3.7], dmg: 29, reach: 3.7, windup: 0.65, heavy: true, points: 1400, glyph: 'F',
+                   look: { tint: 0x3b120e, mask: 0xff8a3d, eye: 0xffd166, weapon: 'scythe', crest: 'flames', plated: true, spikes: true }, robe: 0x5c1c14, maskC: 0xff993f,
+                   moves: ['fire', 'hook', 'quake', 'slam'], boss: { aura: 0xff7a30, enraged: ['fire', 'whirlwind', 'quake', 'eclipseSlash', 'fire'] } },
+  guardianAgua: { name: 'Suijin, guardián de la marea', scale: 1.46, hp: 33, speed: [3.6, 3.9], dmg: 27, reach: 3.6, windup: 0.63, heavy: true, points: 1400, glyph: 'A',
+                  look: { tint: 0x132642, mask: 0x9fd8ff, eye: 0x76c5ff, weapon: 'spear', crest: 'crescent', plated: true, thirdEye: true }, robe: 0x1c3a63, maskC: 0x8fd2ff,
+                  moves: ['crescent', 'bladeRush', 'riposte', 'shockwave'], boss: { aura: 0x76c5ff, enraged: ['crescent', 'shockwave', 'bladeRush', 'curse', 'whirlwind'] } },
+  guardianRayo: { name: 'Ikazuchi, guardián del rayo', scale: 1.46, hp: 34, speed: [3.6, 3.9], dmg: 28, reach: 3.6, windup: 0.62, heavy: true, points: 1400, glyph: 'Z',
                   look: { tint: 0x1a2250, mask: 0xd7e3ff, eye: 0x9fdcff, weapon: 'sword', crest: 'halo' }, robe: 0x24306e, maskC: 0xc4d6ff,
-                  moves: ['blade', 'thunder', 'bladeRush', 'blade'], boss: { aura: 0x9fbbff, enraged: ['storm', 'whirlwind', 'thunder', 'bladeRush'] } },
+                  moves: ['bladeRush', 'thunder', 'blade', 'storm'], boss: { aura: 0x9fbbff, enraged: ['storm', 'whirlwind', 'bladeRush', 'thunder', 'eclipseSlash'] } },
   // --- the great bosses of the wilds (encounters.ts WILD_BOSSES): each with its own look and attack cycle ---
   // the oni king: a mountain of red muscle with great ox horns and a spiked iron club; shakes the earth
   shuten: { name: 'Shuten, rey de los oni', scale: 1.8, hp: 34, speed: [2.6, 2.8], dmg: 30, reach: 3.7, windup: 0.8, heavy: true, points: 1300, glyph: 'H',
@@ -112,9 +121,9 @@ export const KINDS: Record<EnemyKind, KindDef> = {
                  look: { tint: 0x16301c, mask: 0x5c8a3c, eye: 0xd6ff6a, weapon: 'scythe', crest: 'antlers', spikes: true }, robe: 0x1d3a22, maskC: 0x5c8a3c,
                  moves: ['hook', 'web', 'staffStrike'], boss: { aura: 0x9cff5a, enraged: ['curse', 'hook', 'web', 'shockwave'] } },
   // the lady of the snow: pale, a crown of icicles, keeps her distance and throws cutting waves of frost
-  yukiOnna: { name: 'Yuki, dama de la nieve', scale: 1.42, hp: 26, speed: [3.6, 3.9], dmg: 22, reach: 12, windup: 0.85, heavy: false, points: 1100, glyph: 'I', ranged: true,
+  yukiOnna: { name: 'Yuki, dama de la nieve', scale: 1.44, hp: 34, speed: [3.9, 4.2], dmg: 28, reach: 12, windup: 0.74, heavy: false, points: 1350, glyph: 'I', ranged: true,
               look: { tint: 0x8aa7c4, mask: 0xf1f6ff, eye: 0x6ad8ff, weapon: 'staff', crest: 'flames', thirdEye: true }, robe: 0xb9d4ea, maskC: 0xf1f6ff,
-              moves: ['crescent', 'curse', 'gust'], boss: { aura: 0x7fe0ff, enraged: ['crescent', 'gust', 'crescent', 'curse'] } },
+              moves: ['crescent', 'curse', 'gust', 'crescent'], boss: { aura: 0x7fe0ff, enraged: ['crescent', 'gust', 'storm', 'curse', 'crescent'] } },
   // --- the new warlords occupying the towns (and roaming the wilds) ---
   // the ash lord of Asagiri: charred armour, crown of embers and a great scythe; drags you in and burns the square
   kagutsuchi: { name: 'Kagutsuchi, señor de la ceniza', scale: 1.62, hp: 28, speed: [3.1, 3.4], dmg: 25, reach: 3.6, windup: 0.74, heavy: true, points: 1150, glyph: 'F',
@@ -128,19 +137,22 @@ export const KINDS: Record<EnemyKind, KindDef> = {
   taikoDemonio: { name: 'Oni del Tambor Carmesí', scale: 1.68, hp: 30, speed: [2.8, 3.1], dmg: 24, reach: 3.7, windup: 0.78, heavy: true, points: 1200, glyph: 'G',
                   look: { tint: 0x3b1520, mask: 0xd9a036, eye: 0xff5a36, weapon: 'drum', crest: 'halo', plated: true, spikes: true }, robe: 0x5c1a24, maskC: 0xd9a036,
                   moves: ['rally', 'shockwave', 'slam'], boss: { aura: 0xffb840, enraged: ['rally', 'quake', 'storm', 'shockwave'] } },
-  // --- colossal calamity event bosses (world-events.ts): towering mythic titans with bespoke 3D regalia ---
-  gashadokuro: { name: 'Gashadokuro, Soberano del Eclipse', scale: 2.45, hp: 48, speed: [3.1, 3.3], dmg: 32, reach: 4.5, windup: 0.78, heavy: true, points: 2400, glyph: 'Ω',
+  // --- colossal calamity event bosses (world-events.ts): towering 3-phase mythic titans with bespoke 3D regalia ---
+  gashadokuro: { name: 'Gashadokuro, Soberano del Eclipse', scale: 2.45, hp: 78, speed: [3.4, 3.7], dmg: 40, reach: 4.6, windup: 0.70, heavy: true, points: 3200, glyph: 'Ω',
                  look: { tint: 0x160a12, mask: 0xb81d2c, eye: 0xff3b58, weapon: 'sword', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'eclipse', cape: true },
                  robe: 0x240b14, maskC: 0xb81d2c,
-                 moves: ['bladeRush', 'eclipseSlash', 'fire', 'quake'], boss: { aura: 0xff2848, enraged: ['cataclysm', 'bladeRush', 'eclipseSlash', 'storm'] } },
-  susanooTempestad: { name: 'Susanoo, Titán de la Tempestad', scale: 2.35, hp: 46, speed: [3.2, 3.5], dmg: 30, reach: 4.4, windup: 0.8, heavy: true, points: 2300, glyph: 'Ψ',
+                 moves: ['bladeRush', 'eclipseSlash', 'fire', 'quake'],
+                 boss: { aura: 0xff2848, enraged: ['cataclysm', 'bladeRush', 'eclipseSlash', 'storm'], phase3: ['cataclysm', 'eclipseSlash', 'bladeRush', 'storm', 'eclipseSlash'] } },
+  susanooTempestad: { name: 'Susanoo, Titán de la Tempestad', scale: 2.35, hp: 74, speed: [3.5, 3.8], dmg: 38, reach: 4.5, windup: 0.72, heavy: true, points: 3100, glyph: 'Ψ',
                       look: { tint: 0x101c3a, mask: 0xd6e6ff, eye: 0x5ce1ff, weapon: 'scythe', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'tempest', drums: true, cape: true },
                       robe: 0x182a54, maskC: 0xd6e6ff,
-                      moves: ['storm', 'hook', 'shockwave', 'crescent'], boss: { aura: 0x5ce1ff, enraged: ['cataclysm', 'storm', 'whirlwind', 'thunder'] } },
-  amaterasuCeniza: { name: 'Kijin Kōtei, Emperador de la Forja', scale: 2.55, hp: 54, speed: [2.7, 2.9], dmg: 35, reach: 4.6, windup: 0.86, heavy: true, points: 2600, glyph: 'Φ',
+                      moves: ['storm', 'hook', 'shockwave', 'crescent'],
+                      boss: { aura: 0x5ce1ff, enraged: ['cataclysm', 'storm', 'whirlwind', 'thunder'], phase3: ['cataclysm', 'storm', 'whirlwind', 'eclipseSlash', 'thunder'] } },
+  amaterasuCeniza: { name: 'Kijin Kōtei, Emperador de la Forja', scale: 2.55, hp: 86, speed: [3.0, 3.3], dmg: 44, reach: 4.7, windup: 0.76, heavy: true, points: 3600, glyph: 'Φ',
                      look: { tint: 0x241008, mask: 0xe68422, eye: 0xffe26a, weapon: 'bigclub', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'solar', drums: true, cape: true },
                      robe: 0x3b170a, maskC: 0xe68422,
-                     moves: ['quake', 'fire', 'crush', 'slam'], boss: { aura: 0xff9828, enraged: ['cataclysm', 'quake', 'shockwave', 'fire'] } },
+                     moves: ['quake', 'fire', 'crush', 'slam'],
+                     boss: { aura: 0xff9828, enraged: ['cataclysm', 'quake', 'shockwave', 'fire'], phase3: ['cataclysm', 'quake', 'shockwave', 'fire', 'eclipseSlash'] } },
   // --- the sub-bosses that guard chests (encounters.ts) ---
   // a spear master: three lunges in a row, barely a breath between them, then a long pause (your turn)
   kensei:   { name: 'kensei de la lanza', scale: 1.14, hp: 9, speed: [4.6, 4.6], dmg: 13, reach: 2.5, windup: 0.42, heavy: false, points: 450, glyph: 'K',
@@ -176,17 +188,20 @@ const oniGeo = {
 const hornMat = M(0xdccca2), bladeMat = M(0xdbe4ed, { metalness: 0.7 }), bootMat = M(0x2e2426);
 export const enemies: Enemy[] = [];
 
-/** every enemy is tougher, hits harder and strikes sooner than its table numbers; bosses even more */
+/** every enemy is tougher, hits harder and strikes sooner than its table numbers; bosses and temple guards even more */
 const HP_MULT = 1.5, DMG_MULT = 1.3, WINDUP_MULT = 0.88, SPEED_MULT = 1.08;
 const BOSS_HP = 1.5, BOSS_DMG = 1.25;
+const TEMPLE_HP = 1.35, TEMPLE_DMG = 1.25, TEMPLE_WINDUP = 0.88, TEMPLE_SPEED = 1.1;
 /** Regional danger, acquired gear and your level (progression.ts) scale independently. */
 function stats(camp: Camp, kind: EnemyKind, x: number, z: number) {
-  const k = KINDS[kind], t = camp.tier, bh = HP_MULT * (k.boss ? BOSS_HP : 1), bd = DMG_MULT * (k.boss ? BOSS_DMG : 1);
+  const k = KINDS[kind], t = camp.tier, tg = !!camp.templeGuard;
+  const bh = HP_MULT * (k.boss ? BOSS_HP : 1) * (tg ? TEMPLE_HP : 1);
+  const bd = DMG_MULT * (k.boss ? BOSS_DMG : 1) * (tg ? TEMPLE_DMG : 1);
   const hp = Math.round(k.hp * bh * (1 + t * 0.8) * (1 + (camp.threat?.offense ?? 0) * 0.16) * foeHp());
   const dmg = Math.round(k.dmg * bd * (1 + t * 0.3) * (1 + (camp.threat?.defense ?? 0) * 0.11) * foeDmg());
   return {
-    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup * WINDUP_MULT, swings: 0, strikeT: 0, cd: 0,
-    big: k.heavy || !!k.elite || !!k.boss, enraged: false, speed: rnd(k.speed[0], k.speed[1]) * SPEED_MULT, camp, wander: { x, z }
+    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup * WINDUP_MULT * (tg ? TEMPLE_WINDUP : 1), swings: 0, strikeT: 0, cd: 0,
+    big: k.heavy || !!k.elite || !!k.boss, enraged: false, phase: 1, speed: rnd(k.speed[0], k.speed[1]) * SPEED_MULT * (tg ? TEMPLE_SPEED : 1), camp, wander: { x, z }
   };
 }
 function place(g: THREE.Object3D, x: number, z: number, skip?: THREE.Object3D) {
