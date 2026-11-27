@@ -156,17 +156,17 @@ export const KINDS: Record<EnemyKind, KindDef> = {
                   look: { tint: 0x3b1520, mask: 0xd9a036, eye: 0xff5a36, weapon: 'drum', crest: 'halo', plated: true, spikes: true }, robe: 0x5c1a24, maskC: 0xd9a036,
                   moves: ['rally', 'shockwave', 'slam'], boss: { aura: 0xffb840, enraged: ['rally', 'quake', 'storm', 'shockwave'] } },
   // --- colossal calamity event bosses (world-events.ts): towering 3-phase mythic titans with bespoke 3D regalia ---
-  gashadokuro: { name: 'Gashadokuro, Soberano del Eclipse', scale: 2.45, hp: 78, speed: [3.4, 3.7], dmg: 40, reach: 4.6, windup: 0.70, heavy: true, points: 3200, glyph: 'Ω',
+  gashadokuro: { name: 'Gashadokuro, Soberano del Eclipse', scale: 2.45, hp: 60, speed: [3.3, 3.6], dmg: 36, reach: 4.6, windup: 0.74, heavy: true, points: 3200, glyph: 'Ω',
                  look: { tint: 0x160a12, mask: 0xb81d2c, eye: 0xff3b58, weapon: 'sword', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'eclipse', cape: true },
                  robe: 0x240b14, maskC: 0xb81d2c,
                  moves: ['bladeRush', 'eclipseSlash', 'fire', 'quake'],
                  boss: { aura: 0xff2848, enraged: ['cataclysm', 'bladeRush', 'eclipseSlash', 'storm'], phase3: ['cataclysm', 'eclipseSlash', 'bladeRush', 'storm', 'eclipseSlash'] } },
-  susanooTempestad: { name: 'Susanoo, Titán de la Tempestad', scale: 2.35, hp: 74, speed: [3.5, 3.8], dmg: 38, reach: 4.5, windup: 0.72, heavy: true, points: 3100, glyph: 'Ψ',
+  susanooTempestad: { name: 'Susanoo, Titán de la Tempestad', scale: 2.35, hp: 56, speed: [3.4, 3.7], dmg: 34, reach: 4.5, windup: 0.76, heavy: true, points: 3100, glyph: 'Ψ',
                       look: { tint: 0x101c3a, mask: 0xd6e6ff, eye: 0x5ce1ff, weapon: 'scythe', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'tempest', drums: true, cape: true },
                       robe: 0x182a54, maskC: 0xd6e6ff,
                       moves: ['storm', 'hook', 'shockwave', 'crescent'],
                       boss: { aura: 0x5ce1ff, enraged: ['cataclysm', 'storm', 'whirlwind', 'thunder'], phase3: ['cataclysm', 'storm', 'whirlwind', 'eclipseSlash', 'thunder'] } },
-  amaterasuCeniza: { name: 'Kijin Kōtei, Emperador de la Forja', scale: 2.55, hp: 86, speed: [3.0, 3.3], dmg: 44, reach: 4.7, windup: 0.76, heavy: true, points: 3600, glyph: 'Φ',
+  amaterasuCeniza: { name: 'Kijin Kōtei, Emperador de la Forja', scale: 2.55, hp: 66, speed: [2.9, 3.2], dmg: 39, reach: 4.7, windup: 0.80, heavy: true, points: 3600, glyph: 'Φ',
                      look: { tint: 0x241008, mask: 0xe68422, eye: 0xffe26a, weapon: 'bigclub', plated: true, spikes: true, thirdEye: true, colossal: true, crown: 'solar', drums: true, cape: true },
                      robe: 0x3b170a, maskC: 0xe68422,
                      moves: ['quake', 'fire', 'crush', 'slam'],
@@ -214,7 +214,7 @@ export const enemies: Enemy[] = [];
 
 /** every enemy is tougher, hits harder and strikes sooner than its table numbers; bosses and temple guards even more */
 const HP_MULT = 1.5, DMG_MULT = 1.3, WINDUP_MULT = 0.88, SPEED_MULT = 1.08;
-const BOSS_HP = 2.05, BOSS_DMG = 1.58, BOSS_WINDUP = 0.86, BOSS_SPEED = 1.12;
+const BOSS_HP = 1.65, BOSS_DMG = 1.38, BOSS_WINDUP = 0.92, BOSS_SPEED = 1.07;
 const TEMPLE_HP = 1.65, TEMPLE_DMG = 1.45, TEMPLE_WINDUP = 0.82, TEMPLE_SPEED = 1.15;
 /** Regional danger, acquired gear and your level (progression.ts) scale independently. */
 function stats(camp: Camp, kind: EnemyKind, x: number, z: number) {

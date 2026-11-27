@@ -233,7 +233,7 @@ function slam(en: Enemy, r: number) {
 }
 
 const CHARGE_T = 0.36;
-const moveDamage = (en: Enemy, attack: EnemyAttack) => Math.round(en.dmg * attack.move.power * (en.phase === 3 ? 1.5 : en.enraged ? 1.28 : 1));
+const moveDamage = (en: Enemy, attack: EnemyAttack) => Math.round(en.dmg * attack.move.power * (en.phase === 3 ? 1.34 : en.enraged ? 1.2 : 1));
 
 interface FirePatch {
   owner: Enemy;
@@ -288,7 +288,7 @@ function pullPlayer(dx: number, dz: number, distance: number, strength: number) 
 function finishMove(en: Enemy, attack: EnemyAttack) {
   clearEnemyAttack(en);
   en.state = 'recover';
-  en.t = attack.move.recovery * (en.phase === 3 ? 0.68 : en.enraged ? 0.82 : 1) * foeRecovery();
+  en.t = attack.move.recovery * (en.phase === 3 ? 0.78 : en.enraged ? 0.88 : 1) * foeRecovery();
 }
 
 function executeMove(en: Enemy, attack: EnemyAttack) {
@@ -461,7 +461,7 @@ export function updateEnemies(dt: number) {
         showMsg(`¡ ${def.name.toUpperCase()} ENFURECIDO !\nllama a sus refuerzos`, 2);
       }
     }
-    const speed = en.speed * (en.phase === 3 ? 1.32 : en.enraged ? 1.18 : 1) * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));
+    const speed = en.speed * (en.phase === 3 ? 1.22 : en.enraged ? 1.13 : 1) * (1 - 0.4 * wadeDepth(g.position.x, g.position.z));
     en.t -= dt; en.cd -= dt;
     en.strikeT = Math.max(0, en.strikeT - dt);
     const slamming = en.kind === 'bruto' || (en.kind === 'raijin' && en.swings % 3 === 2);
