@@ -44,7 +44,8 @@ export interface CompanionDef {
   price: number;
   minLevel: number;
   color: number;
-  maxHp: number;
+  /** fraction of player.maxHp (strictly < 1 so companions always have less HP than the main character) */
+  hpRatio: number;
   dmg: number;
   speed: number;
   reach: number;
@@ -65,35 +66,35 @@ export const COMPANIONS: Record<CompanionId, CompanionDef> = {
     id: 'lobo', name: 'Lobo Guardián', short: 'Lobo', kanji: '狼', role: 'Cazador ágil',
     desc: 'Rápido y feroz. Persigue y muerde a los enemigos con recarga corta.',
     price: 2500, minLevel: 3, color: 0x68d8ff,
-    maxHp: 115, dmg: 1.35, speed: 9.8, reach: 2.1, windup: 0.22, attackCd: 0.95, rechargeTime: 20,
+    hpRatio: 0.48, dmg: 1.35, speed: 9.8, reach: 2.1, windup: 0.22, attackCd: 0.95, rechargeTime: 20,
     scale: 1.0, radius: 0.55, stagger: 0.35,
   },
   esqueleto: {
     id: 'esqueleto', name: 'Guerrero Esqueleto', short: 'Esqueleto', kanji: '骸', role: 'Espadachín',
     desc: 'Guerrero de huesos con katana y escudo. Equilibrado en vida y tajos constantes.',
     price: 4800, minLevel: 8, color: 0x72f5c8,
-    maxHp: 155, dmg: 1.65, speed: 7.5, reach: 2.45, windup: 0.28, attackCd: 1.0, rechargeTime: 24,
+    hpRatio: 0.58, dmg: 1.65, speed: 7.5, reach: 2.45, windup: 0.28, attackCd: 1.0, rechargeTime: 24,
     scale: 1.0, radius: 0.55, stagger: 0.45,
   },
   aguila: {
     id: 'aguila', name: 'Águila Imperial', short: 'Águila', kanji: '鷲', role: 'Ataque aéreo',
     desc: 'Vuela sobre el campo de batalla y se lanza en picada para desgarrar enemigos.',
     price: 7500, minLevel: 14, color: 0xffd66b,
-    maxHp: 95, dmg: 1.6, speed: 12.6, reach: 2.3, windup: 0.2, attackCd: 1.35, rechargeTime: 24,
+    hpRatio: 0.38, dmg: 1.6, speed: 12.6, reach: 2.3, windup: 0.2, attackCd: 1.35, rechargeTime: 24,
     scale: 1.08, radius: 0.6, flying: true, flyHeight: 3.4, stagger: 0.4,
   },
   leon: {
     id: 'leon', name: 'León Dorado', short: 'León', kanji: '獅', role: 'Depredador',
     desc: 'Fuerte y valiente. Sus zarpazos y embestidas infligen gran daño en área y aturden.',
     price: 11000, minLevel: 22, color: 0xffa838,
-    maxHp: 200, dmg: 2.2, speed: 8.8, reach: 2.55, windup: 0.30, attackCd: 1.15, rechargeTime: 28,
+    hpRatio: 0.68, dmg: 2.2, speed: 8.8, reach: 2.55, windup: 0.30, attackCd: 1.15, rechargeTime: 28,
     scale: 1.08, radius: 0.68, aoeRadius: 2.35, stagger: 0.65,
   },
   golem: {
     id: 'golem', name: 'Gólem de Piedra', short: 'Gólem', kanji: '岩', role: 'Tanque colosal',
-    desc: 'Resistencia enorme. Atrae la atención de los onis y golpea el suelo en área.',
+    desc: 'Resistencia sólida. Atrae la atención de los onis y golpea el suelo en área.',
     price: 15500, minLevel: 30, color: 0x8ef06e,
-    maxHp: 350, dmg: 2.4, speed: 5.4, reach: 3.0, windup: 0.44, attackCd: 1.65, rechargeTime: 36,
+    hpRatio: 0.85, dmg: 2.4, speed: 5.4, reach: 3.0, windup: 0.44, attackCd: 1.65, rechargeTime: 36,
     scale: 1.12, radius: 0.85, aoeRadius: 3.85, tauntRadius: 11.5, stagger: 0.95,
   },
 };
@@ -116,6 +117,7 @@ interface ActiveCompanion {
   maxHp: number;
   state: CompState;
   t: number;
+  phaseDur: number;
   attackCd: number;
   invuln: number;
   flash: number;
@@ -163,7 +165,8 @@ export function companionStats(d: CompanionDef): string {
 }
 
 function scaledMaxHp(d: CompanionDef): number {
-  return Math.round(d.maxHp * (1 + (level() - 1) * 0.035));
+  const cap = Math.max(10, Math.floor(player.maxHp) - 1);
+  return Math.max(10, Math.min(cap, Math.round(player.maxHp * d.hpRatio)));
 }
 
 export function buyCompanion(d: CompanionDef): 'ok' | 'owned' | 'poor' | 'level' {
@@ -435,6 +438,7 @@ function spawnSlot(slot: 0 | 1, d: CompanionDef) {
     maxHp,
     state: 'follow',
     t: 0,
+    phaseDur: 0.3,
     attackCd: 0.25,
     invuln: 0.6,
     flash: 0.5,
@@ -704,7 +708,8 @@ function updateFlyingCompanion(c: ActiveCompanion, dt: number) {
   c.altitude = Math.max(0, c.pos.y - gy);
   c.model.ring.position.y = (gy - c.pos.y + 0.06) / d.scale;
   const turnRate = dt > 1e-4 ? angDiff(c.face, c.model.root.rotation.y) / dt : 0;
-  c.model.update(dt, { moving, speed: d.speed, state: animState, turnRate, attackStyle: c.comboStep });
+  const attackProg = c.phaseDur > 1e-4 ? THREE.MathUtils.clamp(1 - c.t / c.phaseDur, 0, 1) : 1;
+  c.model.update(dt, { moving, speed: d.speed, state: animState, turnRate, attackStyle: c.comboStep, attackProg });
 }
 
 function updateGroundCompanion(c: ActiveCompanion, dt: number) {
@@ -729,7 +734,8 @@ function updateGroundCompanion(c: ActiveCompanion, dt: number) {
       dealCompanionAttack(c);
       c.state = 'strike';
       const isGolemFinisher = d.id === 'golem' && (c.comboStep % 3 === 2);
-      c.t = d.id === 'golem' ? (isGolemFinisher ? 0.42 : 0.30) : 0.26;
+      c.phaseDur = d.id === 'golem' ? (isGolemFinisher ? 0.46 : 0.34) : 0.26;
+      c.t = c.phaseDur;
       c.attackCd = d.id === 'golem' ? (isGolemFinisher ? d.attackCd * 1.15 : d.attackCd * 0.72) : d.attackCd;
     }
   } else if (c.state === 'strike') {
@@ -753,7 +759,8 @@ function updateGroundCompanion(c: ActiveCompanion, dt: number) {
 
     if (dist <= reach && c.attackCd <= 0) {
       c.state = 'windup';
-      c.t = d.id === 'golem' ? (c.comboStep % 3 === 2 ? d.windup * 1.25 : d.windup * 0.78) : d.windup;
+      c.phaseDur = d.id === 'golem' ? (c.comboStep % 3 === 2 ? d.windup * 1.25 : d.windup * 0.80) : d.windup;
+      c.t = c.phaseDur;
     } else if (dist > reach * 0.85) {
       moving = 1;
       const spd = d.speed * (1 - 0.35 * wadeDepth(c.pos.x, c.pos.z));
@@ -814,7 +821,8 @@ function updateGroundCompanion(c: ActiveCompanion, dt: number) {
   c.pos.y = surfaceY(c.pos.x, c.pos.z) - wd * WADE_SINK;
   c.altitude = 0;
   const turnRate = dt > 1e-4 ? angDiff(c.face, c.model.root.rotation.y) / dt : 0;
-  c.model.update(dt, { moving, speed: d.speed, state: animState, turnRate, attackStyle: c.comboStep });
+  const attackProg = c.phaseDur > 1e-4 ? THREE.MathUtils.clamp(1 - c.t / c.phaseDur, 0, 1) : 1;
+  c.model.update(dt, { moving, speed: d.speed, state: animState, turnRate, attackStyle: c.comboStep, attackProg });
 }
 
 export function updateCompanions(dt: number) {
@@ -841,6 +849,14 @@ export function updateCompanions(dt: number) {
         if (getSlotCharge(slot) >= 1) notifyReady(id);
       }
       continue;
+    }
+
+    // Always keep companion max HP strictly below player's max HP (e.g. if player's maxHp changes)
+    const capMax = scaledMaxHp(c.def);
+    if (c.maxHp !== capMax) {
+      const ratio = c.hp / Math.max(1, c.maxHp);
+      c.maxHp = capMax;
+      c.hp = Math.min(c.maxHp, Math.max(1, ratio * c.maxHp));
     }
 
     c.invuln = Math.max(0, c.invuln - dt);
