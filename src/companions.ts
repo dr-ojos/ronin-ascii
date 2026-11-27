@@ -92,9 +92,9 @@ export const COMPANIONS: Record<CompanionId, CompanionDef> = {
   },
   golem: {
     id: 'golem', name: 'Gólem de Piedra', short: 'Gólem', kanji: '岩', role: 'Tanque colosal',
-    desc: 'Resistencia sólida. Atrae la atención de los onis y golpea el suelo en área.',
+    desc: 'Misma resistencia que tú. Atrae la atención de los onis y golpea el suelo en área.',
     price: 15500, minLevel: 30, color: 0x8ef06e,
-    hpRatio: 0.85, dmg: 2.4, speed: 5.4, reach: 3.0, windup: 0.44, attackCd: 1.65, rechargeTime: 36,
+    hpRatio: 1.0, dmg: 2.4, speed: 5.4, reach: 3.0, windup: 0.44, attackCd: 1.65, rechargeTime: 36,
     scale: 1.12, radius: 0.85, aoeRadius: 3.85, tauntRadius: 11.5, stagger: 0.95,
   },
 };
@@ -165,8 +165,9 @@ export function companionStats(d: CompanionDef): string {
 }
 
 function scaledMaxHp(d: CompanionDef): number {
-  const cap = Math.max(10, Math.floor(player.maxHp) - 1);
-  return Math.max(10, Math.min(cap, Math.round(player.maxHp * d.hpRatio)));
+  const playerMax = Math.max(10, Math.round(player.maxHp));
+  if (d.hpRatio >= 1) return playerMax;
+  return Math.max(10, Math.min(playerMax - 1, Math.round(playerMax * d.hpRatio)));
 }
 
 export function buyCompanion(d: CompanionDef): 'ok' | 'owned' | 'poor' | 'level' {
