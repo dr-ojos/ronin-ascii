@@ -2,7 +2,7 @@
 import { LOOK_PROFILE } from './blade-looks';
 import { MANGA_PROFILE } from './manga-swords';
 import * as THREE from 'three';
-import { scene } from './renderer';
+import { DPR, scene } from './renderer';
 import { BLADE_SHEEN_ALPHA, BLADE_SPARK_ALPHA, CLS, markCombatFx, tagMat } from './materials';
 import { sam, bladeMat } from './avatar';
 import { BELLY_POW, BLADE_PROFILE, bladeSection } from './samurai';
@@ -226,37 +226,123 @@ function setWeaponFx(w: Weapon) {
 
 // Travelling flashes live on the cutting edge in blade space. Loose sparks are emitted on contact and on cuts.
 const WHITE = new THREE.Color(0xffffff), edgeColor = new THREE.Color();
-const BLADE_GLINTS = 3, EDGE_SPARKS = BLADE_GLINTS + 42;
+const BLADE_GLINTS = 3, ASCII_EDGE_SPARKS = BLADE_GLINTS + 42, EDGE_SPARKS = BLADE_GLINTS + 112;
 const edgePositions = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3).setUsage(THREE.DynamicDrawUsage);
 const edgePulses = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS), 1).setUsage(THREE.DynamicDrawUsage);
 const edgeColors = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3);
+const edgeSeeds = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS), 1);
+for (let i = 0; i < EDGE_SPARKS; i++) {
+  edgeSeeds.setX(i, i < BLADE_GLINTS ? 0.01 * (i + 1) : ((i * 0.61803398875) % 1));
+}
 const edgeGeo = new THREE.BufferGeometry();
 edgeGeo.setAttribute('position', edgePositions);
 edgeGeo.setAttribute('color', edgeColors);
 edgeGeo.setAttribute('aPulse', edgePulses);
+edgeGeo.setAttribute('aSeed', edgeSeeds);
 const edgeViewport = new THREE.Vector4();
+const hiResU = { value: 0 };
+const fxTimeU = { value: 0 };
 const edgeMat = new THREE.ShaderMaterial({
-  uniforms: { uViewportHeight: { value: 1 }, uRasterScale: { value: 1 } },
+  uniforms: {
+    uViewportHeight: { value: 1 },
+    uRasterScale: { value: 1 },
+    uTime: fxTimeU,
+    uHiRes: hiResU,
+    uHeat: { value: 0 }
+  },
   vertexColors: true, transparent: true, depthWrite: false, toneMapped: false,
   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
   blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.ZeroFactor,
-  vertexShader: `
-    uniform float uViewportHeight, uRasterScale;
+  vertexShader: /* glsl */`
+    uniform float uViewportHeight, uRasterScale, uTime, uHiRes, uHeat;
     attribute float aPulse;
+    attribute float aSeed;
     varying vec3 vTint;
     varying float vPulse;
+    varying float vSeed;
+    varying float vGlitch;
+    float ehash(float n) { return fract(sin(n) * 43758.5453123); }
     void main() {
       vec4 p = modelViewMatrix * vec4(position, 1.0);
       gl_Position = projectionMatrix * p;
-      float size = 0.065 * uViewportHeight * projectionMatrix[1][1] / max(1.0, -p.z);
-      gl_PointSize = mix(0.66, 1.0, aPulse) * clamp(size, 8.0 * uRasterScale, 17.0 * uRasterScale);
       vPulse = aPulse;
       vTint = color;
+      vSeed = aSeed;
+      vGlitch = 0.0;
+      if (uHiRes > 0.5) {
+        float gTick = floor(uTime * 22.0);
+        float gh = ehash(aSeed * 127.1 + gTick * 31.7);
+        float isGlint = step(aSeed, 0.04);
+        float glitch = step(0.78 - 0.20 * uHeat, gh) * (1.0 - isGlint * 0.5);
+        vGlitch = glitch;
+        // crisp horizontal digital jitter on glitched ticks
+        float snapX = (ehash(aSeed * 73.3 + gTick * 19.1) - 0.5) * 0.024 * (1.0 + uHeat * 1.4);
+        float snapY = (ehash(aSeed * 41.9 + gTick * 11.3) - 0.5) * 0.008 * (1.0 + uHeat);
+        gl_Position.xy += glitch * vec2(snapX, snapY) * gl_Position.w;
+        float fineScale = isGlint > 0.5 ? 0.052 : mix(0.017, 0.038, fract(aSeed * 9.37));
+        float size = fineScale * uViewportHeight * projectionMatrix[1][1] / max(1.0, -p.z);
+        float minPx = isGlint > 0.5 ? 5.0 : 2.2;
+        float maxPx = isGlint > 0.5 ? 10.5 : (glitch > 0.5 ? 9.0 : 6.8);
+        gl_PointSize = mix(0.72, 1.0, aPulse) * clamp(size, minPx * uRasterScale, maxPx * uRasterScale);
+      } else {
+        float size = 0.065 * uViewportHeight * projectionMatrix[1][1] / max(1.0, -p.z);
+        gl_PointSize = mix(0.66, 1.0, aPulse) * clamp(size, 8.0 * uRasterScale, 17.0 * uRasterScale);
+      }
     }`,
-  fragmentShader: `
+  fragmentShader: /* glsl */`
+    uniform float uTime, uHiRes;
     varying vec3 vTint;
     varying float vPulse;
+    varying float vSeed;
+    varying float vGlitch;
+    float sparkShape(vec2 q, float kind) {
+      vec2 a = abs(q);
+      if (kind < 0.30) {
+        // ultra-fine pixel diamond / mote
+        float d = a.x + a.y;
+        return 1.0 - smoothstep(0.12, 0.42, d);
+      } else if (kind < 0.62) {
+        // crisp ASCII-like '+' / '*' micro-cross
+        float crossA = (1.0 - smoothstep(0.06, 0.18, min(a.x, a.y))) * (1.0 - smoothstep(0.18, 0.48, max(a.x, a.y)));
+        float core = 1.0 - smoothstep(0.05, 0.22, length(q));
+        return clamp(crossA * 0.9 + core * 0.85, 0.0, 1.0);
+      } else if (kind < 0.84) {
+        // horizontal glitch sliver / micro-scanline dash
+        float bar = (1.0 - smoothstep(0.05, 0.14, a.y)) * (1.0 - smoothstep(0.28, 0.48, a.x));
+        return bar;
+      } else {
+        // twin split glitch pixels (':')
+        vec2 q1 = abs(q - vec2(0.0, 0.18));
+        vec2 q2 = abs(q + vec2(0.0, 0.18));
+        float d1 = 1.0 - smoothstep(0.07, 0.16, max(q1.x, q1.y));
+        float d2 = 1.0 - smoothstep(0.07, 0.16, max(q2.x, q2.y));
+        return max(d1, d2);
+      }
+    }
     void main() {
+      if (uHiRes > 0.5) {
+        vec2 q = gl_PointCoord - 0.5;
+        float kind = fract(vSeed * 13.7 + floor(uTime * 18.0) * 0.29 * vGlitch);
+        float m = sparkShape(q, kind);
+        if (vGlitch > 0.5) {
+          // chromatic RGB split along X for crisp digital glitch feel
+          float shift = 0.15;
+          float mR = sparkShape(q + vec2(shift, 0.0), kind);
+          float mB = sparkShape(q - vec2(shift, 0.0), kind);
+          float peak = max(m, max(mR, mB));
+          if (peak * vPulse < 0.06) discard;
+          vec3 colR = mix(vTint, vec3(1.0, 0.35, 0.55), 0.35);
+          vec3 colB = mix(vTint, vec3(0.35, 0.92, 1.0), 0.35);
+          vec3 rgb = vTint * m * 1.15 + colR * mR * 0.55 + colB * mB * 0.55 + vec3(1.0) * (m * m * 0.55);
+          gl_FragColor = vec4(rgb * vPulse * 1.45, ${BLADE_SPARK_ALPHA.toFixed(2)});
+        } else {
+          if (m * vPulse < 0.06) discard;
+          vec3 rgb = mix(vTint, vec3(1.0), 0.32 * m) * (m * vPulse * 1.35);
+          gl_FragColor = vec4(rgb, ${BLADE_SPARK_ALPHA.toFixed(2)});
+        }
+        #include <colorspace_fragment>
+        return;
+      }
       vec2 p = abs(gl_PointCoord - 0.5) * 2.0;
       float r = length(p);
       float bloom = 0.33 * (1.0 - smoothstep(0.10, 0.85, r));
@@ -298,9 +384,12 @@ function bladeRise(w: Weapon, t: number) {
 const katanaWorldQ = new THREE.Quaternion(), katanaInvQ = new THREE.Quaternion(), localDown = new THREE.Vector3();
 function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
   const hasBlade = w.form !== 'staff' || Boolean(w.fx.sparks);
+  const hiRes = state.viewMode === '3d';
   edgeSparks.visible = hasBlade && !state.dead;
   offhandSparks.visible = edgeSparks.visible && w.form === 'dual';
   bladeSheen.uBladeStrength.value = edgeSparks.visible ? (w.fx.sparks ? 1 : 0.65) + heat * 0.42 : 0;
+  edgeMat.uniforms.uHeat.value = heat;
+  edgeGeo.setDrawRange(0, hiRes ? EDGE_SPARKS : ASCII_EDGE_SPARKS);
   if (!edgeSparks.visible) return;
   const { base, scale, profile } = bladeMetrics(w);
   const length = tipZ(w) - base;
@@ -323,10 +412,32 @@ function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
     const fade = THREE.MathUtils.smoothstep(travel, 0.02, 0.14) * (1 - THREE.MathUtils.smoothstep(travel, 0.84, 0.98));
     edgePulses.setX(i, fade * (0.94 + 0.24 * Math.sin(time * 26 + i * 2)));
   }
-  const count = EDGE_SPARKS - BLADE_GLINTS;
+  const activeTotal = hiRes ? EDGE_SPARKS : ASCII_EDGE_SPARKS;
+  const count = activeTotal - BLADE_GLINTS;
+  const baseCount = ASCII_EDGE_SPARKS - BLADE_GLINTS;
   for (let i = 0; i < count; i++) {
     const idx = i + BLADE_GLINTS;
-    if ((blood || flames) && i % 2 === 0) {
+    if (i >= baseCount) {
+      // Extra fine glitch-mote cloud hugging the blade in 3D high-res mode
+      const k = i - baseCount;
+      const speed = 0.45 + (k % 7) * 0.11 + heat * 0.4;
+      const u = (time * speed + k * 0.381966) % 1;
+      const along = 0.03 + u * 0.95;
+      const sec = bladeSection(profile, THREE.MathUtils.clamp(along, 0.02, 0.98));
+      const gStep = Math.floor(time * 20 + k * 0.7);
+      const jitter = Math.sin(gStep * 12.9898 + k * 78.233) * 43758.5453;
+      const jFrac = jitter - Math.floor(jitter);
+      const glitchPop = jFrac > 0.82 ? (jFrac - 0.82) * 0.16 : 0;
+      const angle = k * 2.39996 + time * (3.2 + (k % 3) * 1.3);
+      const radial = 0.012 + (k % 5) * 0.006 + glitchPop + heat * 0.022;
+      const lane = (Math.sin(angle) * 0.56) + (k % 2 === 0 ? -0.18 : 0.12);
+      const xOff = Math.cos(angle) * radial;
+      const y = (sec.center + sec.width * lane) * scale + Math.sin(angle) * radial * 0.55;
+      edgePositions.setXYZ(idx, xOff, y, base + along * length);
+      const blink = 0.45 + 0.55 * Math.sin(time * 29 + k * 3.17);
+      const fade = THREE.MathUtils.smoothstep(u, 0, 0.08) * (1 - THREE.MathUtils.smoothstep(u, 0.88, 1));
+      edgePulses.setX(idx, fade * blink * (displaying ? 1.15 : 0.95 + 0.35 * heat));
+    } else if ((blood || flames) && i % 2 === 0) {
       // Blood-dripping sparks fall straight down; flame sparks dance & rise upward off the blazing blade
       const speed = (flames ? 1.05 : 0.68) + (i % 5) * (flames ? 0.2 : 0.14);
       const dropT = (time * speed + i * 0.371) % 1;
@@ -403,10 +514,54 @@ const sparkMat = new THREE.PointsMaterial({
   blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.ZeroFactor
 });
 sparkMat.userData.cls = CLS.light;
+sparkMat.customProgramCacheKey = () => 'katana-sparks-hires';
 sparkMat.onBeforeCompile = sh => {
-  sh.fragmentShader = sh.fragmentShader
-    .replace('#include <color_fragment>', `#include <color_fragment>
-      { vec2 pc = gl_PointCoord - 0.5; if (dot(pc, pc) > 0.25 || max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b) < 0.08) discard; }`)
+  sh.uniforms.uHiRes = hiResU;
+  sh.uniforms.uT = fxTimeU;
+  sh.vertexShader = `uniform float uHiRes, uT;\nvarying float vSpSeed, vSpGlitch;\n` + sh.vertexShader
+    .replace('#include <project_vertex>', /* glsl */`
+      #include <project_vertex>
+      vSpSeed = fract(sin(dot(position.xz + position.y, vec2(12.9898, 78.233))) * 43758.5453);
+      vSpGlitch = 0.0;
+      if (uHiRes > 0.5) {
+        float gTick = floor(uT * 24.0);
+        float gh = fract(sin(vSpSeed * 93.7 + gTick * 23.1) * 43758.5453);
+        vSpGlitch = step(0.74, gh);
+        gl_Position.x += vSpGlitch * (fract(gh * 17.3) - 0.5) * 0.024 * gl_Position.w;
+      }
+    `)
+    .replace('gl_PointSize = size;', /* glsl */`
+      gl_PointSize = uHiRes > 0.5 ? size * (vSpGlitch > 0.5 ? 0.78 : 0.58) : size;
+    `);
+  sh.fragmentShader = `uniform float uHiRes, uT;\nvarying float vSpSeed, vSpGlitch;\n` + sh.fragmentShader
+    .replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
+      {
+        vec2 pc = gl_PointCoord - 0.5;
+        float lum = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
+        if (lum < 0.08) discard;
+        if (uHiRes > 0.5) {
+          vec2 ap = abs(pc);
+          float kind = fract(vSpSeed * 11.3 + floor(uT * 20.0) * 0.31 * vSpGlitch);
+          float m;
+          if (kind < 0.35) {
+            m = 1.0 - smoothstep(0.12, 0.38, ap.x + ap.y);
+          } else if (kind < 0.72) {
+            float cr = (1.0 - smoothstep(0.06, 0.17, min(ap.x, ap.y))) * (1.0 - smoothstep(0.18, 0.46, max(ap.x, ap.y)));
+            m = max(cr, 1.0 - smoothstep(0.06, 0.22, length(pc)));
+          } else {
+            m = (1.0 - smoothstep(0.05, 0.14, ap.y)) * (1.0 - smoothstep(0.26, 0.48, ap.x));
+          }
+          if (m < 0.08) discard;
+          if (vSpGlitch > 0.5) {
+            vec3 chroma = pc.x > 0.0 ? vec3(1.25, 0.9, 0.75) : vec3(0.75, 1.05, 1.3);
+            diffuseColor.rgb = mix(diffuseColor.rgb * chroma, vec3(1.0), 0.28 * m) * (m * 1.45);
+          } else {
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), 0.22 * m) * (m * 1.3);
+          }
+        } else {
+          if (dot(pc, pc) > 0.25) discard;
+        }
+      }`)
     .replace(/}\s*$/, `  gl_FragColor.a = ${CLS.light.toFixed(2)};\n}`);
 };
 const sparkPts = new THREE.Points(spGeo, sparkMat);
@@ -427,7 +582,7 @@ const leftBase = new THREE.Vector3(), leftTip = new THREE.Vector3(), leftPrevBas
 // · the vapour: wider and fainter, it lingers, rises, spreads and breaks into twinkling grains.
 // Drawn with different glyph ramps in the ASCII pass: the streak with the bright light ramp, the vapour with
 // the sky ramp ( . ' ` * + ), so a cut reads as a sharp stroke dissolving into dust.
-const TRAIL_N = 160, STREAK_LIFE = 0.2, VAPOUR_LIFE = 0.6;
+const TRAIL_N = 280, TRAIL_KEYS = 64, STREAK_LIFE = 0.2, VAPOUR_LIFE = 0.6;
 let trailK = 1;
 interface TrailPt { b: THREE.Vector3; t: THREE.Vector3; age: number; k: number }
 const blend = {
@@ -435,77 +590,220 @@ const blend = {
   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
   blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.ZeroFactor
 } as const;
-const trailU = { uT: { value: 0 } };
+const trailU = { uT: { value: 0 }, uHiRes: hiResU, uRasterScale: { value: DPR } };
 function ribbon(cls: number, grains: boolean) {
-  const pos = new Float32Array(TRAIL_N * 6), col = new Float32Array(TRAIL_N * 6), geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(TRAIL_N * 6), col = new Float32Array(TRAIL_N * 6), uv = new Float32Array(TRAIL_N * 4);
+  const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aTrailUv', new THREE.BufferAttribute(uv, 2));
   const idx: number[] = []; for (let i = 0; i < TRAIL_N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
   geo.setIndex(idx); geo.setDrawRange(0, 0);
   const mat = new THREE.MeshBasicMaterial(blend);
   mat.userData.cls = cls;
+  mat.customProgramCacheKey = () => `katana-trail-${cls}-${grains ? 'v' : 's'}`;
   mat.onBeforeCompile = sh => {
     sh.uniforms.uT = trailU.uT;
-    sh.fragmentShader = 'uniform float uT;\n' + sh.fragmentShader
-      .replace('#include <color_fragment>', `#include <color_fragment>
+    sh.uniforms.uHiRes = trailU.uHiRes;
+    sh.uniforms.uRasterScale = trailU.uRasterScale;
+    sh.vertexShader = 'attribute vec2 aTrailUv;\nvarying vec2 vTrailUv;\n' + sh.vertexShader.replace(
+      '#include <begin_vertex>', '#include <begin_vertex>\nvTrailUv = aTrailUv;'
+    );
+    sh.fragmentShader = /* glsl */`
+      uniform float uT, uHiRes, uRasterScale;
+      varying vec2 vTrailUv;
+      float thash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      // Procedural high-res ASCII-like micro-glyph mask (., ', :, -, +, *, #) inside a cell
+      float asciiMark(vec2 lp, float lvl, float seed) {
+        vec2 q = abs(lp - 0.5);
+        if (lvl < 0.20) {
+          // dot / apostrophe pinpoint grain
+          vec2 c = lp - vec2(0.5, seed > 0.5 ? 0.30 : 0.70);
+          return step(max(abs(c.x), abs(c.y)), 0.16);
+        } else if (lvl < 0.40) {
+          // ':' or '-' fine stroke
+          if (seed > 0.5) {
+            return step(q.y, 0.12) * step(q.x, 0.36);
+          }
+          vec2 c1 = abs(lp - vec2(0.5, 0.28)), c2 = abs(lp - vec2(0.5, 0.72));
+          return max(step(max(c1.x, c1.y), 0.14), step(max(c2.x, c2.y), 0.14));
+        } else if (lvl < 0.65) {
+          // '+' or '*' crisp star/cross
+          float plus = max(step(q.x, 0.12) * step(q.y, 0.38), step(q.y, 0.12) * step(q.x, 0.38));
+          if (seed > 0.45) {
+            float diag = step(abs(q.x - q.y), 0.11) * step(max(q.x, q.y), 0.32);
+            return max(plus, diag);
+          }
+          return plus;
+        } else if (lvl < 0.85) {
+          // '#' / '=' dense ASCII weave
+          float bars = max(step(abs(q.y - 0.20), 0.09), step(abs(q.x - 0.20), 0.09)) * step(max(q.x, q.y), 0.42);
+          return bars;
+        } else {
+          // dense luminous block with crisp micro-border
+          return step(max(q.x, q.y), 0.42);
+        }
+      }
+    ` + sh.fragmentShader
+      .replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
         { float f = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
-          ${grains ? `// vapour: the fainter the ribbon, the more it breaks into twinkling grains
-          vec2 g = floor(gl_FragCoord.xy / 3.0);
-          float h = fract(sin(dot(g + floor(uT * 24.0) * vec2(7.13, 3.71), vec2(12.9898, 78.233))) * 43758.5453);
-          if (f < 0.015 || h > f * 3.5) discard;
-          diffuseColor.rgb *= 0.55 + 0.9 * h;` : `if (f < 0.02) discard;`} }`)
+          if (uHiRes > 0.5) {
+            float gClock = floor(uT * 24.0);
+            vec2 cellSz = vec2(4.0, ${grains ? '5.5' : '6.0'}) * max(1.0, uRasterScale);
+            float rowId = floor(gl_FragCoord.y / (cellSz.y * 1.4));
+            float rowRand = thash(vec2(rowId, gClock * 1.37));
+            float glitchRow = step(0.75, rowRand);
+            float xShift = glitchRow * (fract(rowRand * 37.1) - 0.5) * cellSz.x * ${grains ? '6.0' : '4.5'};
+            vec2 fc = gl_FragCoord.xy + vec2(xShift, 0.0);
+            vec2 cell = floor(fc / cellSz);
+            vec2 lp = fract(fc / cellSz);
+            float ch = thash(cell + floor(uT * ${grains ? '22.0' : '28.0'}) * vec2(7.13, 3.71));
+            ${grains ? `
+            // Hi-res ASCII-inspired dissolving vapour: twinkling micro-glyphs & glitch dust
+            if (f < 0.012 || ch > f * 4.2) discard;
+            float lvl = clamp(f * 2.4 + ch * 0.22, 0.0, 0.99);
+            float mark = asciiMark(lp, lvl, fract(ch * 19.7));
+            if (mark < 0.5) discard;
+            float flick = 0.65 + 0.85 * ch;
+            vec3 rgb = diffuseColor.rgb * flick * 2.15;
+            if (glitchRow > 0.5 || ch > 0.82) {
+              vec3 shiftCol = lp.x > 0.5 ? vec3(1.25, 0.92, 0.8) : vec3(0.75, 1.08, 1.32);
+              rgb = mix(rgb * shiftCol, vec3(1.0) * f * 2.4, 0.28);
+            }
+            diffuseColor.rgb = rgb;` : `
+            // Hi-res ASCII-inspired cutting streak: razor-hot leading edge + crisp micro-glyph wake with glitch slices
+            if (f < 0.018) discard;
+            float lead = smoothstep(0.18, 0.0, vTrailUv.x) * smoothstep(0.15, 0.85, vTrailUv.y);
+            float lvl = clamp(f * 2.1 + lead * 0.45, 0.0, 0.99);
+            float mark = asciiMark(lp, lvl, fract(ch * 13.3));
+            float keep = max(mark, lead * 0.92);
+            if (keep < 0.12) discard;
+            vec3 rgb = diffuseColor.rgb * (1.85 + 0.75 * lead);
+            // white-hot highlight on the brightest ASCII strokes & leading edge
+            rgb = mix(rgb, vec3(1.0) * max(f * 2.2, lead * 1.1), 0.30 * mark + 0.35 * lead);
+            if (glitchRow > 0.5) {
+              vec3 chroma = lp.x > 0.5 ? vec3(1.3, 0.88, 0.75) : vec3(0.7, 1.05, 1.35);
+              rgb *= chroma * 1.25;
+            }
+            diffuseColor.rgb = rgb * keep;`}
+          } else {
+            ${grains ? `// vapour: the fainter the ribbon, the more it breaks into twinkling grains
+            vec2 g = floor(gl_FragCoord.xy / 3.0);
+            float h = fract(sin(dot(g + floor(uT * 24.0) * vec2(7.13, 3.71), vec2(12.9898, 78.233))) * 43758.5453);
+            if (f < 0.015 || h > f * 3.5) discard;
+            diffuseColor.rgb *= 0.55 + 0.9 * h;` : `if (f < 0.02) discard;`}
+          }
+        }`)
       .replace(/}\s*$/, `  gl_FragColor.a = ${cls.toFixed(2)};\n}`);
   };
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false; scene.add(markCombatFx(mesh));
-  return { pos, col, geo };
+  return { pos, col, uv, geo };
 }
 const makeTrail = () => ({ points: [] as TrailPt[], streak: ribbon(CLS.light, false), vapour: ribbon(CLS.sky, true) });
 const rightTrail = makeTrail(), leftTrail = makeTrail();
 const HOT = new THREE.Color(), tmpC = new THREE.Color();
-function pushTrail(trail: TrailPt[], b: THREE.Vector3, t: THREE.Vector3, age: number, k: number) {
-  trail.unshift({ b: b.clone(), t: t.clone(), age, k });
-  if (trail.length > TRAIL_N) trail.pop();
+const crB = new THREE.Vector3(), crT = new THREE.Vector3(), crDir = new THREE.Vector3();
+function catmullRom(p0: number, p1: number, p2: number, p3: number, u: number) {
+  const u2 = u * u, u3 = u2 * u;
+  return 0.5 * (
+    2 * p1 +
+    (-p0 + p2) * u +
+    (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 +
+    (-p0 + 3 * p1 - 3 * p2 + p3) * u3
+  );
+}
+function evalCatmullRom(p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3, u: number, out: THREE.Vector3) {
+  return out.set(
+    catmullRom(p0.x, p1.x, p2.x, p3.x, u),
+    catmullRom(p0.y, p1.y, p2.y, p3.y, u),
+    catmullRom(p0.z, p1.z, p2.z, p3.z, u)
+  );
+}
+function pushKey(keys: TrailPt[], b: THREE.Vector3, t: THREE.Vector3, age: number, k: number) {
+  keys.unshift({ b: b.clone(), t: t.clone(), age, k });
+  if (keys.length > TRAIL_KEYS) keys.pop();
 }
 function updateTrail(track: ReturnType<typeof makeTrail>, dt: number, emit: boolean, swing: number,
   base: THREE.Vector3, tip: THREE.Vector3, lastBase: THREE.Vector3, lastTip: THREE.Vector3) {
-  const { points: trail, streak, vapour } = track;
+  const { points: keys, streak, vapour } = track;
   const vLife = VAPOUR_LIFE * (0.7 + 0.3 * trailK), sLife = STREAK_LIFE * (0.8 + 0.2 * trailK);
-  for (const s of trail) s.age += dt;
-  while (trail.length && trail[trail.length - 1].age > vLife) trail.pop();
+  for (const s of keys) s.age += dt;
+  while (keys.length && keys[keys.length - 1].age > vLife) keys.pop();
   if (emit && fight > 0.5 && swing > 0.12) {
-    // sub-steps between last frame's blade and this one, so fast cuts draw a smooth arc
-    const steps = trail.length ? Math.min(10, Math.max(1, Math.ceil(lastTip.distanceTo(tip) / 0.06))) : 1;
-    for (let k = 1; k <= steps; k++) {
-      const f = k / steps;
-      pushTrail(trail, spTmp.lerpVectors(lastBase, base, f), new THREE.Vector3().lerpVectors(lastTip, tip, f), dt * (1 - f), swing);
+    // Seed the start of a fresh cut so even frame 1 forms a clean arc
+    if ((!keys.length || keys[0].age > 0.085) && lastTip.distanceToSquared(tip) > 1e-6) {
+      pushKey(keys, lastBase, lastTip, dt, swing);
     }
+    pushKey(keys, base, tip, 0, swing);
   }
   HOT.copy(CG).lerp(tmpC.set(0xffffff), 0.4);
-  const n = trail.length;
-  for (let i = 0; i < n; i++) {
-    const s = trail[i], j = i * 6, dx = s.t.x - s.b.x, dy = s.t.y - s.b.y, dz = s.t.z - s.b.z;
-    const end = i === 0 || i === n - 1 ? 0.3 : 1, kk = Math.min(1, s.k * 1.4) * end;
-    // streak: from 55 % of the blade to just past the tip; its inner edge slides out as it ages (a thinning crescent)
-    const as = Math.min(1, s.age / sLife), inner = 0.74 + 0.24 * as, outer = 1.03;
-    streak.pos[j] = s.b.x + dx * inner; streak.pos[j + 1] = s.b.y + dy * inner; streak.pos[j + 2] = s.b.z + dz * inner;
-    streak.pos[j + 3] = s.b.x + dx * outer; streak.pos[j + 4] = s.b.y + dy * outer; streak.pos[j + 5] = s.b.z + dz * outer;
-    const fs = Math.pow(1 - as, 2.4) * kk * (0.3 + 0.1 * trailK);
+  const hiRes = state.viewMode === '3d';
+  const kn = keys.length;
+  let n = 0;
+  let ns = 0;
+  const writeVertex = (b: THREE.Vector3, t: THREE.Vector3, age: number, k: number, isEnd: boolean) => {
+    if (n >= TRAIL_N) return;
+    const i = n++, j = i * 6, uj = i * 4;
+    const dx = t.x - b.x, dy = t.y - b.y, dz = t.z - b.z;
+    const end = isEnd ? 0.3 : 1, kk = Math.min(1, k * 1.4) * end;
+    // streak: from 62% (3D) / 74% (ASCII) of the blade to just past the tip; thins outward as it ages
+    const as = Math.min(1, age / sLife), inner = (hiRes ? 0.62 + 0.32 * as : 0.74 + 0.24 * as), outer = 1.03;
+    streak.pos[j] = b.x + dx * inner; streak.pos[j + 1] = b.y + dy * inner; streak.pos[j + 2] = b.z + dz * inner;
+    streak.pos[j + 3] = b.x + dx * outer; streak.pos[j + 4] = b.y + dy * outer; streak.pos[j + 5] = b.z + dz * outer;
+    streak.uv[uj] = as; streak.uv[uj + 1] = 0; streak.uv[uj + 2] = as; streak.uv[uj + 3] = 1;
+    const fs = Math.pow(1 - as, 2.2) * kk * (0.3 + 0.1 * trailK) * (hiRes ? 1.18 : 1);
     tmpC.copy(HOT).lerp(CG, Math.min(1, as * 4));                     // white-hot → the blade's colour
     streak.col[j] = tmpC.r * fs * 0.25; streak.col[j + 1] = tmpC.g * fs * 0.25; streak.col[j + 2] = tmpC.b * fs * 0.25;
     streak.col[j + 3] = tmpC.r * fs; streak.col[j + 4] = tmpC.g * fs; streak.col[j + 5] = tmpC.b * fs;
+    if (age < sLife) ns = n;
     // vapour: the whole blade's sweep, rising, spreading away from the hilt and wobbling as it dissipates
-    const av = s.age / vLife, rise = s.age * 0.9, spread = s.age * 0.8, wob = Math.sin(s.age * 16 + i * 0.5) * s.age * 0.22;
-    vapour.pos[j] = s.b.x + dx * 0.25 + wob; vapour.pos[j + 1] = s.b.y + dy * 0.25 + rise * 0.5; vapour.pos[j + 2] = s.b.z + dz * 0.25 - wob;
-    vapour.pos[j + 3] = s.t.x + dx * spread + wob; vapour.pos[j + 4] = s.t.y + rise; vapour.pos[j + 5] = s.t.z + dz * spread - wob;
-    const fv = Math.pow(Math.max(0, 1 - av), 1.6) * kk * 0.3 * (0.6 + 0.4 * trailK) * Math.min(1, s.age / 0.06 + 0.25);
+    const av = age / vLife, rise = age * 0.9, spread = age * 0.8, wob = Math.sin(age * 16 + i * 0.35) * age * 0.22;
+    vapour.pos[j] = b.x + dx * 0.25 + wob; vapour.pos[j + 1] = b.y + dy * 0.25 + rise * 0.5; vapour.pos[j + 2] = b.z + dz * 0.25 - wob;
+    vapour.pos[j + 3] = t.x + dx * spread + wob; vapour.pos[j + 4] = t.y + rise; vapour.pos[j + 5] = t.z + dz * spread - wob;
+    vapour.uv[uj] = av; vapour.uv[uj + 1] = 0; vapour.uv[uj + 2] = av; vapour.uv[uj + 3] = 1;
+    const fv = Math.pow(Math.max(0, 1 - av), 1.55) * kk * 0.3 * (0.6 + 0.4 * trailK) * Math.min(1, age / 0.06 + 0.25) * (hiRes ? 1.25 : 1);
     vapour.col[j] = CG.r * fv * 0.1; vapour.col[j + 1] = CG.g * fv * 0.1; vapour.col[j + 2] = CG.b * fv * 0.1;
     vapour.col[j + 3] = CG.r * fv; vapour.col[j + 4] = CG.g * fv; vapour.col[j + 5] = CG.b * fv;
+  };
+  if (kn >= 2) {
+    // Subdivide between frame keyframes using Catmull-Rom splines + blade-length preservation,
+    // so fast circular swings trace true round arcs instead of polygonal/hexagonal chords.
+    for (let i = 0; i < kn - 1 && n < TRAIL_N - 1; i++) {
+      const k1 = keys[i], k2 = keys[i + 1];
+      const gap = k2.age - k1.age > 0.085;
+      if (gap) {
+        // End the newer stroke cleanly and insert a zero-colour break so separate attacks never bridge
+        writeVertex(k1.b, k1.t, k1.age, k1.k, true);
+        writeVertex(k1.b, k1.t, k1.age, 0, true);
+        writeVertex(k2.b, k2.t, k2.age, 0, true);
+        continue;
+      }
+      const k0 = i > 0 && (k1.age - keys[i - 1].age <= 0.085) ? keys[i - 1] : k1;
+      const k3 = i + 2 < kn && (keys[i + 2].age - k2.age <= 0.085) ? keys[i + 2] : k2;
+      const len1 = k1.b.distanceTo(k1.t), len2 = k2.b.distanceTo(k2.t);
+      const tipDist = k1.t.distanceTo(k2.t);
+      const sub = Math.min(14, Math.max(4, Math.ceil(tipDist / 0.045)));
+      const lastSeg = i === kn - 2;
+      for (let s = 0; s < sub && n < TRAIL_N - 1; s++) {
+        const u = s / sub;
+        evalCatmullRom(k0.b, k1.b, k2.b, k3.b, u, crB);
+        evalCatmullRom(k0.t, k1.t, k2.t, k3.t, u, crT);
+        // Preserve blade length along the arc so wide swings stay circular instead of flattening inward
+        const targetLen = len1 + (len2 - len1) * u;
+        crDir.subVectors(crT, crB);
+        if (crDir.lengthSq() > 1e-8) crT.copy(crB).addScaledVector(crDir.normalize(), targetLen);
+        const age = k1.age + (k2.age - k1.age) * u;
+        const k = k1.k + (k2.k - k1.k) * u;
+        writeVertex(crB, crT, age, k, i === 0 && s === 0);
+      }
+      if (lastSeg) writeVertex(k2.b, k2.t, k2.age, k2.k, true);
+    }
   }
-  // the streak only needs its young part
-  let ns = 0; while (ns < n && trail[ns].age < sLife) ns++;
   for (const [r, count] of [[streak, ns], [vapour, n]] as const) {
-    r.geo.attributes.position.needsUpdate = true; r.geo.attributes.color.needsUpdate = true;
+    r.geo.attributes.position.needsUpdate = true;
+    r.geo.attributes.color.needsUpdate = true;
+    r.geo.attributes.aTrailUv.needsUpdate = true;
     r.geo.setDrawRange(0, Math.max(0, count - 1) * 6);
   }
 }
@@ -549,6 +847,10 @@ export function updateSparks(dt: number, emit: boolean) {
   fight = cutting ? 1 : Math.max(0, fight - dt * 6);
   const swingF = swingS * fight;   // blade speed that counts: the cut's, never the run's
   bladeHeat += ((cutting ? 1 : swing * 0.6 * fight) - bladeHeat) * Math.min(1, dt * 10);
+  const hiRes = state.viewMode === '3d';
+  hiResU.value = hiRes ? 1 : 0;
+  fxTimeU.value = state.time;
+  trailU.uRasterScale.value = DPR;
   if (displaying || changed) rightTrail.points.length = 0;
   trailU.uT.value += dt;
   updateTrail(rightTrail, dt, emit, swingS, bladeBase, bladeTip, prevBase, prevTip);
@@ -566,7 +868,8 @@ export function updateSparks(dt: number, emit: boolean) {
   const running = displaying ? 0 : player.moving * (1 - fight), calm = 1 - running;
   // emission: a rare crackle along the edge, a light shower while cutting
   if (emit) {
-    sparkAcc += dt * ((w.fx.sparks ? 0 : 3 * calm) + bladeHeat * 55 + swing * fight * 25);
+    const hiSparkBoost = hiRes ? (8 * calm + bladeHeat * 28 + swing * fight * 24) : 0;
+    sparkAcc += dt * ((w.fx.sparks ? 0 : 3 * calm) + bladeHeat * 55 + swing * fight * 25 + hiSparkBoost);
     while (sparkAcc >= 1) {
       sparkAcc -= 1;
       const s = Math.sqrt(Math.random());
