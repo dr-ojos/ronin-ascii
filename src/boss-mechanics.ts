@@ -15,12 +15,12 @@ import { surfaceY } from './structures';
 import { rnd } from './utils';
 import type { Affix, Enemy, EnemyKind } from './types';
 
-const DAZE = { boss: 3.5, elite: 2.5 };   // seconds stunned when the bar fills
+const DAZE = { boss: 2.6, elite: 2.2 };   // seconds stunned when the bar fills
 const VULNERABLE = 1.5;                    // damage taken while stunned
-const NEED = { boss: 0.3, elite: 0.4 };    // share of its life worth of stagger to fill the bar
-const NEED_GROWTH = 1.35;                  // each stun makes the next one harder
-const DECAY_AFTER = 4;                     // seconds without stagger before the bar empties...
-const DECAY = 0.06;                        // ...by this share of the bar per second
+const NEED = { boss: 0.42, elite: 0.45 };  // share of its life worth of stagger to fill the bar
+const NEED_GROWTH = 1.45;                  // each stun makes the next one harder
+const DECAY_AFTER = 3.0;                   // seconds without stagger before the bar empties...
+const DECAY = 0.085;                       // ...by this share of the bar per second
 
 export const AFFIXES: Record<Affix, { name: string; desc: string }> = {
   acorazado: { name: 'acorazado', desc: 'recibe un 35 % menos de daño hasta que lo aturdes' },
@@ -46,13 +46,13 @@ export function affixesOf(en: Enemy): Affix[] {
   if (!rank) return [];
   if (en.affixes) return en.affixes;
   const tier = en.camp.tier, colossal = !!KINDS[en.kind].boss?.phase3, temple = !!en.camp.templeGuard;
-  const n = rank === 'elite' ? 1 : colossal ? 3 : Math.max(temple ? 2 : 1, 1 + (tier > 0.5 ? 1 : 0) + (tier > 0.8 ? 1 : 0) + (temple && tier > 0.6 ? 1 : 0));
+  const n = rank === 'elite' ? 1 : colossal ? 4 : Math.min(3, Math.max(2, 2 + (tier > 0.45 ? 1 : 0) + (temple ? 1 : 0)));
   const pool = ALL.slice(), out: Affix[] = [];
   while (out.length < n && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   en.affixes = out;
-  en.stagger = 0; en.staggerNeed = en.maxHp * NEED[rank] * (colossal ? 1.35 : temple ? 1.25 : 1); en.dazedT = 0;
-  en.affixT = state.time + (temple ? rnd(2.5, 4.5) : rnd(3, 6));
-  if (out.includes('furioso')) { en.speed *= 1.25; en.windup *= 0.85; en.dmg = Math.round(en.dmg * 1.1); }
+  en.stagger = 0; en.staggerNeed = en.maxHp * NEED[rank] * (colossal ? 1.45 : temple ? 1.3 : 1); en.dazedT = 0;
+  en.affixT = state.time + (colossal || temple ? rnd(2.2, 3.8) : rnd(3.0, 5.0));
+  if (out.includes('furioso')) { en.speed *= 1.28; en.windup *= 0.82; en.dmg = Math.round(en.dmg * 1.18); }
   return out;
 }
 export const affixLabel = (en: Enemy) => affixesOf(en).map(a => AFFIXES[a].name).join(' · ');
@@ -73,7 +73,7 @@ export function addStagger(en: Enemy, amount: number) {
   lastStagger.set(en, state.time);
   if (en.stagger < en.staggerNeed!) return;
   en.stagger = 0; en.staggerNeed! *= NEED_GROWTH;
-  en.dazedT = KINDS[en.kind].boss?.phase3 ? 2.4 : en.camp.templeGuard ? 2.6 : DAZE[rank];
+  en.dazedT = KINDS[en.kind].boss?.phase3 ? 2.0 : en.camp.templeGuard ? 2.2 : DAZE[rank];
   staggerEnemy(en, en.dazedT);
   en.knock.set(0, 0, 0);
   const p = en.g.position, at = new THREE.Vector3(p.x, p.y + 2 * en.scale, p.z);
@@ -88,9 +88,9 @@ export function bossHit(en: Enemy, dealt: number, heavy: boolean) {
   if (!strong(en)) return;
   addStagger(en, dealt * (heavy ? 2 : 1));
   if (affixesOf(en).includes('espinoso') && (en.dazedT ?? 0) <= 0 && state.time > (reflectT.get(en) ?? 0)) {
-    reflectT.set(en, state.time + 1.2);
+    reflectT.set(en, state.time + 1.0);
     burst(player.pos.clone().setY(player.pos.y + 1.2), 0x9cff5a, 20, 4, 0.12);
-    hurtPlayer(Math.max(2, Math.round(en.dmg * 0.2)));
+    hurtPlayer(Math.max(3, Math.round(en.dmg * 0.26)));
   }
 }
 
@@ -134,19 +134,20 @@ export function updateBossMechanics(dt: number) {
     }
     if (state.time - (lastStagger.get(en) ?? -99) > DECAY_AFTER) en.stagger = Math.max(0, (en.stagger ?? 0) - en.staggerNeed! * DECAY * dt);
     const fighting = en.state !== 'idle' && en.state !== 'return' && !state.dead;
-    if (affixes.includes('regenerador') && fighting) en.hp = Math.min(en.maxHp, en.hp + en.maxHp * (en.camp.templeGuard ? 0.018 : 0.012) * dt);
+    const apex = !!KINDS[en.kind].boss?.phase3 || !!en.camp.templeGuard;
+    if (affixes.includes('regenerador') && fighting) en.hp = Math.min(en.maxHp, en.hp + en.maxHp * (apex ? 0.022 : 0.016) * dt);
     if (!fighting || state.time < (en.affixT ?? 0)) continue;
     // one affix acts at a time, every few seconds
     const d = Math.hypot(player.pos.x - p.x, player.pos.z - p.z);
     const active = affixes.filter(a => a === 'gelido' || a === 'invocador' || (a === 'errante' && d > 4));
-    en.affixT = state.time + (en.camp.templeGuard ? rnd(3.0, 5.0) : rnd(5, 8));
+    en.affixT = state.time + (apex ? rnd(2.4, 4.0) : rnd(3.2, 5.4));
     if (!active.length) continue;
     const a = active[Math.floor(Math.random() * active.length)];
     if (a === 'gelido') {
       const at = new THREE.Vector3(player.pos.x, surfaceY(player.pos.x, player.pos.z) + 0.05, player.pos.z);
-      impactRing(at, 0x7fd8ff, 2.4); burst(at.clone().setY(at.y + 0.3), 0x7fd8ff, 24, 2, 0.1);
-      frost.push({ at, t: 1.1, dmg: Math.round(en.dmg * 0.45) });
-    } else if (a === 'invocador' && (summoned.get(en) ?? 0) < (en.camp.templeGuard ? 6 : 4)) {
+      impactRing(at, 0x7fd8ff, 2.6); burst(at.clone().setY(at.y + 0.3), 0x7fd8ff, 26, 2.2, 0.11);
+      frost.push({ at, t: 0.9, dmg: Math.round(en.dmg * 0.6) });
+    } else if (a === 'invocador' && (summoned.get(en) ?? 0) < (apex ? 8 : 6)) {
       summoned.set(en, (summoned.get(en) ?? 0) + 1);
       summon(en, [MINIONS[Math.floor(Math.random() * MINIONS.length)]], 1);
       sfx.roar({ big: false, pan: panOf(p.x, p.z) });

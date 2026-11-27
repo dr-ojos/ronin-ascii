@@ -200,7 +200,7 @@ export const enemies: Enemy[] = [];
 
 /** every enemy is tougher, hits harder and strikes sooner than its table numbers; bosses and temple guards even more */
 const HP_MULT = 1.5, DMG_MULT = 1.3, WINDUP_MULT = 0.88, SPEED_MULT = 1.08;
-const BOSS_HP = 1.5, BOSS_DMG = 1.25;
+const BOSS_HP = 2.05, BOSS_DMG = 1.58, BOSS_WINDUP = 0.86, BOSS_SPEED = 1.12;
 const TEMPLE_HP = 1.65, TEMPLE_DMG = 1.45, TEMPLE_WINDUP = 0.82, TEMPLE_SPEED = 1.15;
 /** Regional danger, acquired gear and your level (progression.ts) scale independently. */
 function stats(camp: Camp, kind: EnemyKind, x: number, z: number) {
@@ -209,9 +209,10 @@ function stats(camp: Camp, kind: EnemyKind, x: number, z: number) {
   const bd = DMG_MULT * (k.boss ? BOSS_DMG : 1) * (tg ? TEMPLE_DMG : 1);
   const hp = Math.round(k.hp * bh * (1 + t * 0.8) * (1 + (camp.threat?.offense ?? 0) * 0.16) * foeHp());
   const dmg = Math.round(k.dmg * bd * (1 + t * 0.3) * (1 + (camp.threat?.defense ?? 0) * 0.11) * foeDmg());
+  const bw = k.boss ? BOSS_WINDUP : 1, bs = k.boss ? BOSS_SPEED : 1;
   return {
-    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup * WINDUP_MULT * (tg ? TEMPLE_WINDUP : 1), swings: 0, strikeT: 0, cd: 0,
-    big: k.heavy || !!k.elite || !!k.boss, enraged: false, phase: 1, speed: rnd(k.speed[0], k.speed[1]) * SPEED_MULT * (tg ? TEMPLE_SPEED : 1), camp, wander: { x, z }
+    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup * WINDUP_MULT * bw * (tg ? TEMPLE_WINDUP : 1), swings: 0, strikeT: 0, cd: 0,
+    big: k.heavy || !!k.elite || !!k.boss, enraged: false, phase: 1, speed: rnd(k.speed[0], k.speed[1]) * SPEED_MULT * bs * (tg ? TEMPLE_SPEED : 1), camp, wander: { x, z }
   };
 }
 function place(g: THREE.Object3D, x: number, z: number, skip?: THREE.Object3D) {

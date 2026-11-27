@@ -50,8 +50,8 @@ const MOVES = {
   scorpionSting: { shape: 'arc', range: 3.1, radius: 4.1, angle: 0.76, windup: 0.62, recovery: 0.88, power: 1.05, color: 0x7ef3ff },
   crystalShard:  { shape: 'wave', range: 9.5, length: 11.2, width: 1.05, windup: 0.78, recovery: 1.15, power: 0.90, color: 0x7ef3ff },
   crescent:   { shape: 'wave', range: 10.5, length: 12.2, width: 1.32, windup: 0.91, recovery: 1.32, power: 0.92, color: 0x9aeaff },
-  eclipseSlash: { shape: 'arc', range: 5.4, radius: 6.6, angle: 1.78, windup: 0.96, recovery: 1.15, power: 1.24, color: 0xff2848 },
-  cataclysm:  { shape: 'arc', range: 7.4, radius: 8.8, innerRadius: 2.3, angle: Math.PI, windup: 1.28, recovery: 1.55, power: 1.32, color: 0xff9438 }
+  eclipseSlash: { shape: 'arc', range: 5.4, radius: 6.6, angle: 1.78, windup: 0.90, recovery: 1.05, power: 1.38, color: 0xff2848 },
+  cataclysm:  { shape: 'arc', range: 7.4, radius: 8.8, innerRadius: 2.3, angle: Math.PI, windup: 1.18, recovery: 1.42, power: 1.48, color: 0xff9438 }
 } satisfies Record<string, Move>;
 export type EnemyMove = keyof typeof MOVES;
 export const moveDef = (id: EnemyMove): Move => MOVES[id];
@@ -124,7 +124,7 @@ export function chargeBlocked(en: Enemy, x: number, z: number) {
 
 export function prepareEnemyAttack(en: Enemy, move: Move, target: THREE.Vector3, yaw: number): EnemyAttack {
   const origin = en.g.position.clone(), fx = Math.sin(yaw), fz = Math.cos(yaw);
-  const windup = move.windup * (en.phase === 3 ? 0.74 : en.enraged ? 0.86 : 1) * (en.camp.templeGuard ? 0.84 : 1);
+  const windup = move.windup * (en.phase === 3 ? 0.68 : en.enraged ? 0.80 : 1) * (en.camp.templeGuard ? 0.84 : 1);
   const zones: XZ[] = [];
   let outlines: XZ[][], length = 0;
   if (move.shape === 'charge' || move.shape === 'wave') {
