@@ -156,7 +156,7 @@ function updateTHud() {
   r.pts.hidden = !free;
   if (free) r.pts.textContent = `+${free} U`;
   r.weaponTxt.textContent = weaponDisplayName(weapon());
-  r.armorTxt.textContent = armor().name;
+  r.armorTxt.textContent = cls().garbName ?? armor().name;
 
   const hp = Math.max(0, Math.ceil(player.hp)), maxHp = Math.max(1, Math.round(player.maxHp));
   r.hpNum.textContent = String(hp);

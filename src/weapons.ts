@@ -160,6 +160,11 @@ export const WEAPONS: Weapon[] = [
     fx: { glow: 0xfff0b8, hot: 0xffffff, cool: 0xffb84a, gravity: 1, halo: 2.1, trail: 2.4, sparks: [0xffe9a8, 0xffc26a, 0xfff8e0], extra: 'stars' } },
   { id: 'fudo', name: 'Kurikara de Fudō', desc: 'la llama inmóvil del rey de la sabiduría: el bastón de la leyenda', form: 'staff', price: 32000, tier: 3, dmg: 3.5, reach: 0.8, speed: 0.92, len: 1.05, glow: 0xff4a2a, steel: 0x2a1a1a, heal: 3, charge: 0.03, daze: 1.8,
     fx: { glow: 0xff5a30, hot: 0xffe0a0, cool: 0xd01a3a, gravity: -1, halo: 2.4, trail: 2.8, sparks: [0xff5a30, 0xffb040, 0xff3a8a], extra: 'blood' } },
+  // ---- signature starting weapons for Monarca (Shadow Hunter) & Vagabundo (Musashi-style Samurai)
+  { id: 'dagas-kasaka', name: 'Colmillos de Kasaka', desc: 'dagas gemelas de sombra y veneno abisal: rapidísimas, con estela azul-violeta', form: 'dual', cls: 'monarca', price: 0, tier: 0.5, dmg: 1.18, reach: -0.35, speed: 0.78, len: 0.54, width: 0.86, glow: 0x3e98ff, steel: 0x101830,
+    fx: { glow: 0x4caeff, hot: 0xdcf4ff, cool: 0x6b2eff, gravity: 1.2, halo: 1.5, trail: 1.9, sparks: [0x4cc8ff, 0x8e4aff, 0xd8f4ff], extra: 'bolts' } },
+  { id: 'katana-vagabundo', name: 'Katana de Musashi', desc: 'hoja templada en cien duelos: acero desnudo de corte limpio, rápido y letal', cls: 'vagabundo', price: 0, tier: 0.5, dmg: 1.16, reach: 0.1, speed: 0.93, len: 1.04, glow: 0xdce6f2, steel: 0xeaf0f6,
+    fx: { glow: 0xe6eef8, hot: 0xfff8e4, cool: 0x7f95b0, gravity: 7.5, halo: 1.2, trail: 1.45, sparks: [0xfff2d2, 0xc9d8ec, 0xffa852] } },
   // ---- boss-exclusive relics (dropped by major bosses in loot.ts, not sold by Masa)
   { id: 'kuro-odachi', name: 'Ōdachi del Señor Kuro', desc: 'reliquia del Señor Kuro: hoja carmesí de gran alcance que drena 2 de vida por golpe', form: 'odachi', bossDrop: true, price: 0, tier: 2.75, dmg: 2.25, reach: 1.55, speed: 1.02, len: 1.78, width: 1.16, glow: 0xff3838, steel: 0x28141c, heal: 2,
     fx: { glow: 0xff453c, hot: 0xffb8b0, cool: 0x8f0a18, gravity: 14, halo: 1.9, trail: 2.3, sparks: [0xff3838, 0xff7a5c, 0xc8163a], extra: 'blood' } },

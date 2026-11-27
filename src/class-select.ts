@@ -28,7 +28,7 @@ function render() {
       `<span class="kj" aria-hidden="true">${c.kanji}</span><span class="nm">${c.name}</span><span class="lv">nivel ${classLevel(id)}</span></button>`;
   }).join('');
   desc.innerHTML = `${cls().desc}<br><span style="color:#ffd27a">nivel ${level()}</span> <span style="color:#6c7488">· ${Math.floor(xpFrac() * 100)} % al siguiente · empiezas con <b style="color:#e8e3d3">${TECHNIQUES[cls().technique].name}</b> (P) y <b style="color:#e8e3d3">${TECHNIQUES[cls().technique2].name}</b> (J)</span>`;
-  customBtn.textContent = `personalizar ${cls().name.toLowerCase()}`;
+  customBtn.textContent = cls().fixedArmor ? `nombre de ${cls().name.toLowerCase()}` : `personalizar ${cls().name.toLowerCase()}`;
   dispatchEvent(new Event('ronin:class'));   // title.ts names the warrior beside the figure
 }
 

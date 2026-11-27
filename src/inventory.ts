@@ -1,4 +1,5 @@
 import { ARMORS, armorStats, ownsArmor, wearArmor } from './armor';
+import { cls, hasFixedArmor } from './classes';
 import { closeMenu, menuStatus, openMenu, type MenuRow } from './menu';
 import { dressUp } from './outfit';
 import { sfx } from './sfx';
@@ -27,6 +28,7 @@ const IMAGE_KIN: Record<string, string> = {
   'kuro-odachi': 'muramasa', 'martillo-raijin': 'susanoo', 'filo-ikazuchi': 'raiken',
   'hoja-enma': 'masamune', 'lanza-bosque': 'guandao',
   'lanza-hueso': 'yari-marea', 'hoz-ceniza': 'muramasa',
+  'dagas-kasaka': 'gemelas-ocaso', 'katana-vagabundo': 'katana',
   neon: 'kurogane', kagutsuchi: 'hachiman', raijin: 'oyoroi', 'fuego-negro': 'kurogane', 'coraza-sepulcral': 'lacado', 'manto-tengu': 'garza',
   'tunica-fuego': 'monje', 'tunica-neon': 'monje', 'tunica-fuego-blanco': 'monje', 'tunica-fuego-negro': 'monje',
   'yoroi-shuten': 'hachiman', 'coraza-escarcha': 'tsukuyomi', 'coraza-tambor': 'oyoroi'
@@ -49,21 +51,30 @@ function inventoryRows(): MenuRow[] {
       }
     });
   }
-  rows.push({ label: 'ARMADURAS', head: true });
-  for (const a of ARMORS.filter(a => ownsArmor(a.id))) {
-    const equipped = state.armor === a.id;
+  if (hasFixedArmor()) {
+    rows.push({ label: 'ATUENDO PROPIO', head: true });
     rows.push({
-      label: (a.bossDrop ? '✦ ' : '') + a.name, value: equipped ? 'puesta' : 'ponerse', cls: equipped ? 'y' : 'b',
-      image: itemImage('armaduras', a.id),
-      note: `${a.desc} · ${armorStats(a)}`,
-      act() {
-        if (equipped) return menuStatus('Ya llevas esta prenda.');
-        wearArmor(a.id);
-        dressUp();
-        sfx.dash();
-        menuStatus(`Vestimenta equipada · ${a.name}`);
-      }
+      label: cls().garbName ?? 'Atuendo propio', value: 'fijo', cls: 'y',
+      image: itemImage('armaduras', 'kimono'),
+      note: 'Este personaje conserva siempre su atuendo característico y solo cambia de arma.'
     });
+  } else {
+    rows.push({ label: 'ARMADURAS', head: true });
+    for (const a of ARMORS.filter(a => ownsArmor(a.id))) {
+      const equipped = state.armor === a.id;
+      rows.push({
+        label: (a.bossDrop ? '✦ ' : '') + a.name, value: equipped ? 'puesta' : 'ponerse', cls: equipped ? 'y' : 'b',
+        image: itemImage('armaduras', a.id),
+        note: `${a.desc} · ${armorStats(a)}`,
+        act() {
+          if (equipped) return menuStatus('Ya llevas esta prenda.');
+          wearArmor(a.id);
+          dressUp();
+          sfx.dash();
+          menuStatus(`Vestimenta equipada · ${a.name}`);
+        }
+      });
+    }
   }
   rows.push({ label: 'TÉCNICAS', head: true });
   for (const id of state.learnedTechniques) {

@@ -12,6 +12,7 @@ import type { Avatar, AvatarInput, EnemyModel } from './types';
 import { oniCostume, oniEye, oniMask, oniYumi, type OniLook } from './oni-costume';
 import { paintBody, mangaFinish, monTex, tabardTex, waveTex } from './manga-art';
 import { realHead, realMenpoGeometry, SCAN } from './real-head';
+import { buildMonarcaHead, buildVagabundoHead } from './hero-models';
 import { headAsset } from './assets';
 import { fittedBody } from './fitted-body';
 import { HangingCloth, type Capsule } from './cloth';
@@ -239,10 +240,22 @@ export function createRealSamurai(gltf: GLTF): Avatar {
     const face = realHead({ hair: 0x141318, topknot: true });
     const k = 0.189 / (SCAN.crown - SCAN.chin);
     face.group.scale.setScalar(k); face.group.position.set(0, 0.083 - SCAN.crown * k, 0.004);
+    face.group.userData.part = 'head-default';
     hg.add(face.group);
     // the menpo (lower face guard) only when a mask is chosen (look.ts)
     const mask = mesh(realMenpoGeometry(), skin, face.group);
     mask.userData.part = 'mask';
+
+    // Bespoke realistic sculpted heads for Monarca (Solo Leveling) & Vagabundo (Musashi)
+    const monarcaHead = buildMonarcaHead();
+    monarcaHead.scale.setScalar(k); monarcaHead.position.set(0, 0.083 - SCAN.crown * k, 0.004);
+    monarcaHead.visible = false;
+    hg.add(monarcaHead);
+
+    const vagabundoHead = buildVagabundoHead();
+    vagabundoHead.scale.setScalar(k); vagabundoHead.position.set(0, 0.083 - SCAN.crown * k, 0.004);
+    vagabundoHead.visible = false;
+    hg.add(vagabundoHead);
   } else mesh(new THREE.SphereGeometry(0.09, 20, 14), skin, hg, 0, -0.01, 0);   // the scan failed to load
   // the sōhei's katō: a white cloth wound round the whole head, a slit left open for the eyes, a cowl over
   // the neck and a long tail of simulated cloth (cloth.ts) falling down the back. Hidden unless you play the
@@ -476,6 +489,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
       cols: 5, rows: 4, closed: false, material: mat, drape: 14, drapeMoving: 8,
       rest: (i, j, out) => out.copy(f).lerp(h, 0.1 + 0.62 * (i / 4)).sub(f).add(new V(0, -0.03 - 0.075 * j, -0.015 * j))
     });
+    cloth.mesh.name = `sleeve-${pre}`;
     g.add(cloth.mesh); g.position.copy(f);
     attach(pre + 'ForeArm', g);
     sleeves.push({ cloth, g });
@@ -548,6 +562,7 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   for (const pre of ['Left', 'Right']) {
     const ft = P(pre + 'Foot'), toe = P(pre + 'ToeBase');
     const fw = new THREE.Group();
+    fw.userData.equipmentLayer = 'footwrap';
     mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.1, 10), tan, fw, 0, 0.02, 0);
     const foot = mesh(new THREE.BoxGeometry(0.1, 0.06, 0.2), tan, fw, 0, -0.04, 0.08); void foot;
     fw.position.copy(ft); attach(pre + 'Foot', fw);
@@ -568,11 +583,11 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   for (const o of halos) o.castShadow = o.receiveShadow = false;   // halos stay out of the figure's mask: they glow around it
 
   const ky = ((lArm.y + rArm.y) / 2) / 1.39;
-  // relaxed one-handed carry: blade low, pointing down and forward like the illustration
-  const LOW = key([-0.3, 0.9, 0.2], [-0.18, -0.6, 0.78], [0, -0.35, 1]);
-  const LOW_RUN = key([-0.3, 0.95, 0.12], [-0.25, -0.45, 0.86], [0, -0.3, 1]);
+  // relaxed one-handed samurai carry: arm natural at the right hip, blade angled cleanly forward and down
+  const LOW = key([-0.25, 0.89, 0.18], [-0.10, -0.44, 0.89], [0, -1, 0]);
+  const LOW_RUN = key([-0.26, 0.92, 0.12], [-0.15, -0.38, 0.91], [0, -1, 0]);
   const tPos = new V(), tQ = new Q(), hand = new V(), pole = new V(), bq = new Q();
-  const POLE_R = new V(-0.8 * side, -0.5, -0.3).normalize(), POLE_L = new V(0.8 * side, -0.5, -0.3).normalize();
+  const POLE_R = new V(-0.48 * side, -0.76, -0.44).normalize(), POLE_L = new V(0.48 * side, -0.76, -0.44).normalize();
   const rightGrip = new V(), leftGrip = new V(), wristPoint = new V(), palmAxis = new V(), crossAxis = new V(), fistNormal = new V();
   const gripMatrix = new THREE.Matrix4(), gripWorld = new Q(), gripParent = new Q();
   function palmBasis(prefix: 'Left' | 'Right') {
@@ -588,23 +603,31 @@ export function createRealSamurai(gltf: GLTF): Avatar {
   const rightPalm = palmBasis('Right'), leftPalm = palmBasis('Left');
   const wristTarget = new V(), gripScale = new V();
   const rigFromWorld = new THREE.Matrix4(), rigFromBone = new THREE.Matrix4();
-  function previewHand(prefix: 'Left' | 'Right', neutral: THREE.Quaternion, elbow: THREE.Vector3) {
-    const upper = B[prefix + 'Arm'], forearm = B[prefix + 'ForeArm'], wrist = B[prefix + 'Hand'];
-    // The wrist pivot is behind the palm. Place the handle inside the curled fingers.
-    const palmCenter = wrist.worldToLocal(P(prefix + 'HandMiddle1').lerp(P(prefix + 'HandRing1'), 0.4));
-    palmCenter.x -= 2.5;
-    palmCenter.y -= 1.5;
+  function handGripData(prefix: 'Left' | 'Right') {
+    const wrist = B[prefix + 'Hand'];
+    // Mirror-safe anatomical palm grip point: slightly ahead of HandMiddle1/Ring1 shifted inward toward the thumb pad
+    const knuckle = P(prefix + 'HandMiddle1').lerp(P(prefix + 'HandRing1'), 0.35);
+    const thumbPad = P(prefix + 'HandThumb2');
+    const palmWorld = knuckle.clone().lerp(thumbPad, 0.28);
+    const palmCenter = wrist.worldToLocal(palmWorld);
     const flex = new V(0, 0, 1), oppose = new V(0, prefix === 'Left' ? 1 : -1, 0);
     const fingers = ['Index', 'Middle', 'Ring', 'Pinky'].flatMap(digit =>
-      [0.98, 1.08, 0.62].map((angle, i) => {
+      [1.05, 1.15, 0.72].map((angle, i) => {
         const joint = B[prefix + 'Hand' + digit + (i + 1)];
         return { joint, closed: joint.quaternion.clone().multiply(new Q().setFromAxisAngle(flex, angle)) };
       })
     );
-    for (const [i, angle] of [0.68, 0.32].entries()) {
+    for (const [i, angle] of [0.72, 0.38].entries()) {
       const joint = B[prefix + 'HandThumb' + (i + 1)];
       fingers.push({ joint, closed: joint.quaternion.clone().multiply(new Q().setFromAxisAngle(oppose, angle)) });
     }
+    return { palmCenter, fingers };
+  }
+  const rightHandData = handGripData('Right'), leftHandData = handGripData('Left');
+
+  function previewHand(prefix: 'Left' | 'Right', neutral: THREE.Quaternion, elbow: THREE.Vector3, data: ReturnType<typeof handGripData>) {
+    const upper = B[prefix + 'Arm'], forearm = B[prefix + 'ForeArm'], wrist = B[prefix + 'Hand'];
+    const { palmCenter, fingers } = data;
     return (weapon: THREE.Object3D, offset: number) => {
       weapon.localToWorld(wristTarget.set(0, 0, offset));
       wristTarget.applyMatrix4(rigFromWorld);
@@ -623,22 +646,56 @@ export function createRealSamurai(gltf: GLTF): Avatar {
       for (const { joint, closed } of fingers) joint.quaternion.copy(closed);
     };
   }
-  const showRightHand = previewHand('Right', rightPalm, POLE_R);
-  const showLeftHand = previewHand('Left', leftPalm, POLE_L);
+  const showRightHand = previewHand('Right', rightPalm, POLE_R, rightHandData);
+  const showLeftHand = previewHand('Left', leftPalm, POLE_L, leftHandData);
 
-  function holdShortBlade(wrist: THREE.Object3D, forearm: THREE.Object3D, sword: THREE.Object3D, neutral: THREE.Quaternion) {
-    wrist.getWorldPosition(wristPoint);
-    palmAxis.subVectors(wristPoint, forearm.getWorldPosition(hand)).normalize();
+  const _curQ = new Q();
+  function gripWeaponHand(
+    upper: THREE.Object3D,
+    forearm: THREE.Object3D,
+    wrist: THREE.Object3D,
+    sword: THREE.Object3D,
+    gripZ: number,
+    neutral: THREE.Quaternion,
+    elbowPole: THREE.Vector3,
+    data: ReturnType<typeof handGripData>,
+    weight = 1,
+    pinSword = false
+  ) {
+    // Align hand cleanly to the weapon's own orthonormal frame:
+    //   crossAxis = weapon +Z (pinky -> index -> blade tip)
+    //   palmAxis  = weapon -Y (wrist -> knuckles -> cutting edge)
+    // Guarantees natural ergonomic wrist angles on BOTH left & right hands across every weapon form!
     sword.getWorldQuaternion(gripWorld);
-    crossAxis.set(0, 0, 1).applyQuaternion(gripWorld);
-    palmAxis.addScaledVector(crossAxis, -palmAxis.dot(crossAxis));
-    if (palmAxis.lengthSq() < 0.03) palmAxis.set(1, 0, 0).applyQuaternion(gripWorld);
-    palmAxis.normalize();
-    fistNormal.crossVectors(palmAxis, crossAxis);
+    crossAxis.set(0, 0, 1).applyQuaternion(gripWorld).normalize();
+    palmAxis.set(0, -1, 0).applyQuaternion(gripWorld).normalize();
+    fistNormal.crossVectors(palmAxis, crossAxis).normalize();
     gripWorld.setFromRotationMatrix(gripMatrix.makeBasis(palmAxis, crossAxis, fistNormal)).multiply(neutral);
+
+    // Solve 2-bone arm IK targeting the wrist position that places the curled palm dead-center on the hilt at gripZ
+    sword.localToWorld(wristTarget.set(0, 0, gripZ));
+    wrist.getWorldScale(gripScale);
+    wristTarget.sub(hand.copy(data.palmCenter).multiply(gripScale).applyQuaternion(gripWorld));
+    ik2(upper, forearm, wrist, wristTarget, pole.copy(elbowPole).applyQuaternion(bq), weight);
+
     wrist.parent!.getWorldQuaternion(gripParent).invert();
-    wrist.quaternion.copy(gripParent.multiply(gripWorld));
-    sword.position.copy(body.worldToLocal(wristPoint.addScaledVector(palmAxis, 0.04)));
+    _curQ.copy(gripParent).multiply(gripWorld);
+    if (weight >= 0.99) {
+      wrist.quaternion.copy(_curQ);
+      for (const { joint, closed } of data.fingers) joint.quaternion.copy(closed);
+    } else {
+      wrist.quaternion.slerp(_curQ, weight);
+      for (const { joint, closed } of data.fingers) joint.quaternion.slerp(closed, weight);
+    }
+    wrist.updateMatrixWorld(true);
+    if (pinSword) {
+      // Pin the hilt's gripZ point exactly inside the curled palm center so weapons never float outside the fists
+      wrist.localToWorld(wristPoint.copy(data.palmCenter));
+      hand.set(0, 0, gripZ).applyQuaternion(sword.getWorldQuaternion(_curQ));
+      wristPoint.sub(hand);
+      sword.position.copy(body.worldToLocal(wristPoint));
+      sword.updateMatrixWorld(true);
+    }
   }
   let previousForm: AvatarInput['weaponForm'] = 'katana';
   let wasShowingWeapon = false;
@@ -904,14 +961,17 @@ export function createRealSamurai(gltf: GLTF): Avatar {
       rigFromWorld.copy(rig.holder.matrixWorld).invert();
       showRightHand(katana, rightZ);
       showLeftHand(leftWeapon, leftZ);
+    } else if (form === 'dual') {
+      gripWeaponHand(B.RightArm, B.RightForeArm, B.RightHand, katana, 0, rightPalm, POLE_R, rightHandData, 1, true);
+      gripWeaponHand(B.LeftArm, B.LeftForeArm, B.LeftHand, offhand, 0, leftPalm, POLE_L, leftHandData, 1, true);
     } else {
+      const rightGripZ = form === 'katana' ? (atk ? 0.065 : 0.048) : form === 'rapier' ? 0.02 : 0.04;
       const leftGripZ = leftGripOffset(form, katana.position.z);
-      ik2(B.RightArm, B.RightForeArm, B.RightHand, katana.localToWorld(hand.set(0, 0, form === 'katana' && atk ? 0.065 : 0)), pole.copy(POLE_R).applyQuaternion(bq));
+      const pinRight = form === 'katana' && !atk;
+      gripWeaponHand(B.RightArm, B.RightForeArm, B.RightHand, katana, rightGripZ, rightPalm, POLE_R, rightHandData, 1, pinRight);
       leftW += ((atk || grip ? 1 : 0) - leftW) * (1 - Math.exp(-dt * 18));
-      if (leftW > 0.01) ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, leftWeapon.localToWorld(hand.set(0, 0, leftGripZ)), pole.copy(POLE_L).applyQuaternion(bq), grip ? 1 : leftW);
-      if (form === 'dual') {
-        holdShortBlade(B.RightHand, B.RightForeArm, katana, rightPalm);
-        holdShortBlade(B.LeftHand, B.LeftForeArm, offhand, leftPalm);
+      if (grip || leftW > 0.01) {
+        gripWeaponHand(B.LeftArm, B.LeftForeArm, B.LeftHand, leftWeapon, leftGripZ, leftPalm, POLE_L, leftHandData, grip ? 1 : leftW, false);
       }
     }
     previousForm = form;

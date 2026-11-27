@@ -28,7 +28,9 @@ export const LOOK_PARTS: Record<ClassId, Partial<Record<LookPart, string>>> = {
   ronin: { lacquer: 'Lacado', cloth: 'Kimono y faja', scarf: 'Bufanda', hat: 'Sombrero', mask: 'Máscara' },
   sohei: { cloth: 'Hábito', lacquer: 'Kesa', scarf: 'Capucha' },
   xia: { cloth: 'Hanfu', lacquer: 'Ribetes y faja', scarf: 'Velo' },
-  hwarang: { cloth: 'Dopo', lacquer: 'Cordón', scarf: 'Cuentas del gat' }
+  hwarang: { cloth: 'Dopo', lacquer: 'Cordón', scarf: 'Cuentas del gat' },
+  monarca: {},
+  vagabundo: {}
 };
 
 export type Look = { name: string } & Record<LookPart, number>;
@@ -40,7 +42,9 @@ const DEFAULTS: Record<ClassId, Look> = {
   sohei: { name: 'Benkei', lacquer: 3, cloth: 2, scarf: 2, hat: 3, mask: 0 },
   // a moss-green hanfu with gilt hems and a white veil; a white dopo with a vermilion cord and amber gat beads
   xia: { name: 'Li Mu', lacquer: 3, cloth: 5, scarf: 2, hat: 3, mask: 0 },
-  hwarang: { name: 'Gwanchang', lacquer: 0, cloth: 3, scarf: 4, hat: 3, mask: 0 }
+  hwarang: { name: 'Gwanchang', lacquer: 0, cloth: 3, scarf: 4, hat: 3, mask: 0 },
+  monarca: { name: 'Jin', lacquer: 0, cloth: 2, scarf: 0, hat: 3, mask: 0 },
+  vagabundo: { name: 'Musashi', lacquer: 0, cloth: 0, scarf: 0, hat: 3, mask: 0 }
 };
 export const look: Look = { ...DEFAULTS.ronin };
 /** the look saved for a class (or its default) */
@@ -49,6 +53,7 @@ export function loadLook(c: ClassId = state.cls) {
   try { Object.assign(look, JSON.parse(localStorage.getItem(keyOf(c)) || '{}')); } catch { /* no storage */ }
   for (const k of Object.keys(LOOK_OPTIONS) as LookPart[]) look[k] = ((Math.round(Number(look[k])) || 0) % LOOK_OPTIONS[k].length + LOOK_OPTIONS[k].length) % LOOK_OPTIONS[k].length;
   look.name = String(look.name || DEFAULTS[c].name).slice(0, 16);
+  if (c === 'monarca' && look.name === 'Jin-Woo') look.name = 'Jin';
 }
 loadLook();
 

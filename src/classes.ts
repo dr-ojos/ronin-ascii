@@ -8,7 +8,7 @@ import { state } from './state';
 import type { TechniqueId } from './techniques';
 import type { WeaponForm } from './types';
 
-export type ClassId = 'ronin' | 'sohei' | 'xia' | 'hwarang';
+export type ClassId = 'ronin' | 'sohei' | 'xia' | 'hwarang' | 'monarca' | 'vagabundo';
 export interface CharacterClass {
   id: ClassId;
   name: string;
@@ -26,6 +26,10 @@ export interface CharacterClass {
    *  weapons forged for it (Weapon.cls), not every weapon of those forms */
   forms: readonly WeaponForm[];
   own?: boolean;
+  /** signature character that keeps its own detailed outfit and cannot change armor (only weapons) */
+  fixedArmor?: boolean;
+  /** display name of the fixed signature outfit shown in HUD & menus */
+  garbName?: string;
   weapon: string;
   technique: TechniqueId;
   technique2: TechniqueId;
@@ -55,6 +59,20 @@ export const CLASSES: Record<ClassId, CharacterClass> = {
     desc: 'caballero flor coreano · equilibrado y firme · espada de anilla, woldo y espadas gemelas · empieza con la Tormenta de Pétalos y la Lluvia de Flechas',
     hp: 110, guard: 0.05, run: 1.02, dash: 0.92,
     forms: ['katana', 'dual', 'spear'], own: true, weapon: 'hwandu', technique: 'petalos', technique2: 'flechas'
+  },
+  monarca: {
+    id: 'monarca', name: 'Jin', kanji: '影君', address: 'Jin', wanderer: 'un cazador solitario entre las sombras',
+    desc: 'cazador de sombras · abrigo oscuro y aura abisal · no cambia armadura (solo armas) · empieza con Colmillos de Kasaka, Clones Espectrales y Danza de los Mil Tajos',
+    hp: 140, guard: 0.24, run: 1.12, dash: 0.72,
+    fixedArmor: true, garbName: 'Abrigo de Sombras',
+    forms: ['katana', 'spear', 'broad', 'dual', 'odachi', 'rapier', 'cleaver'], weapon: 'dagas-kasaka', technique: 'espectros', technique2: 'tajos'
+  },
+  vagabundo: {
+    id: 'vagabundo', name: 'Musashi', kanji: '剣聖', address: 'Musashi', wanderer: 'un samurái errante sin señor',
+    desc: 'samurái errante de tinta y acero · kimono índigo desgastado y doble espada al cinto · no cambia armadura (solo armas) · empieza con Katana de Musashi, Iaijutsu y Danza de los Mil Tajos',
+    hp: 150, guard: 0.26, run: 1.05, dash: 0.82,
+    fixedArmor: true, garbName: 'Kimono y Hakama',
+    forms: ['katana', 'spear', 'broad', 'dual', 'odachi', 'rapier', 'cleaver'], weapon: 'katana-vagabundo', technique: 'iai', technique2: 'tajos'
   }
 };
 export const CLASS_IDS = Object.keys(CLASSES) as ClassId[];
@@ -66,6 +84,7 @@ try {
 } catch { /* no storage */ }
 
 export const cls = () => CLASSES[state.cls];
+export const hasFixedArmor = () => !!cls().fixedArmor;
 /** a weapon forged for one class (Weapon.cls) is only its own; boss relics and all ronin weapons can be wielded by any class; the rest go to the classes wielding their form */
 export const canWield = (w: { form?: WeaponForm; cls?: ClassId; bossDrop?: boolean }) =>
   w.bossDrop ? true

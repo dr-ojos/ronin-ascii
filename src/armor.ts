@@ -3,7 +3,7 @@
 // helpers the rest of the game already reads (hurtMult, dashCdMult, runMult).
 import { player, state } from './state';
 import { readVault, saveVault } from './vault';
-import type { ClassId } from './classes';
+import { hasFixedArmor, type ClassId } from './classes';
 
 export type AuraKind = 'foxfire' | 'wind' | 'fire' | 'whitefire' | 'lightning' | 'blackfire' | 'gold' | 'neon' | 'cyberneon';
 export type RobeTheme = 'fire' | 'whitefire' | 'blackfire' | 'neon';
@@ -95,7 +95,7 @@ export const ARMORS: Armor[] = [
 ];
 const byId = new Map(ARMORS.map(a => [a.id, a]));
 export const armorById = (id: string) => byId.get(id);
-export const armorsForSale = () => ARMORS.filter(a => !a.bossDrop && (!a.classes || a.classes.includes(state.cls)));
+export const armorsForSale = () => hasFixedArmor() ? [] : ARMORS.filter(a => !a.bossDrop && (!a.classes || a.classes.includes(state.cls)));
 export const armor = () => byId.get(state.armor) || ARMORS[0];
 export const ownsArmor = (id: string) => state.ownedArmor.includes(id);
 
@@ -111,6 +111,7 @@ export function armorStats(a: Armor) {
   return a.hp ? bits.join(' · ') : 'sin protección';
 }
 export function wearArmor(id: string, justBought = false) {
+  if (hasFixedArmor() && id !== 'kimono') return;
   if (!ownsArmor(id) || state.armor === id) return;
   const before = armor().hp;
   const healthRatio = player.hp / player.maxHp;
@@ -123,6 +124,7 @@ export function wearArmor(id: string, justBought = false) {
     : healthRatio * player.maxHp;
 }
 export function buyArmor(a: Armor): 'ok' | 'poor' | 'owned' {
+  if (hasFixedArmor()) return 'owned';
   if (ownsArmor(a.id)) return 'owned';
   if (state.mon < a.price) return 'poor';
   state.mon -= a.price; state.ownedArmor.push(a.id); wearArmor(a.id, true);
@@ -130,6 +132,7 @@ export function buyArmor(a: Armor): 'ok' | 'poor' | 'owned' {
 }
 /** award a special armor (e.g. from defeating a major boss) and persist it to the vault */
 export function grantArmor(id: string, autoEquip = true): Armor | null {
+  if (hasFixedArmor()) return null;
   const a = byId.get(id);
   if (!a) return null;
   if (!ownsArmor(a.id)) state.ownedArmor.push(a.id);
@@ -140,8 +143,12 @@ export function grantArmor(id: string, autoEquip = true): Armor | null {
 /** a new run (or another class): the travelling clothes, every armour already won (vault.ts), and the one worn last
  *  (encounters.reset has already set the class's starting life; wearArmor adds the armour's) */
 export function resetArmor() {
-  const v = readVault();
   state.armor = 'kimono';
+  if (hasFixedArmor()) {
+    state.ownedArmor = ['kimono'];
+    return;
+  }
+  const v = readVault();
   state.ownedArmor = ['kimono', ...v.armors.filter(id => id !== 'kimono' && byId.has(id))];
   if (v.armor) wearArmor(v.armor);
 }

@@ -69,44 +69,101 @@ const RONIN_CLOTH = /* glsl */`
   vec3 b = vBind; float ax = abs(b.x), z = b.z;
   vec3 cloth = diffuseColor.rgb, col;
   float fold = 0.5 + 0.5 * sin(b.x * 0.23 + z * 0.11 + 2.0 * sin(z * 0.05 + b.y * 0.2));
-  if (ax > 67.0) {
-    // hands: leather bindings crossing over the knuckles
-    float strap = step(0.55, fract((ax + z * 0.8) * 0.33));
-    col = uWrap * (0.7 + 0.5 * strap);
-  } else if (z > 154.0 && ax < 14.0) {
-    if (z > 158.5) discard;   // the soldier's head: the scanned head (real-head.ts) takes its place
-    col = (z > 171.0 || b.y < -3.0) ? vec3(0.025, 0.022, 0.03) : uSkin;
-    if (z <= 171.0 && b.y >= -3.0) pixelCls = 0.64;
-  } else if (z > 124.0 && ax > 20.0) {
-    // sleeves: wave weave, embroidered cuff
-    col = cloth * (0.8 + 0.3 * fold);
-    col *= 1.0 + 0.22 * (seigaiha(vec2(ax, z) / 6.5) - 0.4);
-    col = mix(col, uTrim, band(ax - 61.5, 2.0) * 0.95);
-    if (band(ax - 61.5, 2.0) > 0.5) pixelCls = 0.62;
-    col = mix(col, uTrim * 0.7, band(ax - 58.0, 0.6) * 0.8);
-    col = mix(col, uUnder, band(ax - 64.6, 1.4));
-  } else if (z > 100.0) {
-    // kimono: tone-on-tone waves, crossed collar in front, collar band round the back of the neck
-    col = cloth * (0.82 + 0.26 * fold);
-    col *= 1.0 + 0.22 * (seigaiha(vec2(b.x, z) / 7.0) - 0.4);
-    float d = ax - (z - 112.0) * 0.2;
-    if (b.y > 0.0 && z > 108.0) {
-      if (d < -2.2) col = cloth * 0.45;
-      else if (d < 0.0) col = uUnder;
-      else if (d < 3.4) col = mix(vec3(0.03), uTrim * 0.35, 0.25);
-      col = mix(col, uTrim, band(d - 3.7, 0.8));
-    } else if (b.y <= 0.0 && z > 147.0) col = mix(vec3(0.03), uTrim, band(z - 147.4, 0.7));
-  } else if (z > 9.0) {
-    // hakama: deep pleats and fine pinstripes
-    float pleat = 0.5 + 0.5 * sin(b.x * 0.75 + b.y * 0.3);
-    col = uHakama * (0.7 + 0.55 * pleat);
-    col += uHakama * 0.9 * band(fract(b.x / 3.2) - 0.5, 0.06);
-  } else col = uWrap;
-  bool lining = z > 22.0 && z < 159.0 && ax < 64.5 && !(z > 154.0 && ax < 12.0);
-  if (lining && (uRoninOutfit > 1.5 || (uRoninOutfit > 0.5 && z > 100.0 && ax < 27.0))) {
-    // The robe's lining covers the old uniform between the sleeves, hems and collar.
-    col = uRoninLinen * (0.47 + 0.33 * fold);
-    pixelCls = 0.0;
+  if (uRoninOutfit > 3.5) {
+    // 4: Vagabundo (Musashi) — open bare-chest weathered slate-indigo kimono, bare hands, charcoal sumi-e hakama
+    if (ax > 67.0) {
+      col = uSkin * (0.94 + 0.08 * fold);
+      pixelCls = 0.64;
+    } else if (z > 154.0 && ax < 14.0) {
+      if (z > 158.5) discard;
+      col = (z > 171.0 || b.y < -3.0) ? vec3(0.05, 0.04, 0.04) : uSkin;
+      if (z <= 171.0 && b.y >= -3.0) pixelCls = 0.64;
+    } else if (z > 124.0 && ax > 20.0) {
+      // Full-length weathered dark slate-indigo kimono sleeves down to the wrists (only hands bare, like the reference photo!)
+      float ink = 0.72 + 0.42 * sin(b.x * 0.34 + z * 0.18 + sin(b.y * 0.28) * 1.4);
+      col = vec3(0.11, 0.175, 0.215) * clamp(ink, 0.48, 1.22);
+    } else if (z > 100.0) {
+      // Clean narrow V-neck opening exposing bare tanned chest strictly between the kimono lapels
+      float vGap = (z - 115.0) * 0.21 + 1.0;
+      if (b.y > 0.0 && z > 115.0 && ax < vGap) {
+        float pec = 1.0 - 0.14 * exp(-pow((z - 134.0) / 3.0, 2.0)) * step(ax, 10.0);
+        float stern = 1.0 - 0.10 * exp(-pow(b.x / 2.2, 2.0));
+        col = uSkin * (0.90 + 0.12 * smoothstep(114.0, 152.0, z)) * pec * stern;
+        pixelCls = 0.64;
+      } else {
+        float ink = 0.70 + 0.44 * sin(b.x * 0.29 + z * 0.15 + sin(z * 0.09 + b.y * 0.22) * 1.5);
+        col = vec3(0.105, 0.168, 0.208) * clamp(ink, 0.45, 1.24);
+      }
+    } else if (z > 9.0) {
+      float pleat = 0.5 + 0.5 * sin(b.x * 0.8 + b.y * 0.35);
+      col = vec3(0.085, 0.092, 0.12) * (0.68 + 0.58 * pleat);
+    } else {
+      col = vec3(0.28, 0.32, 0.28);
+    }
+  } else if (uRoninOutfit > 2.5) {
+    // 3: Monarca (Solo Leveling) — deep jet-black tailored coat sleeves, compression turtleneck, slim black pants & black combat gloves
+    if (ax > 67.0) {
+      // Sleek full-finger matte-black hunter combat gloves
+      col = vec3(0.020, 0.023, 0.035) * (0.85 + 0.22 * fold);
+    } else if (z > 154.0 && ax < 14.0) {
+      if (z > 158.5) discard;
+      col = (z > 171.0 || b.y < -3.0) ? vec3(0.014, 0.016, 0.024) : vec3(0.82, 0.69, 0.63);
+      if (z <= 171.0 && b.y >= -3.0) pixelCls = 0.64;
+    } else if (z > 124.0 && ax > 20.0) {
+      // Smooth organically skinned jet-black tailored coat sleeves with subtle indigo twill sheen
+      col = vec3(0.018, 0.022, 0.034) * (0.84 + 0.26 * fold);
+      col += vec3(0.022, 0.036, 0.075) * band(ax - 62.5, 1.2);
+    } else if (z > 100.0) {
+      // Deep jet-black matte compression turtleneck (never washes out grey!)
+      float rib = 0.90 + 0.14 * sin(b.x * 0.7);
+      col = vec3(0.015, 0.018, 0.028) * (0.84 + 0.20 * fold) * rib;
+    } else if (z > 9.0) {
+      // Sleek tailored slim jet-black hunter combat pants
+      float crease = 0.5 + 0.5 * sin(b.x * 0.45 + b.y * 0.25);
+      col = vec3(0.017, 0.020, 0.031) * (0.82 + 0.26 * crease);
+    } else {
+      col = vec3(0.014, 0.016, 0.024);
+    }
+  } else {
+    if (ax > 67.0) {
+      // hands: leather bindings crossing over the knuckles
+      float strap = step(0.55, fract((ax + z * 0.8) * 0.33));
+      col = uWrap * (0.7 + 0.5 * strap);
+    } else if (z > 154.0 && ax < 14.0) {
+      if (z > 158.5) discard;   // the soldier's head: the scanned head (real-head.ts) takes its place
+      col = (z > 171.0 || b.y < -3.0) ? vec3(0.025, 0.022, 0.03) : uSkin;
+      if (z <= 171.0 && b.y >= -3.0) pixelCls = 0.64;
+    } else if (z > 124.0 && ax > 20.0) {
+      // sleeves: wave weave, embroidered cuff
+      col = cloth * (0.8 + 0.3 * fold);
+      col *= 1.0 + 0.22 * (seigaiha(vec2(ax, z) / 6.5) - 0.4);
+      col = mix(col, uTrim, band(ax - 61.5, 2.0) * 0.95);
+      if (band(ax - 61.5, 2.0) > 0.5) pixelCls = 0.62;
+      col = mix(col, uTrim * 0.7, band(ax - 58.0, 0.6) * 0.8);
+      col = mix(col, uUnder, band(ax - 64.6, 1.4));
+    } else if (z > 100.0) {
+      // kimono: tone-on-tone waves, crossed collar in front, collar band round the back of the neck
+      col = cloth * (0.82 + 0.26 * fold);
+      col *= 1.0 + 0.22 * (seigaiha(vec2(b.x, z) / 7.0) - 0.4);
+      float d = ax - (z - 112.0) * 0.2;
+      if (b.y > 0.0 && z > 108.0) {
+        if (d < -2.2) col = cloth * 0.45;
+        else if (d < 0.0) col = uUnder;
+        else if (d < 3.4) col = mix(vec3(0.03), uTrim * 0.35, 0.25);
+        col = mix(col, uTrim, band(d - 3.7, 0.8));
+      } else if (b.y <= 0.0 && z > 147.0) col = mix(vec3(0.03), uTrim, band(z - 147.4, 0.7));
+    } else if (z > 9.0) {
+      // hakama: deep pleats and fine pinstripes
+      float pleat = 0.5 + 0.5 * sin(b.x * 0.75 + b.y * 0.3);
+      col = uHakama * (0.7 + 0.55 * pleat);
+      col += uHakama * 0.9 * band(fract(b.x / 3.2) - 0.5, 0.06);
+    } else col = uWrap;
+    bool lining = z > 22.0 && z < 159.0 && ax < 64.5 && !(z > 154.0 && ax < 12.0);
+    if (lining && (uRoninOutfit > 1.5 || (uRoninOutfit > 0.5 && z > 100.0 && ax < 27.0))) {
+      // The robe's lining covers the old uniform between the sleeves, hems and collar.
+      col = uRoninLinen * (0.47 + 0.33 * fold);
+      pixelCls = 0.0;
+    }
   }
   // painted occlusion in the armpits and between the legs
   float ao = 1.0 - 0.35 * exp(-pow((ax - 20.0) / 5.0, 2.0) - pow((z - 130.0) / 7.0, 2.0))
@@ -226,7 +283,7 @@ if (uArmorElem > 0.5) {
     fCol = mix(fCol, vec3(1.0, 1.0, 1.0), core);
     totalEmissiveRadiance += fCol * (flame * 1.35 + pow(rimE, 2.0) * 1.10);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.96, 1.0), flame * 0.45);
-  } else {
+  } else if (uArmorElem < 5.5) {
     // 5: NEON (Túnica de Neón) — pulsing electric cyan & magenta energy waves and luminous silhouette rim
     float scan = 0.5 + 0.5 * sin(vElemPos.y * 18.0 - uElemTime * 6.0 + angE * 2.0);
     float pulse = pow(scan, 4.0);
@@ -234,6 +291,14 @@ if (uArmorElem > 0.5) {
     vec3 neonCol = mix(vec3(0.18, 0.94, 1.0), vec3(1.0, 0.22, 0.80), dual);
     float fineRim = smoothstep(0.58, 0.86, rimE);
     totalEmissiveRadiance += neonCol * (pulse * 0.75 + fineRim * 1.45);
+  } else {
+    // 6: SHADOW MONARCH (Monarca) — sleek abyssal violet-blue mist veins & razor-sharp electric cyan-indigo contour rim
+    float n1 = enoise(spE * vec2(1.8, 1.6) - vec2(0.0, uElemTime * 2.8));
+    float n2 = enoise(spE * vec2(4.0, 3.6) + vec2(uElemTime * 0.7, -uElemTime * 5.2));
+    float mist = smoothstep(0.56, 0.86, n1 * 0.62 + n2 * 0.38);
+    float crispRim = pow(rimE, 2.8);
+    vec3 sCol = mix(vec3(0.32, 0.16, 0.92), vec3(0.24, 0.74, 1.0), smoothstep(0.35, 0.85, n2 + rimE * 0.4));
+    totalEmissiveRadiance += sCol * (crispRim * 1.15 + mist * rimE * 0.85);
   }
 }
 `;

@@ -23,7 +23,7 @@ import {
   MAX_WEAPON_LEVEL, forgeWeapon, weaponDisplayName, weaponLevel, weaponMasteryText,
   weaponNextBonusText, weaponUpgradeCost
 } from './weapon-upgrades';
-import { cls } from './classes';
+import { cls, hasFixedArmor } from './classes';
 import { armorsForSale, armor, ownsArmor, buyArmor, wearArmor, armorStats } from './armor';
 import { player, state } from './state';
 import { threatLabel } from './equipment-threat';
@@ -166,7 +166,7 @@ export function updateShop(dt: number) {
   elbowL.rotation.x = -0.27 + Math.sin(t * 1.2) * 0.042;
   body.position.y = Math.sin(t * 2) * 0.007;
   hotMat.emissiveIntensity = 1.8 + Math.sin(t * 5) * 0.4;
-  if (d < TALK_R && !state.dead && !state.prompt) state.prompt = `[ E ] hablar con ${SMITH_NAME}: armas y armaduras`;
+  if (d < TALK_R && !state.dead && !state.prompt) state.prompt = hasFixedArmor() ? `[ E ] hablar con ${SMITH_NAME}: armas y forja` : `[ E ] hablar con ${SMITH_NAME}: armas y armaduras`;
   if (state.indoors && !greeted) { greeted = true; showMsg(`${SMITH_NAME}, el armero:\n«¿Buscas acero, ${cls().address}?»`, 2.4); }
   if (d > 30) greeted = false;
 }
@@ -225,27 +225,31 @@ function shopRows(): MenuRow[] {
       });
     }
   }
-  rows.push({ label: 'ARMADURAS', head: true });
-  for (const a of armorsForSale()) {
-    const mine = ownsArmor(a.id), on = state.armor === a.id, shut = locked(a.id, mine);
-    rows.push({
-      label: legend(a.id) + a.name, value: shut ? `nivel ${levelReq(a.id)}` : price(a.price, mine, on, 'puesta'),
-      cls: on ? 'y' : mine ? 'b' : shut ? 'd' : state.mon >= a.price ? '' : 'r',
-      note: `${shut ? lockNote(a.id) + `${a.price} mon · ` : ''}${a.desc} · ${armorStats(a)}`,
-      preview() { dressUp(a); applyWeapon(); },
-      act() {
-        if (on) return menuStatus('ya la llevas puesta');
-        if (shut) return refuse(a.id);
-        if (mine) { wearArmor(a.id); dressUp(); sfx.dash(); return menuStatus(`te pones ${a.name}`); }
-        if (buyArmor(a) === 'poor') { sfx.warn(); return menuStatus(`te faltan ${a.price - state.mon} mon`); }
-        dressUp();
-        sfx.chime(true); menuStatus(`«Te queda como hecha a medida.» · ${a.name}`);
-      }
-    });
+  if (!hasFixedArmor()) {
+    rows.push({ label: 'ARMADURAS', head: true });
+    for (const a of armorsForSale()) {
+      const mine = ownsArmor(a.id), on = state.armor === a.id, shut = locked(a.id, mine);
+      rows.push({
+        label: legend(a.id) + a.name, value: shut ? `nivel ${levelReq(a.id)}` : price(a.price, mine, on, 'puesta'),
+        cls: on ? 'y' : mine ? 'b' : shut ? 'd' : state.mon >= a.price ? '' : 'r',
+        note: `${shut ? lockNote(a.id) + `${a.price} mon · ` : ''}${a.desc} · ${armorStats(a)}`,
+        preview() { dressUp(a); applyWeapon(); },
+        act() {
+          if (on) return menuStatus('ya la llevas puesta');
+          if (shut) return refuse(a.id);
+          if (mine) { wearArmor(a.id); dressUp(); sfx.dash(); return menuStatus(`te pones ${a.name}`); }
+          if (buyArmor(a) === 'poor') { sfx.warn(); return menuStatus(`te faltan ${a.price - state.mon} mon`); }
+          dressUp();
+          sfx.chime(true); menuStatus(`«Te queda como hecha a medida.» · ${a.name}`);
+        }
+      });
+    }
   }
   rows.push({ label: 'OTROS', head: true });
   rows.push({
-    label: 'Cambiar de aspecto', note: 'nombre, lacado, kimono, bufanda, sombrero y máscara', preview: restoreGear,
+    label: hasFixedArmor() ? 'Cambiar nombre' : 'Cambiar de aspecto',
+    note: hasFixedArmor() ? 'este guerrero conserva su atuendo propio y solo cambia de arma' : 'nombre, lacado, kimono, bufanda, sombrero y máscara',
+    preview: restoreGear,
     act() { restoreGear(); openCustom(() => openShop(rows.length - 1)); }
   });
   return rows;
@@ -254,7 +258,7 @@ export function openShop(at = 1) {
   showMsg('', 0.01);
   openMenu({
     id: 'shop', title: `— TIENDA DE ${SMITH_NAME.toUpperCase()} —`,
-    sub: () => `nivel <span class="y">${level()}</span> · bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weaponDisplayName(weapon())}</span> · <span class="b">${armor().name}</span> · <span class="y">${threatLabel()}</span>`,
+    sub: () => `nivel <span class="y">${level()}</span> · bolsa <span class="y">${state.mon} mon</span> · <span class="b">${weaponDisplayName(weapon())}</span> · <span class="b">${cls().garbName ?? armor().name}</span> · <span class="y">${threatLabel()}</span>`,
     rows: shopRows,
     pinnedAction: { label: 'Despedirse', key: 'ESC', act: closeMenu },
     foot: '↑ ↓ previsualizar · E / ENTER comprar, templar o equipar · ESC salir',

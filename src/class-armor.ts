@@ -5,12 +5,11 @@
 // forearm vambraces, overlapping hip tassets, and contoured shin greaves with kneecaps).
 import * as THREE from 'three';
 import type { Armor, RobeTheme } from './armor';
-import type { ClassId } from './classes';
 
 const V = THREE.Vector3;
 const TAU = Math.PI * 2;
 
-export type NewClassId = Exclude<ClassId, 'ronin'>;
+export type NewClassId = 'sohei' | 'xia' | 'hwarang';
 
 export interface ArmorBuildCtx {
   bones: Record<string, THREE.Object3D>;

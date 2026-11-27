@@ -23,6 +23,10 @@ import {
   buildContouredTorso, ellipseArcTube, buildForearmVambrace, buildContouredGreave, buildTassetPanel,
   type NewClassId
 } from './class-armor';
+import {
+  buildMonarcaOutfit, buildVagabundoOutfit, buildShadowMonarchAura, buildVagabondAura,
+  updateShadowMonarchAura, updateVagabondAura, vagabondHakamaPBR, vagabondKimonoPBR
+} from './hero-models';
 import { makeFresnelShellMat, softGlowTex, anamorphicFlareTex } from './vfx-art';
 
 const V = THREE.Vector3;
@@ -64,6 +68,16 @@ const robeMat = robeMesh?.material, robeMap = robeMat?.map ?? null;
 // avatar.ts makes the waves glow faintly too (emissiveMap): plain robes drop both
 const robeGlowMap = robeMat?.emissiveMap ?? null;
 const robeBaseEmissiveIntensity = robeMat?.emissiveIntensity ?? 0.12;
+// simulated hanging kimono sleeves (rig.ts): restyled with painterly sumi-e kimono texture for Vagabundo
+const sleeveMeshes = ['sleeve-Left', 'sleeve-Right']
+  .map(n => root.getObjectByName(n) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | undefined)
+  .filter((m): m is THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> => !!m);
+const sleeveOrig = sleeveMeshes.map(m => ({
+  mat: m.material,
+  map: m.material.map,
+  emissiveMap: m.material.emissiveMap,
+  emissiveIntensity: m.material.emissiveIntensity
+}));
 /** put `obj` beside `twin` (same bone, same place, turn and size), so it follows it exactly */
 function overlay(id: string, twin: THREE.Object3D, obj: THREE.Object3D) {
   finish(obj);
@@ -897,13 +911,29 @@ function buildSwordsman(id: string, kind: 'xia' | 'hwarang', robeSpec?: RobeSpec
 }
 buildSwordsman(XIA, 'xia');
 buildSwordsman(HWARANG, 'hwarang');
+
+// ---- Fixed-outfit signature heroes: Monarca (Solo Leveling) & Vagabundo (Musashi / Vagabond)
+const MONARCA = 'monarca-garb', VAGABUNDO = 'vagabundo-garb';
+sets.set(MONARCA, []);
+buildMonarcaOutfit(MONARCA, { bones, P, rigChest, rigWaist, overlay, hang }, skirtPanels);
+sets.set(VAGABUNDO, []);
+buildVagabundoOutfit(VAGABUNDO, { bones, P, rigChest, rigWaist, overlay, hang });
+
 /** what each class wears when it has no armour of its own on (the ronin wears his kimono and armour) */
-const GARB: Partial<Record<ClassId, string>> = { sohei: SOHEI, xia: XIA, hwarang: HWARANG };
+const GARB: Partial<Record<ClassId, string>> = { sohei: SOHEI, xia: XIA, hwarang: HWARANG, monarca: MONARCA, vagabundo: VAGABUNDO };
 /** each class's own headwear (rig.ts), worn whatever the armour */
 const HEADWEAR: Partial<Record<ClassId, string>> = { sohei: 'hood', xia: 'douli', hwarang: 'gat' };
 for (const a of ARMORS) {
   const auraKind = a.look?.aura ?? a.robe?.aura;
   if (auraKind) auras.set(a.id, buildAura(auraKind));
+}
+{
+  const sm = buildShadowMonarchAura();
+  root.add(sm);
+  auras.set(MONARCA, sm);
+  const vg = buildVagabondAura();
+  root.add(vg);
+  auras.set(VAGABUNDO, vg);
 }
 
 
@@ -951,39 +981,97 @@ function getLowerRobeMaps(theme: NonNullable<RobeSpec['theme']>) {
 /** show the armour you wear (and its helmet instead of the kasa), with your chosen colours */
 let activeAura: THREE.Group | undefined;
 let activeSkirt: HingedPanel[] | undefined;
+let vagabondHakamaTex: { map: THREE.CanvasTexture; normal: THREE.CanvasTexture } | null = null;
+let vagabondSleeveTex: { map: THREE.CanvasTexture; normal: THREE.CanvasTexture } | null = null;
 export function dressUp(cur = armor()) {
   applyLook(root);
+  const isMonarca = state.cls === 'monarca', isVagabundo = state.cls === 'vagabundo';
+  const fixedHero = isMonarca || isVagabundo;
   // every class but the ronin wears its own garb when it has no armour of its own on, its own culturally
-  // distinct sculpted armor sets for Masa's plated armors, and always its own headwear (hood, douli, gat)
+  // distinct sculpted armor sets for Masa's plated armors, and always its own headwear (hood, douli, gat);
+  // Monarca and Vagabundo always keep their bespoke fixed outfits regardless of armor state.
   const own = GARB[state.cls], headwear = HEADWEAR[state.cls];
   const sohei = state.cls === 'sohei';
   let worn: string;
-  if (own && cur.robe?.theme) worn = ensureClassRobe(state.cls as NewClassId, cur);
+  if (fixedHero) worn = own!;
+  else if (own && cur.robe?.theme) worn = ensureClassRobe(state.cls as NewClassId, cur);
   else if (own && cur.look) worn = ensureClassArmor(state.cls as NewClassId, cur);
   else if (own && !sets.has(cur.id)) worn = own;
   else worn = cur.id;
   for (const [id, list] of sets) for (const o of list) o.visible = id === worn;
-  for (const [id, g] of auras) g.visible = id === cur.id;
-  activeAura = auras.get(cur.id);
+  const auraId = fixedHero ? worn : cur.id;
+  for (const [id, g] of auras) g.visible = id === auraId;
+  activeAura = auras.get(auraId);
   activeSkirt = skirtPanels.get(worn);
   // Drive live animated elemental surface shaders directly on the cloth & armor plates (no floating orbs!)
-  const ef = cur.look?.elemFx ?? cur.robe?.theme;
+  const ef = fixedHero ? undefined : (cur.look?.elemFx ?? cur.robe?.theme);
   armorElemFX.uArmorElem.value =
     ef === 'fire' ? 1 : ef === 'lightning' ? 2 : ef === 'blackfire' ? 3 : ef === 'whitefire' ? 4 : ef === 'neon' ? 5 : 0;
-  const helmet = !!cur.look?.helmet && !own;
-  const garbed = worn === own, dressed = sets.has(worn), monk = dressed && (!!cur.robe || garbed);
+  const helmet = !fixedHero && !!cur.look?.helmet && !own;
+  const garbed = worn === own, dressed = sets.has(worn), monk = dressed && !fixedHero && (!!cur.robe || garbed);
   sam.fitOutfit?.(dressed);
-  roninRobe.uRoninOutfit.value = monk ? 2 : dressed ? 1 : 0;
-  const habit = garbed ? opt('cloth').c : undefined;
-  if (dressed) roninRobe.uRoninLinen.value.set(habit ?? cur.robe?.linen ?? cur.look!.lame);
+  roninRobe.uRoninOutfit.value = isMonarca ? 3 : isVagabundo ? 4 : monk ? 2 : dressed ? 1 : 0;
+  const habit = garbed && !fixedHero ? opt('cloth').c : undefined;
+  if (dressed && !fixedHero) roninRobe.uRoninLinen.value.set(habit ?? cur.robe?.linen ?? cur.look!.lame);
   for (const o of baseLayers) {
     const layer = o.userData.equipmentLayer;
-    // the long cloth robe stays under every set (a long hakama under the armour, the monk's habit);
-    // the hanging kimono sleeves only show without plates on the arms
-    o.visible = layer === 'robe' ? true : layer === 'sleeves' ? !dressed || monk
-      : layer === 'scarf' || layer === 'wrapping' ? !monk && !own : !dressed;
+    if (layer === 'footwrap') { o.visible = !fixedHero; continue; }
+    if (isMonarca) {
+      o.visible = false;   // Monarca wears his tailored open trenchcoat, slim black hunter pants & combat boots
+    } else if (isVagabundo) {
+      // Vagabundo uses the simulated robe (sumi-e pleated hakama) and wide flowing kimono sleeves
+      o.visible = layer === 'robe' || layer === 'sleeves';
+    } else {
+      // the long cloth robe stays under every set (a long hakama under the armour, the monk's habit);
+      // the hanging kimono sleeves only show without plates on the arms
+      o.visible = layer === 'robe' ? true : layer === 'sleeves' ? !dressed || monk
+        : layer === 'scarf' || layer === 'wrapping' ? !monk && !own : !dressed;
+    }
   }
-  if (dressed && robeMat) {
+  // Restyle hanging kimono sleeves for Vagabundo (sumi-e indigo-slate), restore original for other classes
+  if (isVagabundo) {
+    if (!vagabondSleeveTex) {
+      const p = vagabondKimonoPBR();
+      const map = p.map.clone(); map.repeat.set(1.1, 1.1); map.needsUpdate = true;
+      const normal = p.normal.clone(); normal.repeat.set(1.1, 1.1); normal.needsUpdate = true;
+      vagabondSleeveTex = { map, normal };
+    }
+    for (const s of sleeveOrig) {
+      s.mat.color.set(0xffffff);
+      s.mat.map = vagabondSleeveTex.map;
+      s.mat.normalMap = vagabondSleeveTex.normal;
+      s.mat.emissiveMap = null;
+      s.mat.emissive.set(0x0b1218);
+      s.mat.emissiveIntensity = 0.08;
+      s.mat.needsUpdate = true;
+    }
+  } else {
+    for (const s of sleeveOrig) {
+      if (s.mat.map !== s.map || s.mat.normalMap) {
+        s.mat.map = s.map;
+        s.mat.normalMap = null;
+        s.mat.emissiveMap = s.emissiveMap;
+        s.mat.emissiveIntensity = s.emissiveIntensity;
+        s.mat.needsUpdate = true;
+      }
+    }
+  }
+  if (isVagabundo && robeMat) {
+    if (!vagabondHakamaTex) {
+      const p = vagabondHakamaPBR();
+      const map = p.map.clone(); map.repeat.set(2.4, 1.0); map.needsUpdate = true;
+      const normal = p.normal.clone(); normal.repeat.set(2.4, 1.0); normal.needsUpdate = true;
+      vagabondHakamaTex = { map, normal };
+    }
+    robeMat.color.set(0xffffff);
+    robeMat.map = vagabondHakamaTex.map;
+    robeMat.normalMap = vagabondHakamaTex.normal;
+    robeMat.emissiveMap = null;
+    robeMat.emissive.set(0x090a10);
+    robeMat.emissiveIntensity = 0.08;
+    robeMat.needsUpdate = true;
+  } else if (dressed && !fixedHero && robeMat) {
+    robeMat.normalMap = null;
     if (monk && cur.robe?.theme) {
       const { map, em } = getLowerRobeMaps(cur.robe.theme);
       robeMat.color.set(0xffffff);
@@ -1004,6 +1092,7 @@ export function dressUp(cur = armor()) {
       robeMat.needsUpdate = true;
     }
   } else if (robeMat && robeMap) {
+    robeMat.normalMap = null;
     robeMat.map = robeMap; robeMat.emissiveMap = robeGlowMap;
     if (robeGlowMap) robeMat.emissive.set(0xffffff);
     robeMat.emissiveIntensity = robeBaseEmissiveIntensity;
@@ -1011,9 +1100,12 @@ export function dressUp(cur = armor()) {
   }
   root.traverse(o => {
     const part = o.userData.part;
+    if (part === 'head-default') o.visible = !fixedHero;
+    if (part === 'head-monarca') o.visible = isMonarca;
+    if (part === 'head-vagabundo') o.visible = isVagabundo;
     if (part === 'hat') o.visible = !helmet && !monk && !own && !opt('hat').hidden;
     if ((monk || own) && part === 'mask') o.visible = false;
-    if (part === 'topknot') o.visible = !helmet && !sohei;   // the helmet covers the knot; the monk is shaven
+    if (part === 'topknot') o.visible = !helmet && !sohei && !fixedHero;   // the helmet covers the knot; monk is shaven; heroes have bespoke hair
     if (part === 'hood' || part === 'douli' || part === 'gat') o.visible = part === headwear;
     if (o.userData.helmet) o.visible = !own && o.visible;
   });
@@ -1040,6 +1132,8 @@ export function updateOutfit() {
   const g = activeAura;
   if (!g) return;
   const t = state.time;
+  if (g.name === 'shadow-monarch') { updateShadowMonarchAura(g, t); return; }
+  if (g.name === 'vagabond-ink') { updateVagabondAura(g, t); return; }
   if (g.name === 'lightning') {
     // 8 jagged 3D lightning bolts erupting directly from shoulders, torso, and robe hem into the air
     const bolts = g.getObjectByName('bolts');

@@ -106,7 +106,8 @@ const broad: Grip = {
 // K3 both blades cross in an X and scissor open · L the whirlwind: a leap with both blades spread,
 // two turns in the air, landing with both points driven into the ground
 function dualGrip(side: -1 | 1): Grip {
-  const idle = key([side * 0.34, 1.12, 0.24], [side * 0.53, 0.43, 0.73], [0, -1, 0]);
+  // Natural relaxed dual-blade combat stance: arms gently bent at hip/waist level, both blades held cleanly forward & outward
+  const idle = key([side * 0.30, 0.96 + (side > 0 ? 0.03 : 0), 0.24 + (side > 0 ? 0.04 : 0)], [side * 0.28, 0.14 + (side > 0 ? 0.04 : 0), 0.95], [0, -1, 0]);
   const wind = key([side * 0.39, 1.34, 0.16], [side * 0.72, 0.63, -0.27], [0, -0.3, 1]);
   const strike = key([side * 0.15, 1.23, 0.45], [-side * 0.34, 0.15, 0.93], [-side, -0.55, 0]);
   const follow = key([side * 0.12, 1.02, 0.38], [-side * 0.57, -0.34, 0.74], [-side, -0.57, 0]);

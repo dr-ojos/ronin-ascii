@@ -169,7 +169,7 @@ export function updateSpecial(dt: number) {
 export function resetSpecial() {
   // the class's own two techniques, Clones Espectrales, and every one already learnt (vault.ts)
   const start = cls().technique, start2 = cls().technique2, v = readVault();
-  const base: TechniqueId[] = [start, start2, 'espectros'];
+  const base: TechniqueId[] = [...new Set<TechniqueId>([start, start2, 'espectros'])];
   const learned = [...base, ...v.techniques.filter(t => !base.includes(t) && t in TECHNIQUES)];
   const technique = v.technique && learned.includes(v.technique) ? v.technique : start;
   let technique2 = v.technique2 && learned.includes(v.technique2) ? v.technique2 : start2;

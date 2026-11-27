@@ -11,30 +11,72 @@ import { headAsset } from './assets';
 
 /** an open eye painted on a small curved patch (the scan has its eyes closed): almond of white, a
  *  brown iris with its pupil and a catch-light, a heavy upper lash line and a fine lower lid */
-let eyeTex: THREE.CanvasTexture | null = null;
-function eyeTexture() {
-  if (eyeTex) return eyeTex;
+export type EyeStyle = 'normal' | 'monarch' | 'vagabond';
+const eyeTexCache: Partial<Record<EyeStyle, THREE.CanvasTexture>> = {};
+function eyeTexture(style: EyeStyle = 'normal') {
+  if (eyeTexCache[style]) return eyeTexCache[style]!;
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;
   const x = c.getContext('2d')!;
   const almond = () => {
-    x.beginPath(); x.moveTo(14, 70);
-    x.bezierCurveTo(60, 14, 190, 10, 242, 58);
-    x.bezierCurveTo(200, 104, 70, 112, 14, 70); x.closePath();
+    x.beginPath();
+    if (style === 'monarch') {
+      // sharper, sleeker manhwa-style intense almond eye
+      x.moveTo(10, 74);
+      x.bezierCurveTo(64, 18, 194, 14, 246, 52);
+      x.bezierCurveTo(202, 98, 72, 106, 10, 74);
+    } else if (style === 'vagabond') {
+      // fierce, slightly narrowed samurai gaze
+      x.moveTo(12, 72);
+      x.bezierCurveTo(66, 22, 192, 18, 244, 56);
+      x.bezierCurveTo(198, 100, 72, 106, 12, 72);
+    } else {
+      x.moveTo(14, 70);
+      x.bezierCurveTo(60, 14, 190, 10, 242, 58);
+      x.bezierCurveTo(200, 104, 70, 112, 14, 70);
+    }
+    x.closePath();
   };
-  x.fillStyle = '#c4b2a2'; almond(); x.fill();
+  x.fillStyle = style === 'monarch' ? '#dce8f6' : style === 'vagabond' ? '#d4c8ba' : '#c4b2a2';
+  almond(); x.fill();
   x.save(); almond(); x.clip();
-  const g = x.createRadialGradient(126, 64, 4, 126, 64, 48);
-  g.addColorStop(0, '#2a160c'); g.addColorStop(0.35, '#5a3418'); g.addColorStop(0.85, '#3a2010'); g.addColorStop(1, '#1a0e08');
-  x.fillStyle = g; x.beginPath(); x.arc(126, 64, 47, 0, Math.PI * 2); x.fill();
-  x.fillStyle = '#080404'; x.beginPath(); x.arc(126, 64, 17, 0, Math.PI * 2); x.fill();
-  x.fillStyle = 'rgba(0,0,0,0.5)'; x.fillRect(0, 0, 256, 50);               // the upper lid's shadow
-  x.fillStyle = 'rgba(255,255,255,0.85)'; x.beginPath(); x.arc(112, 56, 6, 0, Math.PI * 2); x.fill();
+  if (style === 'monarch') {
+    // Glowing electric cyan-blue Shadow Monarch iris
+    const g = x.createRadialGradient(126, 62, 4, 126, 62, 48);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.22, '#7ef4ff');
+    g.addColorStop(0.58, '#28b4ff');
+    g.addColorStop(0.86, '#1a52d8');
+    g.addColorStop(1, '#081440');
+    x.fillStyle = g; x.beginPath(); x.arc(126, 62, 47, 0, Math.PI * 2); x.fill();
+    // Fine radial iris energy streaks
+    x.strokeStyle = 'rgba(200,248,255,0.65)'; x.lineWidth = 2;
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      x.beginPath(); x.moveTo(126 + Math.cos(a) * 18, 62 + Math.sin(a) * 18); x.lineTo(126 + Math.cos(a) * 44, 62 + Math.sin(a) * 44); x.stroke();
+    }
+    x.fillStyle = '#071430'; x.beginPath(); x.arc(126, 62, 13, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.98)'; x.beginPath(); x.arc(114, 54, 7.5, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(130,235,255,0.85)'; x.beginPath(); x.arc(140, 72, 4, 0, Math.PI * 2); x.fill();
+  } else {
+    const g = x.createRadialGradient(126, 64, 4, 126, 64, 48);
+    if (style === 'vagabond') {
+      g.addColorStop(0, '#140b06'); g.addColorStop(0.35, '#3a2212'); g.addColorStop(0.85, '#1e1108'); g.addColorStop(1, '#0b0604');
+    } else {
+      g.addColorStop(0, '#2a160c'); g.addColorStop(0.35, '#5a3418'); g.addColorStop(0.85, '#3a2010'); g.addColorStop(1, '#1a0e08');
+    }
+    x.fillStyle = g; x.beginPath(); x.arc(126, 64, 47, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#080404'; x.beginPath(); x.arc(126, 64, 17, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(0,0,0,0.52)'; x.fillRect(0, 0, 256, 52);               // the upper lid's shadow
+    x.fillStyle = 'rgba(255,255,255,0.88)'; x.beginPath(); x.arc(112, 56, 6, 0, Math.PI * 2); x.fill();
+  }
   x.restore();
-  x.strokeStyle = '#1a1210'; x.lineCap = 'round';
-  x.lineWidth = 9; x.beginPath(); x.moveTo(10, 72); x.bezierCurveTo(60, 12, 190, 8, 246, 56); x.stroke();
-  x.lineWidth = 3; x.strokeStyle = 'rgba(60,30,25,0.8)'; x.beginPath(); x.moveTo(30, 80); x.bezierCurveTo(80, 108, 190, 102, 236, 64); x.stroke();
-  eyeTex = new THREE.CanvasTexture(c); eyeTex.colorSpace = THREE.SRGBColorSpace; eyeTex.anisotropy = 4;
-  return eyeTex;
+  x.strokeStyle = style === 'monarch' ? '#070a14' : '#1a1210'; x.lineCap = 'round';
+  x.lineWidth = style === 'monarch' ? 11 : 9;
+  x.beginPath(); x.moveTo(10, 72); x.bezierCurveTo(60, 12, 190, 8, 246, 54); x.stroke();
+  x.lineWidth = 3.5; x.strokeStyle = style === 'monarch' ? 'rgba(25,40,80,0.85)' : 'rgba(60,30,25,0.85)';
+  x.beginPath(); x.moveTo(28, 78); x.bezierCurveTo(80, 106, 190, 100, 238, 62); x.stroke();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return (eyeTexCache[style] = t);
 }
 
 export interface RealHeadOpts {
@@ -43,6 +85,10 @@ export interface RealHeadOpts {
   hair: number;
   /** grey stubble and a short beard along the jaw */
   beard?: number;
+  /** beard strength (default 0.85) */
+  beardStrength?: number;
+  /** eye styling: normal, glowing Shadow Monarch, or intense Vagabond */
+  eyeStyle?: EyeStyle;
   /** a samurai topknot (chonmage) on the crown */
   topknot?: boolean;
 }
@@ -100,7 +146,7 @@ export function realHead(o: RealHeadOpts) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
     // the colour map multiplies this: hair pushes it to the hair colour, skin keeps the scan's tone
     c.copy(tint);
-    if (o.beard !== undefined) c.lerp(beard.clone().multiplyScalar(1.6), beardAmount(x, y, z) * 0.85);
+    if (o.beard !== undefined) c.lerp(beard.clone().multiplyScalar(1.6), beardAmount(x, y, z) * (o.beardStrength ?? 0.85));
     const h = hairAmount(x, y, z);
     // combed strands: a faint ripple running back over the skull
     const strand = 0.85 + 0.15 * Math.sin(x * 9 + z * 2.5);
@@ -116,7 +162,15 @@ export function realHead(o: RealHeadOpts) {
   const group = new THREE.Group();
   group.add(new THREE.Mesh(geo, mat));
   // open eyes over the scanned (closed) lids, turned with the face's curve
-  const eyeMat = new THREE.MeshStandardMaterial({ map: eyeTexture(), alphaTest: 0.5, roughness: 0.35 });
+  const eyeStyle = o.eyeStyle ?? 'normal';
+  const eTex = eyeTexture(eyeStyle);
+  const eyeMat = new THREE.MeshStandardMaterial({
+    map: eTex, alphaTest: 0.5, roughness: eyeStyle === 'monarch' ? 0.15 : 0.35,
+    emissive: eyeStyle === 'monarch' ? 0x42ccff : 0x000000,
+    emissiveMap: eyeStyle === 'monarch' ? eTex : null,
+    emissiveIntensity: eyeStyle === 'monarch' ? 1.85 : 0
+  });
+  if (eyeStyle === 'monarch') eyeMat.userData.noGlyphs = true;
   eyeMat.userData.asciiSkin = true;
   const eyeGeo = new THREE.SphereGeometry(1, 24, 12, Math.PI / 2 - 0.5, 1.0, Math.PI / 2 - 0.25, 0.5);
   for (const s of [-1, 1]) {

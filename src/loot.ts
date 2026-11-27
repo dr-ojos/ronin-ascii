@@ -16,6 +16,7 @@ import { addPoints } from './score';
 import { UPGRADES, grant, lvl, roman, rollUpgrade } from './upgrades';
 import { grantWeapon, owns, weaponById } from './weapons';
 import { armorById, grantArmor, ownsArmor } from './armor';
+import { hasFixedArmor } from './classes';
 import { dressUp } from './outfit';
 import { player, state } from './state';
 import { rnd } from './utils';
@@ -335,6 +336,10 @@ function addRelicPickup(relic: BossRelic, name: string, desc: string, x: number,
 export function dropBossRelic(kind: EnemyKind, x: number, z: number): string | null {
   const relic = BOSS_RELICS[kind];
   if (!relic) return null;
+  if (relic.kind === 'armor' && hasFixedArmor()) {
+    addPickup('mon', 450, x + rnd(-0.7, 0.7), z + rnd(-0.7, 0.7));
+    return null;
+  }
   const owned = relic.kind === 'weapon' ? owns(relic.id) : ownsArmor(relic.id);
   const alreadyDropped = pickups.some(p => p.itemId === relic.id);
   if (owned || alreadyDropped) {

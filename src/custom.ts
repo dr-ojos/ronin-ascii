@@ -14,12 +14,15 @@ function rows(): MenuRow[] {
     input: { value: look.name, max: 16, set(v) { look.name = v; saveLook(); } }
   }];
   const parts = LOOK_PARTS[state.cls];
-  for (const k of Object.keys(parts) as LookPart[]) {
+  const keys = Object.keys(parts) as LookPart[];
+  for (const k of keys) {
     const step = (d: number) => () => { cycleLook(k, d); dressUp(); };
     r.push({ label: parts[k]!, value: opt(k).name, cls: 'y', left: step(-1), right: step(1), act: step(1) });
   }
-  r.push({ label: 'Al azar', note: cls().wanderer,
-    act() { randomLook(); dressUp(); menuStatus('¿ así ?'); } });
+  if (keys.length) {
+    r.push({ label: 'Al azar', note: cls().wanderer,
+      act() { randomLook(); dressUp(); menuStatus('¿ así ?'); } });
+  }
   r.push({ label: 'Listo', act: closeMenu });
   return r;
 }
