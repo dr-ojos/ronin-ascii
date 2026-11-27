@@ -127,7 +127,7 @@ export function onKill(en: Enemy) {
 }
 /** a boss reached its second phase: it calls reinforcements around it */
 export function onEnrage(boss: Enemy) {
-  summon(boss, REINFORCE[boss.kind] ?? ['oni', 'ashigaru'], boss.camp.templeGuard || boss.camp.tier > 0.6 ? 3 : 2);
+  summon(boss, REINFORCE[boss.kind] ?? ['oni', 'ashigaru'], boss.camp.templeGuard ? 4 : boss.camp.tier > 0.6 ? 3 : 2);
   sfx.waveStart(true);
 }
 

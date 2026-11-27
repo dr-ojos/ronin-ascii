@@ -210,10 +210,10 @@ function buildCamps() {
   }
   // each elemental temple has its guardian and thematic guard squad waiting in the courtyard, between master and torii
   const TEMPLE_GUARDS: Partial<Record<EnemyKind, EnemyKind[]>> = {
-    guardianViento: ['sombra', 'duelista', 'arquero', 'escudero'],
-    guardianFuego: ['piromante', 'bruto', 'guadanero', 'escudero'],
-    guardianAgua: ['espectro', 'hechicero', 'duelista', 'escudero'],
-    guardianRayo: ['espectro', 'duelista', 'hechicero', 'escudero']
+    guardianViento: ['sombra', 'sombra', 'duelista', 'hechicero', 'escudero'],
+    guardianFuego: ['coloso', 'piromante', 'tambor', 'guadanero', 'escudero'],
+    guardianAgua: ['espectro', 'espectro', 'hechicero', 'duelista', 'escudero'],
+    guardianRayo: ['espectro', 'coloso', 'duelista', 'hechicero', 'escudero']
   };
   for (const t of TEMPLES) if (t.guardian) {
     const [x, z] = toWorld(t.x, t.z, t.facing, 0, 14);

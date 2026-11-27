@@ -134,19 +134,19 @@ export function updateBossMechanics(dt: number) {
     }
     if (state.time - (lastStagger.get(en) ?? -99) > DECAY_AFTER) en.stagger = Math.max(0, (en.stagger ?? 0) - en.staggerNeed! * DECAY * dt);
     const fighting = en.state !== 'idle' && en.state !== 'return' && !state.dead;
-    if (affixes.includes('regenerador') && fighting) en.hp = Math.min(en.maxHp, en.hp + en.maxHp * 0.012 * dt);
+    if (affixes.includes('regenerador') && fighting) en.hp = Math.min(en.maxHp, en.hp + en.maxHp * (en.camp.templeGuard ? 0.018 : 0.012) * dt);
     if (!fighting || state.time < (en.affixT ?? 0)) continue;
     // one affix acts at a time, every few seconds
     const d = Math.hypot(player.pos.x - p.x, player.pos.z - p.z);
     const active = affixes.filter(a => a === 'gelido' || a === 'invocador' || (a === 'errante' && d > 4));
-    en.affixT = state.time + (en.camp.templeGuard ? rnd(3.8, 6.2) : rnd(5, 8));
+    en.affixT = state.time + (en.camp.templeGuard ? rnd(3.0, 5.0) : rnd(5, 8));
     if (!active.length) continue;
     const a = active[Math.floor(Math.random() * active.length)];
     if (a === 'gelido') {
       const at = new THREE.Vector3(player.pos.x, surfaceY(player.pos.x, player.pos.z) + 0.05, player.pos.z);
       impactRing(at, 0x7fd8ff, 2.4); burst(at.clone().setY(at.y + 0.3), 0x7fd8ff, 24, 2, 0.1);
       frost.push({ at, t: 1.1, dmg: Math.round(en.dmg * 0.45) });
-    } else if (a === 'invocador' && (summoned.get(en) ?? 0) < 4) {
+    } else if (a === 'invocador' && (summoned.get(en) ?? 0) < (en.camp.templeGuard ? 6 : 4)) {
       summoned.set(en, (summoned.get(en) ?? 0) + 1);
       summon(en, [MINIONS[Math.floor(Math.random() * MINIONS.length)]], 1);
       sfx.roar({ big: false, pan: panOf(p.x, p.z) });
