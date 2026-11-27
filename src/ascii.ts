@@ -206,22 +206,22 @@ export const cellMat = new THREE.ShaderMaterial({
         vec3 fx4 = texture2D(tScene, uv - dy).rgb;
         vec3 fxAvg = (fx0 * 2.0 + fx1 + fx2 + fx3 + fx4) / 6.0;
         vec3 fxMax = max(fx0, max(max(fx1, fx2), max(fx3, fx4)));
-        vec3 fxRaw = mix(fxAvg, fxMax, 0.55);
+        vec3 fxRaw = mix(fxAvg, fxMax, 0.3);
         float peak = max(max(fxRaw.r, fxRaw.g), fxRaw.b);
         if (abs(surface.a - ${BLADE_SPARK_ALPHA.toFixed(2)}) < 0.002) {
           float sp = max(max(surface.r, surface.g), surface.b);
           vec3 tint = sqrt(surface.rgb / max(sp, 0.01));
-          c = modeCol(tint * (0.85 + 0.55 * sqrt(min(1.0, sp))), sp);
+          c = modeCol(tint * (0.55 + 0.65 * sqrt(min(1.0, sp))), sp);
           row = ${FLOWER_ROW.toFixed(1)}; idx = ${FLOWER_GLYPHS.indexOf('*').toFixed(1)};
-          glowLvl = 2.0;
-        } else if (peak > 0.02) {
-          vec3 col = pow(aces(fxRaw * 1.9), vec3(1.0 / 2.2));
-          float l = clamp(pow(luma(col) * 1.35, 0.8), 0.0, 0.999);
+          glowLvl = sp > 0.45 ? 1.0 : 0.0;
+        } else if (peak > 0.08) {
+          vec3 col = pow(aces(fxRaw * 1.45), vec3(1.0 / 2.2));
+          float l = clamp(pow(luma(col) * 1.15, 0.9), 0.0, 0.999);
           vec3 tint = col / max(max(max(col.r, col.g), col.b), 0.04);
-          c = modeCol(mix(tint, vec3(1.0), 0.22) * (0.78 + 0.62 * l), l);
+          c = modeCol(mix(tint, vec3(1.0), 0.16 * l) * (0.28 + 0.95 * l), l);
           row = 5.0;
           idx = clamp(floor(l * uN), 1.0, uN - 1.0);
-          glowLvl = 2.0;
+          glowLvl = l > 0.58 ? 2.0 : l > 0.28 ? 1.0 : 0.0;
         } else {
           row = 0.0; idx = 0.0; c = vec3(0.0);
         }
@@ -651,11 +651,11 @@ const postMat = new THREE.ShaderMaterial({
           col *= 1.0 - near * 0.72;
         }
         layer(tCells, tFont, uCell, uGlyph, uGrid, fc, false, et, es);
-        vec3 fxChar = mix(et, es, 0.35);
-        float fxInk = clamp(max(fxChar.r, max(fxChar.g, fxChar.b)) * 1.8, 0.0, 1.0);
+        vec3 fxChar = mix(et, es, 0.3);
+        float fxInk = clamp(max(fxChar.r, max(fxChar.g, fxChar.b)) * 1.4, 0.0, 1.0);
         vec2 guv = fc / (uGrid * uCell);
-        vec3 glow = (texture2D(tGlow, guv).rgb * 0.8 + texture2D(tGlowW, guv).rgb * 1.3) * uGlow;
-        col = mix(col, col * 0.22, fxInk * 0.85) + fxChar + glow * (0.28 + 0.55 * fxInk);
+        vec3 glow = (texture2D(tGlow, guv).rgb * 0.65 + texture2D(tGlowW, guv).rgb * 0.95) * uGlow;
+        col = mix(col, col * 0.48, fxInk * 0.65) + fxChar + glow * (0.14 + 0.32 * fxInk);
         if (uHit > 0.001) col = mix(col, vec3(1.0, 0.14, 0.08), uHit * 0.25);
         gl_FragColor = vec4(col, 1.0);
         return;

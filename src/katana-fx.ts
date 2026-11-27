@@ -85,10 +85,10 @@ const halo = new THREE.Group();
   const outer = new THREE.Mesh(g, haloMat), inner = new THREE.Mesh(g, haloCore);
   outer.name = 'outer'; inner.name = 'inner'; halo.add(outer, inner);
 }
-sam.katana.add(markCombatFx(halo));
+sam.katana.add(halo);
 const offhandHalo = halo.clone();
 offhandHalo.visible = false;
-sam.offhand.add(markCombatFx(offhandHalo));
+sam.offhand.add(offhandHalo);
 
 // ---------------------------------------------------------------- blade flames
 // Volumetric animated flame sheath wrapping fire blades (extra: 'flames'): two crossed ribbons
@@ -226,7 +226,7 @@ function setWeaponFx(w: Weapon) {
 
 // Travelling flashes live on the cutting edge in blade space. Loose sparks are emitted on contact and on cuts.
 const WHITE = new THREE.Color(0xffffff), edgeColor = new THREE.Color();
-const BLADE_GLINTS = 3, EDGE_SPARKS = BLADE_GLINTS + 18;
+const BLADE_GLINTS = 3, EDGE_SPARKS = BLADE_GLINTS + 42;
 const edgePositions = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3).setUsage(THREE.DynamicDrawUsage);
 const edgePulses = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS), 1).setUsage(THREE.DynamicDrawUsage);
 const edgeColors = new THREE.BufferAttribute(new Float32Array(EDGE_SPARKS * 3), 3);
@@ -343,17 +343,43 @@ function updateEdgeSparks(w: Weapon, heat: number, displaying: boolean) {
       const pulse = THREE.MathUtils.smoothstep(dropT, 0, 0.16) * (1 - THREE.MathUtils.smoothstep(dropT, 0.72, 1));
       edgePulses.setX(idx, pulse * (displaying ? 1.2 : 1.0 + 0.25 * heat));
     } else {
-      // Travelling sparks racing along the entire length of the blade (edge, face and spine)
-      const cycle = time * (0.85 + (i % 5) * 0.22) + i * 0.618;
-      const t = cycle % 1, along = 0.02 + t * 0.96;
-      const blink = 0.48 + 0.28 * Math.sin(time * 23 + i * 2.39);
-      const sec = bladeSection(profile, along);
-      // alternate across the blade width so wide manga swords sparkle across their entire surface & edges
-      const lane = i % 3 === 0 ? -0.52 : i % 3 === 1 ? 0.0 : 0.48;
-      const y = (sec.center + sec.width * lane) * scale - (lane < 0 ? 0.005 + blink * 0.01 : 0);
-      edgePositions.setXYZ(idx, Math.sin(i * 2.39) * 0.009, y, base + along * length);
-      const fade = THREE.MathUtils.smoothstep(t, 0, 0.10) * (1 - THREE.MathUtils.smoothstep(t, 0.86, 1));
-      edgePulses.setX(idx, fade * blink * (displaying ? 1 : 0.86 + 0.18 * heat));
+      // Sparks circulating continuously around the entire blade:
+      // · 60% trace a closed loop along the cutting edge -> tip -> spine -> base
+      // · 40% spiral across both faces of the blade in 3D so it shimmers from any angle (including Photo Mode F)
+      const speed = 0.36 + (i % 5) * 0.09;
+      const u = (time * speed + i * 0.6180339) % 1;
+      const blink = 0.55 + 0.40 * Math.sin(time * 19 + i * 2.39);
+      let along: number, lane: number, xOff: number;
+      if (i % 5 < 3) {
+        // Perimeter circulation: up the cutting edge, around the tip, back down the spine, around the guard
+        if (u < 0.46) {
+          along = 0.03 + (u / 0.46) * 0.94;
+          lane = -0.52;
+        } else if (u < 0.50) {
+          const k = (u - 0.46) / 0.04;
+          along = 0.97 + Math.sin(k * Math.PI) * 0.025;
+          lane = -0.52 + k * 1.02;
+        } else if (u < 0.96) {
+          along = 0.97 - ((u - 0.50) / 0.46) * 0.94;
+          lane = 0.50;
+        } else {
+          const k = (u - 0.96) / 0.04;
+          along = 0.03;
+          lane = 0.50 - k * 1.02;
+        }
+        xOff = Math.sin(u * Math.PI * 8 + i * 1.7) * 0.015;
+      } else {
+        // Helical swirl wrapping across both faces of the blade from hilt to tip
+        along = 0.04 + u * 0.92;
+        const spin = u * Math.PI * 4 + i * 1.9;
+        lane = Math.sin(spin) * 0.46;
+        xOff = Math.cos(spin) * 0.018;
+      }
+      const sec = bladeSection(profile, THREE.MathUtils.clamp(along, 0.02, 0.98));
+      const y = (sec.center + sec.width * lane) * scale;
+      edgePositions.setXYZ(idx, xOff, y, base + along * length);
+      const fade = i % 5 < 3 ? 1 : THREE.MathUtils.smoothstep(u, 0, 0.08) * (1 - THREE.MathUtils.smoothstep(u, 0.90, 1));
+      edgePulses.setX(idx, fade * blink * (displaying ? 1.05 : 0.9 + 0.2 * heat));
     }
   }
   edgePositions.needsUpdate = true;
