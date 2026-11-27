@@ -160,9 +160,32 @@ export const rollCrit = () => Math.random() < critChance();
 export const perkHeal = () => hasPerk('sed') ? 3 : 0;
 export const perkStreakTime = () => hasPerk('tigre') ? 2 : 0;
 export const maxStreak = () => hasPerk('tigre') ? 6 : 5;
-/** the oni of the world grow with you: a little more life and bite per level */
-export const foeHp = () => 1 + 0.008 * (prof.level - 1);
-export const foeDmg = () => 1 + 0.005 * (prof.level - 1);
+/** the oni of the world grow proportionally with you: more life, damage, speed and faster attack cadence per level */
+export const foeHpAt = (lv: number) => {
+  const n = Math.max(0, lv - 1);
+  return 1 + 0.035 * n + 0.00025 * n * n;
+};
+export const foeDmgAt = (lv: number) => {
+  const n = Math.max(0, lv - 1);
+  return 1 + 0.024 * n + 0.00012 * n * n;
+};
+export const foeSpeedAt = (lv: number) => {
+  const n = Math.max(0, lv - 1);
+  return 1 + Math.min(0.35, 0.0035 * n);
+};
+export const foeWindupAt = (lv: number) => {
+  const n = Math.max(0, lv - 1);
+  return Math.max(0.68, 1 - 0.0032 * n);
+};
+export const foeRecoveryAt = (lv: number) => {
+  const n = Math.max(0, lv - 1);
+  return Math.max(0.62, 1 - 0.0038 * n);
+};
+export const foeHp = () => foeHpAt(prof.level);
+export const foeDmg = () => foeDmgAt(prof.level);
+export const foeSpeed = () => foeSpeedAt(prof.level);
+export const foeWindup = () => foeWindupAt(prof.level);
+export const foeRecovery = () => foeRecoveryAt(prof.level);
 /** mon at the start of every run: the reputation of a seasoned ronin */
 export const stipend = () => 60 * (prof.level - 1);
 

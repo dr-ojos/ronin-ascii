@@ -11,7 +11,7 @@ import { TECHNIQUES, type TechniqueId } from './techniques';
 import {
   freePoints, LEVEL_REQ, level, MAX_LEVEL, PERKS, respec, respecCost, spendPoint, stat, STAT_CAP, STAT_IDS, STATS,
   totalXp, xp, xpFrac, xpNeed, hasPerk, critChance, secondWindIn,
-  MAX_RANK, rank, rankCost, rankCharge, rankPower, ROMAN, upgradeTechnique, levelHp
+  MAX_RANK, rank, rankCost, rankCharge, rankPower, ROMAN, upgradeTechnique, levelHp, foeHp, foeDmg
 } from './progression';
 
 const btn = document.createElement('button');
@@ -106,8 +106,9 @@ function sub() {
   const lv = level(), f = Math.floor(xpFrac() * 24);
   const bar = `[<span class="y">${'#'.repeat(f)}</span>${'-'.repeat(24 - f)}]`;
   const road = lv >= MAX_LEVEL ? '<span class="y">LEYENDA</span>' : `${num(xp())} / ${num(xpNeed())} xp`;
+  const foeScale = lv > 1 ? ` · enemigos x${foeHp().toFixed(2).replace('.', ',')} vida / x${foeDmg().toFixed(2).replace('.', ',')} daño` : '';
   return `<span class="y" style="font-size:18px;letter-spacing:.12em">NIVEL ${lv}</span>  ${bar}<br>${road}` +
-    ` · <span class="d">total ${num(totalXp())} xp · vida por nivel +${levelHp(lv)} · crítico ${Math.round(critChance() * 100)} %</span> · <span class="y">${num(state.mon)} mon</span>`;
+    ` · <span class="d">total ${num(totalXp())} xp · vida por nivel +${levelHp(lv)} · crítico ${Math.round(critChance() * 100)} %${foeScale}</span> · <span class="y">${num(state.mon)} mon</span>`;
 }
 
 export function toggleLevelMenu() {

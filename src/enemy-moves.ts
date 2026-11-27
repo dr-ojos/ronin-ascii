@@ -3,6 +3,7 @@ import { CLS, markCombatFx, tagMat } from './materials';
 import { collide } from './physics';
 import { scene } from './renderer';
 import { surfaceY } from './structures';
+import { foeWindup } from './progression';
 import type { Enemy, XZ } from './types';
 
 type Move = {
@@ -124,7 +125,7 @@ export function chargeBlocked(en: Enemy, x: number, z: number) {
 
 export function prepareEnemyAttack(en: Enemy, move: Move, target: THREE.Vector3, yaw: number): EnemyAttack {
   const origin = en.g.position.clone(), fx = Math.sin(yaw), fz = Math.cos(yaw);
-  const windup = move.windup * (en.phase === 3 ? 0.68 : en.enraged ? 0.80 : 1) * (en.camp.templeGuard ? 0.84 : 1);
+  const windup = move.windup * (en.phase === 3 ? 0.68 : en.enraged ? 0.80 : 1) * (en.camp.templeGuard ? 0.84 : 1) * foeWindup();
   const zones: XZ[] = [];
   let outlines: XZ[][], length = 0;
   if (move.shape === 'charge' || move.shape === 'wave') {

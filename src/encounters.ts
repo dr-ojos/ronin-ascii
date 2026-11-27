@@ -16,7 +16,7 @@ import { CAMP_SPOTS, HIDDEN_CHESTS, POIS, WILDLIFE_SPOTS } from './landmarks';
 import { chests, makeChest, resetChests, updateLoot } from './loot';
 import { resetScore, updateScore } from './score';
 import { resetUpgrades } from './upgrades';
-import { baseHp } from './progression';
+import { baseHp, level } from './progression';
 import { resetBattle } from './battle';
 import { equipmentThreat } from './equipment-threat';
 import { showMsg } from './hud';
@@ -70,7 +70,10 @@ const REINFORCEMENTS: { kind: EnemyKind; rank: number; tier: number }[] = [
 ];
 
 function prepareRoster(c: Camp) {
-  const threat = equipmentThreat(), previous = c.threat;
+  const gear = equipmentThreat(), lv = level();
+  const lvRank = lv >= 60 ? 3 : lv >= 35 ? 2 : lv >= 15 ? 1 : 0;
+  const threat = { offense: gear.offense, defense: gear.defense, rank: Math.max(gear.rank, lvRank) };
+  const previous = c.threat;
   // A squad that has taken casualties keeps its survivors and stats until it is cleared.
   if (previous && c.roster.length !== c.size) return;
   c.threat = threat;

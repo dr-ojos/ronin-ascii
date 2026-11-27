@@ -13,7 +13,7 @@ import { surfaceY } from './structures';
 import { addLight, removeLights } from './lights';
 import { clearEnemyAttack, type EnemyMove } from './enemy-moves';
 import { rnd } from './utils';
-import { foeDmg, foeHp } from './progression';
+import { foeDmg, foeDmgAt, foeHp, foeHpAt, foeSpeed, foeSpeedAt, foeWindup, foeWindupAt, onLevelUp } from './progression';
 import type { Camp, Enemy, EnemyKind, EnemyModel } from './types';
 
 /** every kind of oni: size, toughness, speed, how hard and how far it hits, its look and its worth */
@@ -225,10 +225,26 @@ function stats(camp: Camp, kind: EnemyKind, x: number, z: number) {
   const dmg = Math.round(k.dmg * bd * (1 + t * 0.3) * (1 + (camp.threat?.defense ?? 0) * 0.11) * foeDmg());
   const bw = k.boss ? BOSS_WINDUP : 1, bs = k.boss ? BOSS_SPEED : 1;
   return {
-    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup * WINDUP_MULT * bw * (tg ? TEMPLE_WINDUP : 1), swings: 0, strikeT: 0, cd: 0,
-    big: k.heavy || !!k.elite || !!k.boss, enraged: false, phase: 1, speed: rnd(k.speed[0], k.speed[1]) * SPEED_MULT * bs * (tg ? TEMPLE_SPEED : 1), camp, wander: { x, z }
+    kind, hp, maxHp: hp, dmg, reach: k.reach, windup: k.windup * WINDUP_MULT * bw * (tg ? TEMPLE_WINDUP : 1) * foeWindup(), swings: 0, strikeT: 0, cd: 0,
+    big: k.heavy || !!k.elite || !!k.boss, enraged: false, phase: 1, speed: rnd(k.speed[0], k.speed[1]) * SPEED_MULT * bs * (tg ? TEMPLE_SPEED : 1) * foeSpeed(), camp, wander: { x, z }
   };
 }
+onLevelUp(({ from, to }) => {
+  const hpK = foeHpAt(to) / foeHpAt(from);
+  const dmgK = foeDmgAt(to) / foeDmgAt(from);
+  const spdK = foeSpeedAt(to) / foeSpeedAt(from);
+  const wndK = foeWindupAt(to) / foeWindupAt(from);
+  for (const en of enemies) {
+    if (en.hp <= 0) continue;
+    const ratio = en.maxHp > 0 ? en.hp / en.maxHp : 1;
+    en.maxHp = Math.max(1, Math.round(en.maxHp * hpK));
+    en.hp = Math.max(1, Math.round(en.maxHp * ratio));
+    en.dmg = Math.max(1, Math.round(en.dmg * dmgK));
+    en.speed *= spdK;
+    en.windup *= wndK;
+    if (en.staggerNeed) en.staggerNeed *= hpK;
+  }
+});
 function place(g: THREE.Object3D, x: number, z: number, skip?: THREE.Object3D) {
   g.position.set(x, surfaceY(x, z), z); g.rotation.y = Math.random() * Math.PI * 2;
   g.traverse(o => { if ((o as THREE.Mesh).isMesh && o !== skip) { o.castShadow = true; o.layers.enable(ACTOR_LAYER); } });

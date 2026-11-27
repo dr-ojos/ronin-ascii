@@ -11,6 +11,7 @@ import { showMsg } from './hud';
 import { collide, isFree } from './physics';
 import { sfx, panOf } from './sfx';
 import { player, state } from './state';
+import { foeRecovery, level } from './progression';
 import { surfaceY } from './structures';
 import { rnd } from './utils';
 import type { Affix, Enemy, EnemyKind } from './types';
@@ -45,13 +46,17 @@ export function affixesOf(en: Enemy): Affix[] {
   const rank = strong(en);
   if (!rank) return [];
   if (en.affixes) return en.affixes;
-  const tier = en.camp.tier, colossal = !!KINDS[en.kind].boss?.phase3, temple = !!en.camp.templeGuard;
-  const n = rank === 'elite' ? 1 : colossal ? 4 : Math.min(3, Math.max(2, 2 + (tier > 0.45 ? 1 : 0) + (temple ? 1 : 0)));
+  const tier = en.camp.tier, colossal = !!KINDS[en.kind].boss?.phase3, temple = !!en.camp.templeGuard, lv = level();
+  const n = rank === 'elite'
+    ? (lv >= 35 ? 2 : 1)
+    : colossal
+      ? Math.min(5, 4 + (lv >= 70 ? 1 : 0))
+      : Math.min(4, Math.max(2, 2 + (tier > 0.45 ? 1 : 0) + (temple ? 1 : 0) + (lv >= 40 ? 1 : 0)));
   const pool = ALL.slice(), out: Affix[] = [];
   while (out.length < n && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   en.affixes = out;
   en.stagger = 0; en.staggerNeed = en.maxHp * NEED[rank] * (colossal ? 1.45 : temple ? 1.3 : 1); en.dazedT = 0;
-  en.affixT = state.time + (colossal || temple ? rnd(2.2, 3.8) : rnd(3.0, 5.0));
+  en.affixT = state.time + (colossal || temple ? rnd(2.2, 3.8) : rnd(3.0, 5.0)) * foeRecovery();
   if (out.includes('furioso')) { en.speed *= 1.28; en.windup *= 0.82; en.dmg = Math.round(en.dmg * 1.18); }
   return out;
 }
@@ -140,7 +145,7 @@ export function updateBossMechanics(dt: number) {
     // one affix acts at a time, every few seconds
     const d = Math.hypot(player.pos.x - p.x, player.pos.z - p.z);
     const active = affixes.filter(a => a === 'gelido' || a === 'invocador' || (a === 'errante' && d > 4));
-    en.affixT = state.time + (apex ? rnd(2.4, 4.0) : rnd(3.2, 5.4));
+    en.affixT = state.time + (apex ? rnd(2.4, 4.0) : rnd(3.2, 5.4)) * foeRecovery();
     if (!active.length) continue;
     const a = active[Math.floor(Math.random() * active.length)];
     if (a === 'gelido') {

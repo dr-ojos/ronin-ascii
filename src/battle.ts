@@ -14,6 +14,7 @@ import { showMsg } from './hud';
 import { addPoints } from './score';
 import { sfx, panOf } from './sfx';
 import { player, state } from './state';
+import { level } from './progression';
 import { angDiff, rnd } from './utils';
 import type { Enemy, EnemyKind } from './types';
 
@@ -57,10 +58,11 @@ export function freeAgent(en: Enemy) {
   const def = KINDS[en.kind];
   return !!(def.boss || def.elite || def.beast || def.ranged || en.camp.wildlife) || en.reach > 6;
 }
-/** how many common foes may strike at once: more in long fights and against big groups */
+/** how many common foes may strike at once: more in long fights, against big groups, and at higher player levels */
 function maxStrikers() {
   const crowd = enemies.filter(e => !freeAgent(e) && e.state !== 'idle' && e.state !== 'return').length;
-  return 2 + (crowd >= 4 ? 1 : 0) + (battle.t > 30 ? 1 : 0);
+  const lv = level();
+  return 2 + (crowd >= 4 ? 1 : 0) + (battle.t > 30 ? 1 : 0) + (lv >= 25 ? 1 : 0) + (lv >= 60 ? 1 : 0);
 }
 function releaseTokens() {
   for (const [e, turn] of tokens) {
