@@ -24,7 +24,11 @@ const SUMMARY_DELAY = 2.4;     // the summary waits for the camp's own message
 
 /** who a boss calls when it is enraged */
 const REINFORCE: Partial<Record<EnemyKind, EnemyKind[]>> = {
-  jefe: ['oni', 'bruto', 'oni'], kuro: ['escudero', 'duelista', 'ashigaru'], tenguMayor: ['sombra', 'arquero', 'hechicero'],
+  jefe: ['oni', 'bruto', 'oni'], kuro: ['escudero', 'duelista', 'espectro'], tenguMayor: ['sombra', 'arquero', 'hechicero'],
+  kuroCapitan: ['escudero', 'ashigaru', 'duelista'],
+  kuroOnmyoji: ['hechicero', 'piromante', 'espectro'],
+  kuroJuggernaut: ['coloso', 'bruto', 'tambor'],
+  kuroSombra: ['sombra', 'acechador', 'duelista'],
   raijinMayor: ['coloso', 'tambor', 'bruto'],
   guardianViento: ['sombra', 'duelista', 'arquero'],
   guardianFuego: ['piromante', 'guadanero', 'bruto'],

@@ -351,8 +351,12 @@ function drawDungeonCanvas(ctx: CanvasRenderingContext2D, W: number, H: number, 
     return [W / 2 + u * cr - v * sr, H / 2 + u * sr + v * cr];
   };
   // Draw dungeon rooms & corridors
-  const themeFill: Record<string, string> = { castle: '#2c3040', cave: '#242b38', bridge: '#3d2830', boss: '#321c3d' };
-  const themeStroke: Record<string, string> = { castle: '#6b728e', cave: '#4eaec4', bridge: '#ff8f40', boss: '#b866ff' };
+  const themeFill: Record<string, string> = data.isKuro
+    ? { castle: '#331d22', cave: '#281d26', bridge: '#452420', boss: '#4a141c' }
+    : { castle: '#2c3040', cave: '#242b38', bridge: '#3d2830', boss: '#321c3d' };
+  const themeStroke: Record<string, string> = data.isKuro
+    ? { castle: '#9c4a52', cave: '#7d526e', bridge: '#ff8a40', boss: '#ff424e' }
+    : { castle: '#6b728e', cave: '#4eaec4', bridge: '#ff8f40', boss: '#b866ff' };
   for (const r of data.rects) {
     const corners: [number, number][] = [
       proj(data.ox + r.x0, data.oz + r.z0),
@@ -404,11 +408,13 @@ function drawDungeonCanvas(ctx: CanvasRenderingContext2D, W: number, H: number, 
   drawPlayer(ctx, px, py, u * cr - v * sr, u * sr + v * cr, fs * 0.55);
   if (!centerOnPlayer) {
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.font = `bold 13px ${FONT}`; ctx.fillStyle = '#c996ff';
-    ctx.fillText(`MAZMORRA · ${data.name.toUpperCase()}`, 14, 12);
+    ctx.font = `bold 13px ${FONT}`; ctx.fillStyle = data.isKuro ? '#ff6a6e' : '#c996ff';
+    ctx.fillText(data.isKuro ? 'CASTILLO KURO · INTERIOR' : `MAZMORRA · ${data.name.toUpperCase()}`, 14, 12);
     ctx.fillStyle = '#9aa3b5'; ctx.font = `bold 12px ${FONT}`;
     ctx.textBaseline = 'bottom';
-    ctx.fillText('◎ portal entrada  ·  $ cofres  ·  ✦ portal de regreso  ·  [N] cerrar', 14, H - 12);
+    ctx.fillText(data.isKuro
+      ? '◎ salida al patio  ·  $ cofres  ·  ✦ portal victorioso  ·  [N] cerrar'
+      : '◎ portal entrada  ·  $ cofres  ·  ✦ portal de regreso  ·  [N] cerrar', 14, H - 12);
   }
 }
 
@@ -649,7 +655,8 @@ export function updateMinimap(dt: number) {
   paintQueued(6);
   if (saveT <= 0) { saveT = 4; saveMinimap(); }
   if (state.inDungeon) {
-    zone.textContent = `${dungeonZoneName().toLowerCase()} · mazmorra`;
+    const d = dungeonMapData();
+    zone.textContent = `${dungeonZoneName().toLowerCase()} · ${d.isKuro ? 'castillo kuro' : 'mazmorra'}`;
     if (!state.photo) mapYaw = state.yaw;
     drawMinimap();
     const mapOpen = state.bigMap && !state.menu;

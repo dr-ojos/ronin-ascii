@@ -18,6 +18,7 @@ import { buildSettlements } from './settlements';
 import { buildCanyons } from './canyons';
 import { buildMesas } from './mesas';
 import { buildTemples } from './temple-grounds';
+import { isKuroCastleInterior } from './dungeon';
 import { player, state } from './state';
 import { rnd } from './utils';
 import { sfx } from './sfx';
@@ -208,30 +209,50 @@ const ATMOS = {
   }
 };
 let atmosRain = -1;
-let dungeonAtmos = false;
+let dungeonAtmos = 0; // 0 = overworld, 1 = portal dungeon, 2 = kuro castle interior
 function applyDungeonAtmosphere() {
-  dungeonAtmos = true;
+  const kuro = isKuroCastleInterior();
+  dungeonAtmos = kuro ? 2 : 1;
   sky.visible = false;
-  moonLight.color.setHex(0x6e6aa8);
-  moonLight.intensity = 1.65;
-  hemiLight.color.setHex(0x4c4878);
-  hemiLight.groundColor.setHex(0x16121e);
-  hemiLight.intensity = 0.85;
-  rimLight.color.setHex(0x8c7cff);
-  rimLight.intensity = 1.5;
-  keyLight.color.setHex(0xdcc8ff);
-  keyLight.intensity = 4.2;
-  renderer.toneMappingExposure = 1.16;
-  (scene.background as THREE.Color).setHex(0x07060e);
-  if (scene.fog instanceof THREE.FogExp2) {
-    scene.fog.color.setHex(0x0d0b1a);
-    scene.fog.density = 0.019;
+  if (kuro) {
+    // Torchlit crimson-obsidian Japanese fortress interior
+    moonLight.color.setHex(0xc96858);
+    moonLight.intensity = 1.6;
+    hemiLight.color.setHex(0x6e3a38);
+    hemiLight.groundColor.setHex(0x1a0c0e);
+    hemiLight.intensity = 0.88;
+    rimLight.color.setHex(0xff5240);
+    rimLight.intensity = 1.65;
+    keyLight.color.setHex(0xffd2a8);
+    keyLight.intensity = 4.35;
+    renderer.toneMappingExposure = 1.18;
+    (scene.background as THREE.Color).setHex(0x100709);
+    if (scene.fog instanceof THREE.FogExp2) {
+      scene.fog.color.setHex(0x180a0d);
+      scene.fog.density = 0.017;
+    }
+  } else {
+    moonLight.color.setHex(0x6e6aa8);
+    moonLight.intensity = 1.65;
+    hemiLight.color.setHex(0x4c4878);
+    hemiLight.groundColor.setHex(0x16121e);
+    hemiLight.intensity = 0.85;
+    rimLight.color.setHex(0x8c7cff);
+    rimLight.intensity = 1.5;
+    keyLight.color.setHex(0xdcc8ff);
+    keyLight.intensity = 4.2;
+    renderer.toneMappingExposure = 1.16;
+    (scene.background as THREE.Color).setHex(0x07060e);
+    if (scene.fog instanceof THREE.FogExp2) {
+      scene.fog.color.setHex(0x0d0b1a);
+      scene.fog.density = 0.019;
+    }
   }
   scene.environment = nightEnv;
 }
 function applyAtmosphere(r: number) {
   if (state.inDungeon) { applyDungeonAtmosphere(); return; }
-  dungeonAtmos = false;
+  dungeonAtmos = 0;
   sky.visible = true;
   atmosRain = r;
   const a = sunsetMode ? ATMOS.sunsetDry : ATMOS.nightDry;
@@ -502,8 +523,9 @@ updateChunks(player.pos.x, player.pos.z, 99);
 
 /** per frame: stream forest chunks, hide far landmarks, hand the lantern lights to the nearest lanterns */
 export function updateWorld() {
-  if (state.inDungeon !== dungeonAtmos) {
-    if (state.inDungeon) applyDungeonAtmosphere();
+  const wantAtmos = state.inDungeon ? (isKuroCastleInterior() ? 2 : 1) : 0;
+  if (wantAtmos !== dungeonAtmos) {
+    if (wantAtmos) applyDungeonAtmosphere();
     else { scene.environment = sunsetMode ? sunsetEnv : nightEnv; applyAtmosphere(state.rainAmt); }
   }
   if (!state.inDungeon) {

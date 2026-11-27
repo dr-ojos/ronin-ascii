@@ -498,6 +498,55 @@ function buildCastle() {
   });
   for (const s of [-1, 1]) { const f = box(g, 0.5, 1.4, 0.9, MT.gold, s * 2.4, ty + 3.6, -8); f.rotation.z = s * 0.3; }
   addLight({ x: cx, y: y + 10, z: cz + 6, color: 0xffa050, intensity: 9, distance: 24, decay: 1.3 });
+
+  // Grand interactive Keep Entrance Gate (Portón del Torreón) on the south face of the ishigaki
+  const doorZ = 11.1;
+  // Stone approach steps leading up to the keep threshold
+  for (let i = 0; i < 3; i++) {
+    box(g, 7.6 - i * 0.4, 0.22, 1.1, MT.stone, 0, i * 0.2, doorZ + 2.4 - i * 0.9);
+  }
+  // Crimson-gold gate frame & eaves
+  const brazierFlame = tagMat(M(0xff8a30, { emissive: 0xff5218, emissiveIntensity: 2.6 }), CLS.light);
+  for (const s of [-1, 1]) {
+    box(g, 0.95, 5.4, 1.3, MT.black, s * 2.7, 0, doorZ + 0.3);
+    box(g, 0.35, 5.0, 1.35, MT.vermilion, s * 2.15, 0, doorZ + 0.35);
+    // Slightly ajar crimson-lacquered fortress doors
+    const leaf = box(g, 1.85, 4.4, 0.24, MT.red, s * 1.45, 0.4, doorZ + 0.25);
+    leaf.rotation.y = s * 0.52;
+    box(g, 0.22, 4.4, 0.28, MT.gold, s * 2.05, 0.4, doorZ + 0.48);
+    // Flanking iron braziers with roaring crimson-amber fire
+    add(g, G.cyl, MT.black, s * 3.9, 0.55, doorZ + 1.8, 0.72, 1.1, 0.72);
+    add(g, G.sphere, brazierFlame, s * 3.9, 1.32, doorZ + 1.8, 0.48, 0.72, 0.48);
+    addCollider({ x: cx + s * 3.9, z: cz + doorZ + 1.8, r: 0.55 });
+    addLight({ x: cx + s * 3.9, y: y + 1.8, z: cz + doorZ + 2.0, color: 0xff5a28, intensity: 7.5, distance: 16, decay: 1.4, flicker: 0.7 });
+  }
+  box(g, 7.6, 0.75, 1.8, MT.black, 0, 5.2, doorZ + 0.35);
+  box(g, 7.2, 0.24, 1.9, MT.gold, 0, 5.05, doorZ + 0.35);
+  pyr(g, 9.2, 1.6, 3.6, MT.roof, 0, 5.95, doorZ + 0.4);
+  // Warm crimson interior glow beckoning the player inside
+  const portalGlow = tagMat(M(0xff3828, { emissive: 0xff2e20, emissiveIntensity: 2.2, transparent: true, opacity: 0.72 }), CLS.light);
+  add(g, G.plane, portalGlow, 0, 2.55, doorZ + 0.15, 3.2, 4.4, 1);
+  addLight({ x: cx, y: y + 2.6, z: cz + doorZ + 1.5, color: 0xff3c28, intensity: 9.5, distance: 20, decay: 1.35, flicker: 0.45 });
+
+  // Courtyard fortifications: West & East Guardhouses (Barracks & Forge Yard) and war banners
+  for (const s of [-1, 1]) {
+    const bx = s * 32, bz = 14;
+    box(g, 11, 3.4, 8, MT.plaster, bx, 0, bz);
+    box(g, 11.4, 0.5, 8.4, MT.black, bx, 0, bz);
+    pyr(g, 13.8, 2.2, 10.6, MT.roof, bx, 3.3, bz);
+    solidBox(cx + bx, cz + bz, 11.4, 8.4, 0, true);
+    hangingLantern(g, bx - s * 5.8, 2.7, bz, 0.65);
+    addLight({ x: cx + bx - s * 6.0, y: y + 2.8, z: cz + bz, color: 0xff8a3a, intensity: 5.5, distance: 15, decay: 1.4 });
+    // Inner courtyard war banners flanking the approach to the keep
+    for (const lz of [22, 32, 40]) {
+      const lx = s * 11.5;
+      post(g, 0.08, 5.2, MT.black, lx, 0, lz);
+      const ban = add(g, G.plane, MT.banner[(lz + (s > 0 ? 1 : 0)) % 3], lx, 3.2, lz, 0.95, 3.4, 1, Math.PI / 2);
+      ban.position.x += s * 0.5;
+      addCollider({ x: cx + lx, z: cz + lz, r: 0.25 });
+    }
+  }
+
   // approach: banners and lanterns
   for (let i = 0; i < 6; i++) for (const s of [-1, 1]) {
     const lz = H + 6 + i * 7, lx = s * 5.5;
@@ -505,10 +554,10 @@ function buildCastle() {
     const ban = add(g, G.plane, MT.banner[(i + (s > 0 ? 1 : 0)) % 3], lx, 3.1, lz, 0.9, 3.2, 1, Math.PI / 2); ban.position.x += s * 0.5;
     addCollider({ x: cx + lx, z: cz + lz, r: 0.2 });
   }
-  for (const s of [-1, 1]) stoneLantern(g, s * 4, 0, 10, cx + s * 4, cz + 10, 1.2);
+  for (const s of [-1, 1]) stoneLantern(g, s * 6.5, 0, 16, cx + s * 6.5, cz + 16, 1.2);
   // inner garden: gravel court in front of the keep
-  const court = new THREE.Mesh(new THREE.PlaneGeometry(30, 22), MT.gravel); court.rotation.x = -Math.PI / 2; court.position.set(0, 0.03, 23); g.add(court);
-  FOOTPRINTS.rects.push([cx, cz + 23, 30, 22, 0]);
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(36, 26), MT.gravel); court.rotation.x = -Math.PI / 2; court.position.set(0, 0.03, 25); g.add(court);
+  FOOTPRINTS.rects.push([cx, cz + 25, 36, 26, 0]);
   site(g, cx, cz, 75);
 }
 

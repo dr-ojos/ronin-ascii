@@ -142,7 +142,7 @@ function buildCamps() {
   // Offset bosses into their courtyards so they have room to move and telegraph their attacks.
   const TEMPLE_SITES = new Set(['pagoda', 'inari', 'torii']);
   const guarded: [string, EnemyKind[], P2?][] = [
-    ['castillo', ['kuro', 'escudero', 'escudero', 'ashigaru', 'arquero', 'oni'], [0, 25]],
+    ['castillo', ['kuroCapitan', 'escudero', 'escudero', 'duelista', 'ashigaru', 'arquero', 'tambor'], [0, 24]],
     ['cementerio', ['jefe', 'hechicero', 'espectro', 'oni', 'acechador']],
     ['pagoda', ['tenguMayor', 'sombra', 'duelista', 'arquero', 'hechicero', 'escudero'], [0, 13]],
     ['inari', ['raijinMayor', 'coloso', 'tambor', 'bruto', 'hechicero', 'escudero'], [-2, -10]],
@@ -154,6 +154,20 @@ function buildCamps() {
     const c = makeCamp(p.x + dx, p.z + dz, kinds, r, { name: p.name, templeGuard: TEMPLE_SITES.has(id) });
     const [cx, cz, ry] = chestSpot(c.x, c.z, 4, r * 0.8);
     c.chest = makeChest(cx, cz, ry, c.boss ? 'jefe' : 'guarida', c.tier, true);
+    camps.push(c);
+  }
+  // Additional Castle Kuro outer siege squads defending the South Gate, West Barracks & East Forge Yard
+  // (Señor Kuro and 3 more fortress bosses await inside the Keep!)
+  const castlePl = place('castillo');
+  const castleSquads: [string, EnemyKind[], P2, number][] = [
+    ['Puerta Sur del Castillo Kuro', ['escudero', 'ashigaru', 'ashigaru', 'arquero', 'arquero', 'oni'], [0, 44], 12],
+    ['Cuartel Oeste · Castillo Kuro', ['kensei', 'duelista', 'sombra', 'escudero', 'arquero', 'oni'], [-28, 30], 12],
+    ['Patio Este · Castillo Kuro', ['raijin', 'bruto', 'piromante', 'escudero', 'guadanero', 'tambor'], [28, 30], 12]
+  ];
+  for (const [name, kinds, [dx, dz], r] of castleSquads) {
+    const c = makeCamp(castlePl.x + dx, castlePl.z + dz, kinds, r, { name });
+    const [cx, cz, ry] = chestSpot(c.x, c.z, 3.5, Math.min(8, r * 0.65));
+    c.chest = makeChest(cx, cz, ry, c.elite ? 'guardian' : 'guarida', c.tier, true);
     camps.push(c);
   }
   // Occupied towns: multiple squads + new bosses for the town liberation mini-missions (liberation.ts).

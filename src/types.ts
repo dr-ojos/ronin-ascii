@@ -68,6 +68,7 @@ export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 
   | 'kagutsuchi' | 'daimyoHueso' | 'taikoDemonio'
   | 'gashadokuro' | 'susanooTempestad' | 'amaterasuCeniza'
   | 'senorCripta'
+  | 'kuroCapitan' | 'kuroOnmyoji' | 'kuroJuggernaut' | 'kuroSombra'
   | 'kensei' | 'tengu' | 'raijin';
 export type Affix = 'acorazado' | 'regenerador' | 'furioso' | 'gelido' | 'invocador' | 'errante' | 'espinoso';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';

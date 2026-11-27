@@ -27,6 +27,10 @@ import {
   buildCobweb, buildColumn, buildCrystalSpire, buildGlowingPool, buildSarcophagus,
   buildStoneArchway, buildWeaponRack, type ColliderSpec, type LightSpec
 } from './dungeon-art';
+import {
+  KURO_CASTLE_ARCHETYPE, KURO_CASTLE_BOSS, kuroKeepDoorPos,
+  type BossPreset, type DungeonArchetype, type GridRoom
+} from './kuro-castle';
 import type { Camp, Chest, EnemyKind } from './types';
 
 export { DUNGEON_ORIGIN, dungeonFloorY };
@@ -41,55 +45,6 @@ export interface DungeonRect {
   x0: number; x1: number; z0: number; z1: number;
   theme: 'castle' | 'cave' | 'bridge' | 'boss';
   name: string;
-}
-
-interface GridRoom {
-  gx0: number; gx1: number; gz0: number; gz1: number;
-  theme: 'castle' | 'cave' | 'bridge' | 'boss';
-  name: string;
-}
-
-interface DungeonRoomSpec {
-  id: string;
-  name: string;
-  lx: number; lz: number;
-  r: number;
-  kinds: EnemyKind[];
-  chest?: { lx: number; lz: number; ry: number; kind: Chest['kind']; sealed: boolean };
-  bossRoom?: boolean;
-  eliteKind?: EnemyKind;
-}
-
-interface SecretChestSpec {
-  lx: number; lz: number; ry: number; tier: number;
-}
-
-interface PropAction {
-  kind: 'carpet' | 'arch' | 'brazier' | 'banner' | 'column' | 'sarcophagus' | 'rack' | 'web' | 'crystal' | 'pool' | 'chasm' | 'ritualRing';
-  x: number; y?: number; z: number;
-  w?: number; d?: number; h?: number; r?: number; ry?: number;
-  alongZ?: boolean; obsidian?: boolean; violet?: boolean; cyan?: boolean; scale?: number; withLight?: boolean;
-}
-
-interface DungeonArchetype {
-  id: 'fortaleza' | 'catacumbas' | 'cavernas';
-  name: string;
-  gridRooms: GridRoom[];
-  roomSpecs: DungeonRoomSpec[];
-  secretChests: SecretChestSpec[];
-  props: PropAction[];
-  stairGzStart: number; // south-most gz of stairs (e.g. -82 -> lz -326..-338)
-  bossCenterGz: number;
-  victoryPortalGz: number;
-  bossGx: number;
-}
-
-interface BossPreset {
-  kind: EnemyKind;
-  escort: EnemyKind[];
-  portalColors: [number, number, number];
-  colorHex: string;
-  lightColor: number;
 }
 
 const DUNGEON_BOSSES: BossPreset[] = [
@@ -388,10 +343,23 @@ let activeVariant: ActiveVariant = {
   mirrorX: false,
   spot: PORTAL_SPOTS[0]
 };
+let inKuroCastle = false;
+let kuroConquered = false;
 let activeRects: DungeonRect[] = [];
 let activeBounds = { minX: -70, maxX: 70, minZ: -380, maxZ: 12 };
 let overworldPortalOpen = false;
 let portalRespawnT = 0;
+
+/** Returns the active interior configuration (either Castle Kuro or the current random portal dungeon). */
+function currentInterior(): { archetype: DungeonArchetype; boss: BossPreset; mirrorX: boolean } {
+  if (inKuroCastle) {
+    return { archetype: KURO_CASTLE_ARCHETYPE, boss: KURO_CASTLE_BOSS, mirrorX: false };
+  }
+  return activeVariant;
+}
+
+export const isKuroCastleInterior = () => state.inDungeon && inKuroCastle;
+export const isKuroCastleConquered = () => kuroConquered;
 
 const ENTRANCE_PORTAL_LOCAL = { x: 0, z: 7.4 };
 let victoryPortalLocal = { x: 0, z: -369.5 };
@@ -401,7 +369,7 @@ export function dungeonZoneName(wx = player.pos.x, wz = player.pos.z): string {
   for (const r of activeRects) {
     if (lx >= r.x0 && lx <= r.x1 && lz >= r.z0 && lz <= r.z1) return r.name;
   }
-  return activeVariant.archetype.name;
+  return currentInterior().archetype.name;
 }
 
 /** Current open overworld portal info (or null while closed / waiting to respawn). */
@@ -611,7 +579,7 @@ function disposeDungeonGeometry() {
 
 function buildDungeonGeometry() {
   disposeDungeonGeometry();
-  const { archetype, boss, mirrorX } = activeVariant;
+  const { archetype, boss, mirrorX } = currentInterior();
   const mx = (v: number) => (mirrorX ? -v : v);
 
   const g = new THREE.Group();
@@ -755,12 +723,23 @@ function buildDungeonGeometry() {
   addPropBox(g, 4.8, 0.04, 34, DM.carpet, bx, by, bossCenterZ + 5, false);
   for (const [dx, dz] of [[-16, 12], [16, 12], [-19, 0], [19, 0], [-16, -12], [16, -12]] as [number, number][]) {
     buildColumn(g, bx + dx, by, bossCenterZ + dz, OX, OZ, dungeonColliderSpecs, 6.4, 1.1, true);
-    buildBrazier(g, bx + dx + (dx < 0 ? 1.8 : -1.8), by, bossCenterZ + dz, OX, OZ, dungeonLightSpecs, true);
+    buildBrazier(g, bx + dx + (dx < 0 ? 1.8 : -1.8), by, bossCenterZ + dz, OX, OZ, dungeonLightSpecs, !inKuroCastle);
   }
-  buildCrystalSpire(g, bx - 22, by, bossCenterZ + 16, OX, OZ, dungeonLightSpecs, false, 1.7);
-  buildCrystalSpire(g, bx + 22, by, bossCenterZ + 16, OX, OZ, dungeonLightSpecs, false, 1.7);
-  buildCrystalSpire(g, bx - 22, by, bossCenterZ - 16, OX, OZ, dungeonLightSpecs, true, 1.9);
-  buildCrystalSpire(g, bx + 22, by, bossCenterZ - 16, OX, OZ, dungeonLightSpecs, true, 1.9);
+  if (inKuroCastle) {
+    // Imperial war banners and weapon racks flanking Señor Kuro's crimson throne room
+    for (const [dx, dz, ry] of [
+      [-23, 14, Math.PI / 2], [23, 14, -Math.PI / 2],
+      [-23, -14, Math.PI / 2], [23, -14, -Math.PI / 2]
+    ] as [number, number, number][]) {
+      buildBannerStand(g, bx + dx, by, bossCenterZ + dz, ry, false);
+      buildBrazier(g, bx + dx + (dx < 0 ? 2.2 : -2.2), by, bossCenterZ + dz, OX, OZ, dungeonLightSpecs, false);
+    }
+  } else {
+    buildCrystalSpire(g, bx - 22, by, bossCenterZ + 16, OX, OZ, dungeonLightSpecs, false, 1.7);
+    buildCrystalSpire(g, bx + 22, by, bossCenterZ + 16, OX, OZ, dungeonLightSpecs, false, 1.7);
+    buildCrystalSpire(g, bx - 22, by, bossCenterZ - 16, OX, OZ, dungeonLightSpecs, true, 1.9);
+    buildCrystalSpire(g, bx + 22, by, bossCenterZ - 16, OX, OZ, dungeonLightSpecs, true, 1.9);
+  }
 
   const sigilMat = tagMat(new THREE.MeshBasicMaterial({
     color: boss.lightColor, transparent: true, opacity: 0.48, depthWrite: false, blending: THREE.AdditiveBlending
@@ -829,7 +808,7 @@ function populateDungeonRun() {
   run.returnPortalOpen = false;
   if (victoryPortal) victoryPortal.group.visible = false;
 
-  const { archetype, boss, mirrorX } = activeVariant;
+  const { archetype, boss, mirrorX } = currentInterior();
   const mx = (v: number) => (mirrorX ? -v : v);
   const threat = equipmentThreat();
 
@@ -840,7 +819,7 @@ function populateDungeonRun() {
   }
 
   for (const sp of archetype.roomSpecs) {
-    const tier = sp.bossRoom ? 0.76 : 0.42 + Math.min(0.28, Math.abs(sp.lz) / 1000);
+    const tier = sp.bossRoom ? (inKuroCastle ? 0.85 : 0.76) : sp.bossKind ? 0.68 : 0.44 + Math.min(0.28, Math.abs(sp.lz) / 1000);
     const kinds: EnemyKind[] = sp.bossRoom ? [boss.kind, ...boss.escort] : sp.kinds.slice();
     let chest: Chest | undefined;
     if (sp.chest) {
@@ -854,7 +833,7 @@ function populateDungeonRun() {
       r: sp.r,
       leash: sp.r + 14,
       size: kinds.length,
-      boss: sp.bossRoom ? boss.kind : undefined,
+      boss: sp.bossRoom ? boss.kind : sp.bossKind,
       elite: sp.eliteKind,
       tier,
       threat,
@@ -890,9 +869,11 @@ export function onDungeonCampCleared(camp: Camp): boolean {
   if (camp.chest) unseal(camp.chest);
 
   if (camp.dungeonRoom === 'trono' && !run.bossDefeated) {
+    const { archetype, boss } = currentInterior();
     run.bossDefeated = true;
     run.returnPortalOpen = true;
     run.clearedRuns++;
+    if (inKuroCastle) kuroConquered = true;
     if (victoryPortal) {
       victoryPortal.group.visible = true;
       const vx = OX + victoryPortalLocal.x;
@@ -903,36 +884,47 @@ export function onDungeonCampCleared(camp: Camp): boolean {
       burst(new THREE.Vector3(vx, vy + 1.8, vz), 0x52ffb4, 130, 7.8, 0.16);
       burst(new THREE.Vector3(vx, vy + 2.0, vz), 0xffd27a, 95, 6.8, 0.14);
     }
-    const bonus = 2800;
-    addPoints(bonus, `${activeVariant.archetype.name.toLowerCase()} completada`);
-    state.jade += 3;
+    const bonus = inKuroCastle ? 5000 : 2800;
+    const jadeGain = inKuroCastle ? 5 : 3;
+    addPoints(bonus, inKuroCastle ? 'castillo kuro conquistado' : `${archetype.name.toLowerCase()} completada`);
+    state.jade += jadeGain;
     saveVault();
     player.hp = player.maxHp;
     sfx.taiko(1.35);
     sfx.chime(true);
     skyFlash(0.65);
     showMsg(
-      `✦ ¡ ${KINDS[activeVariant.boss.kind].name.toUpperCase()} ABATIDO ! ✦\n+${bonus} puntos · +3 sellos de jade · vida al máximo\nAbre el cofre del jefe y cruza el PORTAL DE REGRESO`,
-      5.0
+      inKuroCastle
+        ? `✦ ¡ ${KINDS[boss.kind].name.toUpperCase()} DERROTADO ! ✦\n+${bonus} puntos · +${jadeGain} sellos de jade · vida al máximo\n¡Has conquistado el Castillo Kuro! Abre el cofre real y cruza el PORTAL DE REGRESO`
+        : `✦ ¡ ${KINDS[boss.kind].name.toUpperCase()} ABATIDO ! ✦\n+${bonus} puntos · +${jadeGain} sellos de jade · vida al máximo\nAbre el cofre del jefe y cruza el PORTAL DE REGRESO`,
+      5.2
     );
     return true;
   }
 
   const cleared = run.camps.filter(c => c.roster.length === 0).length;
+  const bossCleared = camp.boss ? `\n✦ Jefe de ala derrotado: ${KINDS[camp.boss].name} · Cofre de jefe abierto` : '';
   showMsg(
-    `— ${camp.name?.toUpperCase() ?? 'SALA'} DESPEJADA —\nEl cofre se ha abierto · Salas ${cleared}/${run.camps.length}`,
-    2.6
+    `— ${camp.name?.toUpperCase() ?? 'SALA'} DESPEJADA —${bossCleared}\nSalas ${cleared}/${run.camps.length}`,
+    camp.boss ? 3.4 : 2.6
   );
   return true;
 }
 
 // ------------------------------------------------------------ enter / exit transitions
-export function enterDungeon() {
+function startInteriorSession(isKuro: boolean) {
   if (state.inDungeon || !state.playing || state.dead || state.menu) return;
+  inKuroCastle = isKuro;
   buildDungeonGeometry();
 
-  const { spot, archetype, boss } = activeVariant;
-  run.returnPos.set(spot.x - 3.6, groundY(spot.x - 3.6, spot.z + 2.6), spot.z + 2.6);
+  const { archetype, boss } = currentInterior();
+  if (isKuro) {
+    const gate = kuroKeepDoorPos();
+    run.returnPos.set(gate.returnX, groundY(gate.returnX, gate.returnZ), gate.returnZ);
+  } else {
+    const { spot } = activeVariant;
+    run.returnPos.set(spot.x - 3.6, groundY(spot.x - 3.6, spot.z + 2.6), spot.z + 2.6);
+  }
 
   for (let i = enemies.length - 1; i >= 0; i--) {
     enemies[i].camp.active = false;
@@ -964,21 +956,33 @@ export function enterDungeon() {
   burst(new THREE.Vector3(player.pos.x, player.pos.y + 1.3, player.pos.z), boss.lightColor, 70, 6.5, 0.14);
   skyFlash(0.32);
   sfx.dash();
-  sfx.taiko(1.1);
+  sfx.taiko(1.15);
   showMsg(
-    `✦ MAZMORRA: ${archetype.name.toUpperCase()} ✦\nExplora sus pasillos y cofres · Jefe final: ${KINDS[boss.kind].name}`,
-    4.2
+    isKuro
+      ? `✦ INTERIOR DEL CASTILLO KURO ✦\nExplora las alas del torreón, vence a sus 4 jefes y desafía al Señor Kuro`
+      : `✦ MAZMORRA: ${archetype.name.toUpperCase()} ✦\nExplora sus pasillos y cofres · Jefe final: ${KINDS[boss.kind].name}`,
+    4.5
   );
+}
+
+export function enterDungeon() {
+  startInteriorSession(false);
+}
+
+export function enterKuroCastle() {
+  startInteriorSession(true);
 }
 
 export function exitDungeon(silent = false, targetPos?: THREE.Vector3) {
   if (!state.inDungeon) return;
+  const wasKuro = inKuroCastle;
   const completed = run.bossDefeated;
-  const completedName = activeVariant.archetype.name;
+  const completedName = currentInterior().archetype.name;
   const portalSpot = activeVariant.spot;
 
   clearDungeonEntities();
   state.inDungeon = false;
+  inKuroCastle = false;
   state.indoors = false;
   if (dungeonGroup) dungeonGroup.visible = false;
 
@@ -992,33 +996,39 @@ export function exitDungeon(silent = false, targetPos?: THREE.Vector3) {
   player.airDashUsed = false;
   player.invuln = Math.max(player.invuln, 1.2);
   player.pos.set(dest.x, y, dest.z);
-  player.face = Math.PI;
+  player.face = wasKuro ? 0 : Math.PI;
   state.yaw = 0;
   sam.root.position.copy(player.pos);
   sam.root.rotation.y = player.face;
   snapCamera();
 
-  // If completed: close the overworld portal and schedule a brand-new random one later!
-  if (completed) {
+  // If completed a random overworld portal dungeon: close the portal and schedule a brand-new random one later!
+  if (completed && !wasKuro) {
     const py = groundY(portalSpot.x, portalSpot.z);
     burst(new THREE.Vector3(portalSpot.x, py + 2.0, portalSpot.z), activeVariant.boss.lightColor, 100, 7.2, 0.16);
     impactRing(new THREE.Vector3(portalSpot.x, py + 0.15, portalSpot.z), 0x52ffb4, 5.5);
     destroyOverworldPortal();
     disposeDungeonGeometry();
     portalRespawnT = rnd(55, 95);
+  } else if (wasKuro) {
+    disposeDungeonGeometry();
   }
 
   if (!silent) {
-    const col = completed ? 0x52ffb4 : activeVariant.boss.lightColor;
+    const col = completed ? 0x52ffb4 : wasKuro ? KURO_CASTLE_BOSS.lightColor : activeVariant.boss.lightColor;
     impactRing(player.pos, col, 4.6);
     burst(new THREE.Vector3(player.pos.x, player.pos.y + 1.3, player.pos.z), col, 75, 6.8, 0.15);
     skyFlash(0.28);
     sfx.dash();
     sfx.chime(completed);
     showMsg(
-      completed
-        ? `✦ PORTAL SELLADO ✦\nHas conquistado ${completedName}\nUn nuevo portal aparecerá en otro lugar del mundo`
-        : `✦ HAS SALIDO DE LA MAZMORRA ✦\nDe vuelta en ${portalSpot.label}`,
+      wasKuro
+        ? (completed
+          ? `✦ ¡ CASTILLO KURO CONQUISTADO ! ✦\nEl Señor Kuro ha caído y el torreón es tuyo`
+          : `✦ PATIO DEL CASTILLO KURO ✦\nHas salido del interior del torreón`)
+        : (completed
+          ? `✦ PORTAL SELLADO ✦\nHas conquistado ${completedName}\nUn nuevo portal aparecerá en otro lugar del mundo`
+          : `✦ HAS SALIDO DE LA MAZMORRA ✦\nDe vuelta en ${portalSpot.label}`),
       3.8
     );
   }
@@ -1029,6 +1039,8 @@ export function resetDungeon() {
     clearDungeonEntities();
     state.inDungeon = false;
   }
+  inKuroCastle = false;
+  kuroConquered = false;
   disposeDungeonGeometry();
   run.bossDefeated = false;
   run.returnPortalOpen = false;
@@ -1038,7 +1050,7 @@ export function resetDungeon() {
 }
 
 // ------------------------------------------------------------ per-frame update & interaction
-let nearPortal: 'enter' | 'retreat' | 'victory' | null = null;
+let nearPortal: 'enter' | 'enterKuro' | 'retreat' | 'victory' | null = null;
 let roomScanT = 0;
 
 function animatePortal(p: PortalVisual | null, dt: number) {
@@ -1059,6 +1071,15 @@ export function updateDungeon(dt: number) {
 
   nearPortal = null;
   if (!state.inDungeon) {
+    // Always check Castle Kuro Keep Doors in the overworld
+    const gate = kuroKeepDoorPos();
+    const dKuro = Math.hypot(player.pos.x - gate.x, player.pos.z - gate.z);
+    if (dKuro < 4.6 && !state.dead) {
+      nearPortal = 'enterKuro';
+      state.prompt = kuroConquered
+        ? '[ E ] Volver a entrar al interior del Castillo Kuro'
+        : '[ E ] Entrar al interior del Castillo Kuro · 4 jefes';
+    }
     // Handle random portal respawn timer after completing a dungeon
     if (!overworldPortalOpen && state.playing && !state.dead) {
       portalRespawnT -= dt;
@@ -1067,7 +1088,7 @@ export function updateDungeon(dt: number) {
       }
       return;
     }
-    if (overworldPortalOpen) {
+    if (overworldPortalOpen && !nearPortal) {
       const { spot, archetype } = activeVariant;
       const d = Math.hypot(player.pos.x - spot.x, player.pos.z - spot.z);
       if (d < 3.6 && !state.dead) {
@@ -1087,8 +1108,18 @@ export function updateDungeon(dt: number) {
         spawnDungeonRoom(camp);
         if (camp.dungeonRoom === 'trono') {
           sfx.roar({});
-          sfx.taiko(1.25);
-          showMsg(`— ${KINDS[activeVariant.boss.kind].name.toUpperCase()} —\n¡El señor de la mazmorra te desafía!`, 3.4);
+          sfx.taiko(1.3);
+          const bossName = KINDS[currentInterior().boss.kind].name.toUpperCase();
+          showMsg(
+            inKuroCastle
+              ? `— ${bossName} —\n¡El Shōgun del Castillo Kuro desenvaina su Ōdachi!`
+              : `— ${bossName} —\n¡El señor de la mazmorra te desafía!`,
+            3.6
+          );
+        } else if (camp.boss) {
+          sfx.roar({});
+          sfx.taiko(1.15);
+          showMsg(`— ${KINDS[camp.boss].name.toUpperCase()} —\n¡Guardián de ${camp.name ?? 'esta ala'}!`, 3.0);
         }
       }
     }
@@ -1097,13 +1128,17 @@ export function updateDungeon(dt: number) {
   const dRetreat = Math.hypot(player.pos.x - (OX + ENTRANCE_PORTAL_LOCAL.x), player.pos.z - (OZ + ENTRANCE_PORTAL_LOCAL.z));
   if (dRetreat < 3.4 && !state.dead) {
     nearPortal = 'retreat';
-    state.prompt = '[ E ] Salir de la mazmorra · Volver al mundo principal';
+    state.prompt = inKuroCastle
+      ? '[ E ] Salir al patio del Castillo Kuro'
+      : '[ E ] Salir de la mazmorra · Volver al mundo principal';
   }
   if (run.returnPortalOpen) {
     const dWin = Math.hypot(player.pos.x - (OX + victoryPortalLocal.x), player.pos.z - (OZ + victoryPortalLocal.z));
     if (dWin < 3.8 && !state.dead) {
       nearPortal = 'victory';
-      state.prompt = '[ E ] Cruzar el Portal de Regreso y sellar la mazmorra';
+      state.prompt = inKuroCastle
+        ? '[ E ] Salir victorioso del Castillo Kuro'
+        : '[ E ] Cruzar el Portal de Regreso y sellar la mazmorra';
     }
   }
 }
@@ -1112,6 +1147,10 @@ export function tryUseDungeonPortal(): boolean {
   if (!state.playing || state.dead || state.menu || !nearPortal) return false;
   if (nearPortal === 'enter') {
     enterDungeon();
+    return true;
+  }
+  if (nearPortal === 'enterKuro') {
+    enterKuroCastle();
     return true;
   }
   if (nearPortal === 'retreat' || nearPortal === 'victory') {
@@ -1124,20 +1163,26 @@ export function tryUseDungeonPortal(): boolean {
 // ------------------------------------------------------------ HUD & Minimap queries
 export function dungeonStatus() {
   if (!state.inDungeon) return null;
+  const { archetype, boss } = currentInterior();
   const totalRooms = run.camps.length;
   const clearedRooms = run.camps.filter(c => c.roster.length === 0).length;
   const totalChests = run.chests.length;
   const openedChests = run.chests.filter(c => c.state === 'open').length;
   const remainingFoes = run.camps.reduce((sum, c) => sum + c.roster.length, 0);
+  const bossCamps = run.camps.filter(c => !!c.boss);
+  const bossesDefeated = bossCamps.filter(c => c.roster.length === 0).length;
   return {
-    name: activeVariant.archetype.name,
-    bossName: KINDS[activeVariant.boss.kind].name,
+    isKuro: inKuroCastle,
+    name: archetype.name,
+    bossName: KINDS[boss.kind].name,
     zone: dungeonZoneName(),
     clearedRooms,
     totalRooms,
     openedChests,
     totalChests,
     remainingFoes,
+    bossesDefeated,
+    totalBosses: bossCamps.length,
     bossDefeated: run.bossDefeated,
     returnPortalOpen: run.returnPortalOpen
   };
@@ -1147,16 +1192,22 @@ export function dungeonHud(): string {
   const s = dungeonStatus();
   if (!s) return '';
   const bar = '#'.repeat(s.clearedRooms) + '-'.repeat(Math.max(0, s.totalRooms - s.clearedRooms));
+  const title = s.isKuro ? 'CASTILLO KURO · INTERIOR' : `MAZMORRA · ${s.name.toUpperCase()}`;
+  const bossInfo = s.totalBosses > 1
+    ? `jefes ${s.bossesDefeated}/${s.totalBosses} · final: ${s.bossName}`
+    : `jefe final: ${s.bossName}`;
   const goal = s.returnPortalOpen
     ? '\n  <span class="jade">✦ portal de regreso abierto en el trono</span>'
-    : `\n  <span class="r">jefe final:</span> ${s.bossName}`;
-  return `<span class="jade">MAZMORRA · ${s.name.toUpperCase()}</span>\n` +
+    : `\n  <span class="r">${bossInfo}</span>`;
+  return `<span class="jade">${title}</span>\n` +
     `  salas [<span class="jade">${bar}</span>] ${s.clearedRooms}/${s.totalRooms}  <span class="y">cofres ${s.openedChests}/${s.totalChests}</span>${goal}\n`;
 }
 
 export function dungeonMapData() {
+  const { archetype } = currentInterior();
   return {
-    name: activeVariant.archetype.name,
+    isKuro: inKuroCastle,
+    name: archetype.name,
     ox: OX,
     oz: OZ,
     rects: activeRects,

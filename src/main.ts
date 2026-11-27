@@ -28,7 +28,7 @@ import './account';
 import './title';
 import { devSetLevel, gainXp } from './progression';
 import { activeWorldEvent, resetWorldEvents, showcaseWorldEvent, triggerWorldEvent } from './world-events';
-import { buildDungeonPortal, enterDungeon, exitDungeon, spawnOverworldPortal } from './dungeon';
+import { buildDungeonPortal, enterDungeon, enterKuroCastle, exitDungeon, spawnOverworldPortal } from './dungeon';
 import { enemies } from './enemies';
 
 const clock = new THREE.Clock();
@@ -82,7 +82,7 @@ addEventListener('resize', () => {
 
 // dev only: lets the browser console move the samurai around the world (__ronin.player.pos.set(x, 0, z))
 if (import.meta.env.DEV) {
-  Object.assign(window, { __ronin: { state, player, scene, renderer, camera, THREE, enemies, progress: { gainXp, setLevel: devSetLevel }, triggerEvent: triggerWorldEvent, showcaseEvent: showcaseWorldEvent, activeEvent: activeWorldEvent, resetEvents: resetWorldEvents, dungeon: { enter: enterDungeon, exit: exitDungeon, spawnPortal: () => spawnOverworldPortal(false, true) } } });
+  Object.assign(window, { __ronin: { state, player, scene, renderer, camera, THREE, enemies, progress: { gainXp, setLevel: devSetLevel }, triggerEvent: triggerWorldEvent, showcaseEvent: showcaseWorldEvent, activeEvent: activeWorldEvent, resetEvents: resetWorldEvents, dungeon: { enter: enterDungeon, exit: exitDungeon, spawnPortal: () => spawnOverworldPortal(false, true) }, kuroCastle: { enter: enterKuroCastle, exit: exitDungeon } } });
   // Dev-only hotkeys (7 / 8 / 9) to summon and inspect each colossal world-event boss right in front of you
   addEventListener('keydown', e => {
     if (e.repeat || !state.playing || state.dead || state.menu) return;
