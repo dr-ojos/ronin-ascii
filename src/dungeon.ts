@@ -802,6 +802,64 @@ function clearDungeonEntities() {
   removeLights(DUNGEON_OWNER);
 }
 
+// ------------------------------------------------------------ Dynamic Large Variable Enemy Horde Generator
+const SWARM_POOLS: Record<'castle' | 'cave' | 'crypt' | 'chaos', EnemyKind[]> = {
+  castle: ['oni', 'ashigaru', 'escudero', 'arquero', 'duelista', 'guadanero', 'bruto', 'tambor'],
+  cave: ['arana', 'arana', 'escorpion', 'escorpion', 'acechador', 'sombra', 'hechicero', 'bruto'],
+  crypt: ['espectro', 'espectro', 'hechicero', 'piromante', 'guadanero', 'sombra', 'coloso', 'tambor'],
+  chaos: ['oni', 'escudero', 'duelista', 'arana', 'escorpion', 'espectro', 'piromante', 'hechicero', 'bruto', 'sombra', 'acechador', 'coloso', 'tambor']
+};
+const ELITE_POOL: EnemyKind[] = ['kensei', 'tengu', 'raijin'];
+
+function pickFrom<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** Builds a large, highly variable enemy squad (7–12 foes!) tailored to room depth & theme. */
+function rollDungeonSquad(sp: DungeonArchetype['roomSpecs'][number], boss: BossPreset): { kinds: EnemyKind[]; elite?: EnemyKind } {
+  if (sp.bossRoom) {
+    const extraPool: EnemyKind[] = ['espectro', 'duelista', 'piromante', 'hechicero', 'sombra', 'escudero', 'guadanero'];
+    const extras = [pickFrom(extraPool), pickFrom(extraPool)];
+    if (Math.random() < 0.65) extras.push(pickFrom(extraPool));
+    return { kinds: [boss.kind, ...boss.escort, ...extras] };
+  }
+
+  const depth = Math.min(1, Math.abs(sp.lz) / 340);
+  const targetCount = Math.round(7 + depth * 4 + Math.random() * 2); // 7–12 enemies per room!
+
+  const hasBeasts = sp.kinds.some(k => k === 'arana' || k === 'escorpion');
+  const hasUndead = sp.kinds.some(k => k === 'espectro' || k === 'coloso' || k === 'piromante');
+  const poolKey: keyof typeof SWARM_POOLS =
+    Math.random() < 0.28 ? 'chaos'
+      : hasBeasts ? (Math.random() < 0.76 ? 'cave' : 'chaos')
+      : hasUndead ? (Math.random() < 0.76 ? 'crypt' : 'chaos')
+      : (Math.random() < 0.72 ? 'castle' : 'crypt');
+  const pool = SWARM_POOLS[poolKey];
+
+  const out: EnemyKind[] = [];
+  if (sp.bossKind) out.push(sp.bossKind);
+
+  let elite: EnemyKind | undefined = sp.eliteKind;
+  if (!sp.bossKind) {
+    if (elite) {
+      elite = Math.random() < 0.55 ? pickFrom(ELITE_POOL) : elite;
+      out.push(elite);
+    } else if (depth > 0.3 && Math.random() < 0.45) {
+      elite = pickFrom(ELITE_POOL);
+      out.push(elite);
+    }
+  }
+
+  const baseSeeds = sp.kinds.filter(k => k !== sp.bossKind && k !== 'kensei' && k !== 'tengu' && k !== 'raijin');
+  for (let i = 0; i < Math.min(3, baseSeeds.length); i++) {
+    out.push(pickFrom(baseSeeds));
+  }
+  while (out.length < targetCount) {
+    out.push(pickFrom(pool));
+  }
+  return { kinds: out, elite };
+}
+
 function populateDungeonRun() {
   clearDungeonEntities();
   for (const col of dungeonColliderSpecs) addCollider(col, DUNGEON_OWNER);
@@ -823,7 +881,8 @@ function populateDungeonRun() {
 
   for (const sp of archetype.roomSpecs) {
     const tier = sp.bossRoom ? (inKuroCastle ? 0.85 : 0.76) : sp.bossKind ? 0.68 : 0.44 + Math.min(0.28, Math.abs(sp.lz) / 1000);
-    const kinds: EnemyKind[] = sp.bossRoom ? [boss.kind, ...boss.escort] : sp.kinds.slice();
+    const rolled = rollDungeonSquad(sp, boss);
+    const kinds = rolled.kinds;
     let chest: Chest | undefined;
     if (sp.chest) {
       chest = makeChest(OX + mx(sp.chest.lx), OZ + sp.chest.lz, mirrorX ? -sp.chest.ry : sp.chest.ry, sp.chest.kind, tier, sp.chest.sealed, DUNGEON_OWNER);
@@ -834,10 +893,10 @@ function populateDungeonRun() {
       x: OX + mx(sp.lx),
       z: OZ + sp.lz,
       r: sp.r,
-      leash: sp.r + 14,
+      leash: sp.r + 16,
       size: kinds.length,
       boss: sp.bossRoom ? boss.kind : sp.bossKind,
-      elite: sp.eliteKind,
+      elite: rolled.elite,
       tier,
       threat,
       kinds,
@@ -849,6 +908,35 @@ function populateDungeonRun() {
       dungeonRoom: sp.id
     };
     run.camps.push(camp);
+  }
+
+  // Random corridor & bridge ambush squads so hallways are packed with unpredictable foes!
+  const corridors = activeRects.filter(r =>
+    r.theme === 'bridge' || r.name.includes('Pasillo') || r.name.includes('Corredor') || r.name.includes('Túnel') || r.name.includes('Galería')
+  );
+  for (const cor of corridors) {
+    if (Math.random() > 0.6) continue;
+    const cx = (cor.x0 + cor.x1) / 2, cz = (cor.z0 + cor.z1) / 2;
+    if (Math.abs(cz) < 18) continue;
+    if (run.camps.some(c => Math.hypot(c.x - (OX + cx), c.z - (OZ + cz)) < 22)) continue;
+    const pool = cor.theme === 'cave' ? SWARM_POOLS.cave : SWARM_POOLS.chaos;
+    const n = 4 + Math.floor(Math.random() * 4); // 4–7 ambushers per corridor
+    const kinds: EnemyKind[] = Array.from({ length: n }, () => pickFrom(pool));
+    run.camps.push({
+      x: OX + cx,
+      z: OZ + cz,
+      r: 9,
+      leash: 20,
+      size: kinds.length,
+      tier: 0.46 + Math.min(0.25, Math.abs(cz) / 1000),
+      threat,
+      kinds,
+      roster: kinds.slice(),
+      active: false,
+      clearedAt: -1,
+      name: cor.name,
+      dungeonRoom: `ambush_${cor.name}`
+    });
   }
 }
 
