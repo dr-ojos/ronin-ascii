@@ -12,7 +12,7 @@ import { showMsg } from './hud';
 import { discovered, camps } from './encounters';
 import { isTownLiberated, isTownMissionStarted, townCampsOf, type TownId } from './liberation';
 import { activeWorldEvent } from './world-events';
-import { OVERWORLD_PORTAL, dungeonMapData, dungeonZoneName } from './dungeon';
+import { activeDungeonPortal, dungeonMapData, dungeonZoneName } from './dungeon';
 import { POIS } from './landmarks';
 import { chests } from './loot';
 import { smithPos } from './shop';
@@ -261,19 +261,20 @@ function stamp(ctx: CanvasRenderingContext2D, proj: Proj, fs: number, isBig: boo
   }
   // Masa's shop, in the shrine at the start
   if (near(smithPos.x, smithPos.z, 400) && fogAt(smithPos.x, smithPos.z) >= 128) { ctx.fillStyle = '#8fb4ff'; text('†', smithPos.x, smithPos.z); }
-  // Portal to La Fortaleza Abismal (dungeon mission)
-  {
-    const [dx, dy] = proj(OVERWORLD_PORTAL.x, OVERWORLD_PORTAL.z);
+  // Dynamic dungeon portal (only drawn while open; disappears when sealed until a new one spawns)
+  const dPortal = activeDungeonPortal();
+  if (dPortal) {
+    const [dx, dy] = proj(dPortal.x, dPortal.z);
     const pulse = (state.time * 0.85) % 1;
     ctx.save();
-    ctx.strokeStyle = '#b97aff';
+    ctx.strokeStyle = dPortal.colorHex;
     ctx.lineWidth = isBig ? 1.8 : 1.4;
-    ctx.globalAlpha = (1 - pulse) * 0.8;
+    ctx.globalAlpha = (1 - pulse) * 0.82;
     ctx.beginPath();
-    ctx.arc(dx, dy, fs * (0.55 + pulse * 0.9), 0, Math.PI * 2);
+    ctx.arc(dx, dy, fs * (0.55 + pulse * 0.95), 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#c996ff';
+    ctx.fillStyle = dPortal.colorHex;
     ctx.font = `bold ${Math.round(fs * 1.05)}px ${FONT}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('◎', dx, dy);
@@ -281,8 +282,9 @@ function stamp(ctx: CanvasRenderingContext2D, proj: Proj, fs: number, isBig: boo
       ctx.font = `bold ${Math.round(fs * 0.85)}px ${FONT}`;
       ctx.textAlign = 'left';
       ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
-      ctx.strokeText('portal fortaleza', dx + fs * 0.8, dy);
-      ctx.fillText('portal fortaleza', dx + fs * 0.8, dy);
+      const lbl = `portal: ${dPortal.name.toLowerCase()}`;
+      ctx.strokeText(lbl, dx + fs * 0.8, dy);
+      ctx.fillText(lbl, dx + fs * 0.8, dy);
     }
     ctx.restore();
   }
@@ -340,8 +342,8 @@ function drawDungeonCanvas(ctx: CanvasRenderingContext2D, W: number, H: number, 
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#07060e';
   ctx.fillRect(0, 0, W, H);
-  const cx = centerOnPlayer ? player.pos.x : data.ox;
-  const cz = centerOnPlayer ? player.pos.z : data.oz - 186;
+  const cx = centerOnPlayer ? player.pos.x : data.ox + (data.bounds.minX + data.bounds.maxX) / 2;
+  const cz = centerOnPlayer ? player.pos.z : data.oz + (data.bounds.minZ + data.bounds.maxZ) / 2;
   const cr = centerOnPlayer ? Math.cos(mapYaw) : 1;
   const sr = centerOnPlayer ? Math.sin(mapYaw) : 0;
   const proj: Proj = (x, z) => {
@@ -403,7 +405,7 @@ function drawDungeonCanvas(ctx: CanvasRenderingContext2D, W: number, H: number, 
   if (!centerOnPlayer) {
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.font = `bold 13px ${FONT}`; ctx.fillStyle = '#c996ff';
-    ctx.fillText('MAZMORRA · LA FORTALEZA ABISMAL', 14, 12);
+    ctx.fillText(`MAZMORRA · ${data.name.toUpperCase()}`, 14, 12);
     ctx.fillStyle = '#9aa3b5'; ctx.font = `bold 12px ${FONT}`;
     ctx.textBaseline = 'bottom';
     ctx.fillText('◎ portal entrada  ·  $ cofres  ·  ✦ portal de regreso  ·  [N] cerrar', 14, H - 12);
@@ -457,6 +459,24 @@ function drawMinimap() {
       ctx.beginPath(); ctx.arc(rx, ry, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.font = `bold 10px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = ev.colorHex; ctx.fillText(ev.kanji, rx, ry);
+      ctx.restore();
+    }
+  }
+  // if an open dungeon portal is outside the minimap frame, pin a subtle indicator on the rim
+  const dPortal = activeDungeonPortal();
+  if (dPortal) {
+    const [dx0, dy0] = proj(dPortal.x, dPortal.z);
+    const dx = dx0 - W / 2, dy = dy0 - H / 2;
+    if (Math.abs(dx) > W / 2 - 12 || Math.abs(dy) > H / 2 - 12) {
+      const kp = Math.min((W / 2 - 11) / Math.max(1e-3, Math.abs(dx)), (H / 2 - 11) / Math.max(1e-3, Math.abs(dy)));
+      const rx = W / 2 + dx * kp, ry = H / 2 + dy * kp;
+      ctx.save();
+      ctx.fillStyle = '#05060a';
+      ctx.strokeStyle = dPortal.colorHex;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(rx, ry, 6.8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.font = `bold 10px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = dPortal.colorHex; ctx.fillText('◎', rx, ry);
       ctx.restore();
     }
   }
@@ -565,8 +585,10 @@ function drawBigMap() {
     bigEl.style.width = bigEl.style.height = `${V.side}px`;
   }
   if (state.inDungeon) {
+    const d = dungeonMapData();
+    const span = Math.max(d.bounds.maxX - d.bounds.minX, d.bounds.maxZ - d.bounds.minZ) + 40;
     bigX.setTransform(V.dpr, 0, 0, V.dpr, 0, 0);
-    drawDungeonCanvas(bigX, V.side, V.side, V.side / 425, false);
+    drawDungeonCanvas(bigX, V.side, V.side, V.side / Math.max(180, span), false);
     return;
   }
   // the static layer is rebuilt when it is stale (at most twice a second while you walk)

@@ -59,12 +59,14 @@ export const state = {
 /** keys currently held, by KeyboardEvent.code */
 export const keys: Record<string, boolean> = {};
 
-/** Isolated coordinate origin and walkable floor elevation for La Fortaleza Abismal (dungeon.ts). */
+/** Isolated coordinate origin and dynamic walkable floor elevation for the active dungeon (dungeon.ts). */
 export const DUNGEON_ORIGIN = { x: 3000, z: 0 };
+export const dungeonElev = { stairZ0: -326, stairZ1: -338, daisZ: -366, bossX: 0 };
 export function dungeonFloorY(wx: number, wz: number): number {
   const lz = wz - DUNGEON_ORIGIN.z;
-  if (lz >= -326) return 0;
-  if (lz > -338) return ((lz + 326) / -12) * 1.4;
-  if (lz <= -366 && Math.abs(wx - DUNGEON_ORIGIN.x) < 9.5) return 1.9;
+  const lx = wx - DUNGEON_ORIGIN.x - dungeonElev.bossX;
+  if (lz >= dungeonElev.stairZ0) return 0;
+  if (lz > dungeonElev.stairZ1) return ((lz - dungeonElev.stairZ0) / (dungeonElev.stairZ1 - dungeonElev.stairZ0)) * 1.4;
+  if (lz <= dungeonElev.daisZ && Math.abs(lx) < 9.5) return 1.9;
   return 1.4;
 }

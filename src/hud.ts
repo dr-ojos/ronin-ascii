@@ -270,10 +270,10 @@ function updateTHud() {
   const m = dng ? null : liberationStatus();
   r.mission.hidden = !dng && !m;
   if (dng) {
-    r.mTitle.textContent = `MAZMORRA · FORTALEZA ABISMAL`;
+    r.mTitle.textContent = `MAZMORRA · ${dng.name.toUpperCase()}`;
     r.mBar.max = Math.max(1, dng.totalRooms);
     r.mBar.value = dng.clearedRooms;
-    const bossTxt = dng.returnPortalOpen ? ' · Portal de regreso abierto' : ' · Jefe: Shōgun de la Cripta';
+    const bossTxt = dng.returnPortalOpen ? ' · Portal de regreso abierto' : ` · Jefe: ${dng.bossName}`;
     r.mSub.textContent = `${dng.zone} · Salas ${dng.clearedRooms}/${dng.totalRooms} · Cofres ${dng.openedChests}/${dng.totalChests}${bossTxt}`;
   } else if (m) {
     r.mTitle.textContent = `MISIÓN · LIBERAR ${m.name.toUpperCase()}`;
