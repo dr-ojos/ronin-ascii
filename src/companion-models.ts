@@ -26,6 +26,8 @@ export interface CompanionAnimInput {
   turnRate?: number;
   attackStyle?: number;
   attackProg?: number;
+  /** 0 = walking, 1 = full sprint (matched to player sprint / catch-up speed) */
+  sprinting?: number;
 }
 
 export interface CompanionModel {
@@ -106,61 +108,73 @@ function makePbrSet(
   return set;
 }
 
-/** 512px Sumi-e carved temple basalt with chiseled bevels, ink cracks & lichen. */
-function getMangaStonePBR(): PbrSet {
-  return makePbrSet('manga-stone', 512, 3.2, (ac, hc, s) => {
-    ac.fillStyle = '#474f59'; ac.fillRect(0, 0, s, s);
-    hc.fillStyle = '#808080'; hc.fillRect(0, 0, s, s);
+/** 512px Weathered sandstone / desert limestone with deep tectonic fracture cracks (faithful to reference). */
+function getSandstoneGolemPBR(): PbrSet {
+  return makePbrSet('golem-sandstone-v1', 512, 3.6, (ac, hc, s) => {
+    // Warm sun-baked travertine / sandstone base
+    ac.fillStyle = '#c8ac7d'; ac.fillRect(0, 0, s, s);
+    hc.fillStyle = '#888888'; hc.fillRect(0, 0, s, s);
 
-    // Painterly granite mottling & mineral grain
-    for (let i = 0; i < 3600; i++) {
+    // Broad warm ochre / dusty shadow mottling & stone weathering
+    for (let i = 0; i < 4200; i++) {
       const x = h2(i * 3.1) * s, y = h2(i * 7.3) * s;
-      const rx = 1.6 + h2(i * 11.7) * 9, ry = 1.2 + h2(i * 13.9) * 5;
-      const v = Math.floor(46 + h2(i * 5.9) * 68);
-      ac.fillStyle = `rgba(${v},${v + 6},${v + 14},0.26)`;
+      const rx = 1.4 + h2(i * 11.7) * 10.5, ry = 1.1 + h2(i * 13.9) * 6.0;
+      const t = h2(i * 5.9);
+      const r = Math.floor(156 + t * 76);
+      const g = Math.floor(132 + t * 68);
+      const b = Math.floor(92 + t * 52);
+      ac.fillStyle = `rgba(${r},${g},${b},0.24)`;
       ac.beginPath(); ac.ellipse(x, y, rx, ry, h2(i) * Math.PI, 0, Math.PI * 2); ac.fill();
-      const bv = Math.floor(72 + h2(i * 5.9) * 110);
-      hc.fillStyle = `rgba(${bv},${bv},${bv},0.32)`;
+      const bv = Math.floor(72 + t * 114);
+      hc.fillStyle = `rgba(${bv},${bv},${bv},0.30)`;
       hc.beginPath(); hc.ellipse(x, y, rx, ry, h2(i) * Math.PI, 0, Math.PI * 2); hc.fill();
     }
-    // Crisp Japanese ink cross-hatching strokes in shadowed strata
-    ac.strokeStyle = 'rgba(12,15,22,0.22)'; ac.lineWidth = 1.2;
-    for (let i = 0; i < 240; i++) {
-      const x = h2(i * 17.3) * s, y = h2(i * 23.1) * s, len = 14 + h2(i * 5.3) * 32;
-      ac.beginPath(); ac.moveTo(x, y); ac.lineTo(x + len * 0.7, y + len); ac.stroke();
+
+    // Fine rocky pitting & porous limestone dimples
+    for (let i = 0; i < 950; i++) {
+      const x = h2(i * 29.3) * s, y = h2(i * 37.1) * s, r = 0.8 + h2(i * 13.1) * 2.6;
+      ac.fillStyle = 'rgba(72,56,36,0.34)';
+      ac.beginPath(); ac.arc(x, y, r, 0, Math.PI * 2); ac.fill();
+      hc.fillStyle = 'rgba(34,34,34,0.65)';
+      hc.beginPath(); hc.arc(x, y, r, 0, Math.PI * 2); hc.fill();
     }
-    // Chiseled temple relief grooves
-    for (let r = 0; r < 4; r++) {
-      const y = (r + 0.5) * (s / 4);
-      ac.strokeStyle = 'rgba(12,15,20,0.72)'; ac.lineWidth = 3.2;
-      hc.strokeStyle = '#141414'; hc.lineWidth = 4.4;
-      ac.beginPath(); ac.moveTo(0, y); ac.lineTo(s, y); ac.stroke();
-      hc.beginPath(); hc.moveTo(0, y); hc.lineTo(s, y); hc.stroke();
-      ac.strokeStyle = 'rgba(190,206,224,0.28)'; ac.lineWidth = 1.8;
-      hc.strokeStyle = '#e0e0e0'; hc.lineWidth = 2.4;
-      ac.beginPath(); ac.moveTo(0, y + 3); ac.lineTo(s, y + 3); ac.stroke();
-      hc.beginPath(); hc.moveTo(0, y + 3); hc.lineTo(s, y + 3); hc.stroke();
+
+    // Subtle weathered grey-olive moss & mineral stains in pockets (like the reference shoulders/knees)
+    for (let m = 0; m < 26; m++) {
+      const x = h2(m * 53.3) * s, y = h2(m * 61.1) * s, r = 8 + h2(m * 17.9) * 22;
+      const g = ac.createRadialGradient(x, y, 1, x, y, r);
+      const moss = m % 3 === 0;
+      g.addColorStop(0, moss ? 'rgba(88,104,64,0.34)' : 'rgba(92,84,74,0.28)');
+      g.addColorStop(1, 'rgba(88,104,64,0)');
+      ac.fillStyle = g; ac.beginPath(); ac.arc(x, y, r, 0, Math.PI * 2); ac.fill();
     }
-    // Deep sumi-e stone fractures
-    for (let c = 0; c < 26; c++) {
+
+    // Signature deep dark tectonic fracture web crisscrossing the stone body!
+    for (let c = 0; c < 38; c++) {
       let x = h2(c * 19.1) * s, y = h2(c * 23.7) * s;
-      ac.strokeStyle = 'rgba(10,12,18,0.82)'; ac.lineWidth = 1.5 + h2(c * 4.3) * 2.2;
-      hc.strokeStyle = '#0c0c0c'; hc.lineWidth = ac.lineWidth + 1.0;
-      ac.beginPath(); hc.beginPath(); ac.moveTo(x, y); hc.moveTo(x, y);
-      for (let k = 0; k < 6; k++) {
-        x += (h2(c * 31 + k * 7) - 0.5) * 62;
-        y += (h2(c * 41 + k * 13) - 0.5) * 62;
-        ac.lineTo(x, y); hc.lineTo(x, y);
+      const w = 1.6 + h2(c * 4.3) * 2.6;
+      // Subtle light sandstone bevel along crack lip
+      ac.strokeStyle = 'rgba(238,218,176,0.38)'; ac.lineWidth = w + 2.4;
+      ac.beginPath(); ac.moveTo(x + 1.5, y + 1.5);
+      const pts: [number, number][] = [[x, y]];
+      for (let k = 0; k < 7; k++) {
+        x += (h2(c * 31 + k * 7) - 0.5) * 64;
+        y += (h2(c * 41 + k * 13) - 0.5) * 64;
+        pts.push([x, y]);
+        ac.lineTo(x + 1.5, y + 1.5);
+      }
+      ac.stroke();
+
+      // Deep dark charcoal fissure line
+      ac.strokeStyle = 'rgba(24,19,14,0.88)'; ac.lineWidth = w;
+      hc.strokeStyle = '#080808'; hc.lineWidth = w + 1.4;
+      ac.beginPath(); hc.beginPath();
+      ac.moveTo(pts[0][0], pts[0][1]); hc.moveTo(pts[0][0], pts[0][1]);
+      for (let k = 1; k < pts.length; k++) {
+        ac.lineTo(pts[k][0], pts[k][1]);
+        hc.lineTo(pts[k][0], pts[k][1]);
       }
       ac.stroke(); hc.stroke();
-    }
-    // Subtle moss pockets
-    for (let m = 0; m < 36; m++) {
-      const x = h2(m * 53.3) * s, y = h2(m * 61.1) * s, r = 10 + h2(m * 17.9) * 26;
-      const g = ac.createRadialGradient(x, y, 2, x, y, r);
-      g.addColorStop(0, 'rgba(54,118,52,0.44)');
-      g.addColorStop(1, 'rgba(54,118,52,0)');
-      ac.fillStyle = g; ac.beginPath(); ac.arc(x, y, r, 0, Math.PI * 2); ac.fill();
     }
   });
 }
@@ -187,23 +201,6 @@ function getMangaBronzePBR(): PbrSet {
         ac.fillStyle = '#d8b264'; ac.beginPath(); ac.arc(rx, ry, 5, 0, Math.PI * 2); ac.fill();
         hc.fillStyle = '#ececec'; hc.beginPath(); hc.arc(rx, ry, 5, 0, Math.PI * 2); hc.fill();
       }
-    }
-  });
-}
-
-/** 256px Rich mossy stone overgrowth. */
-function getMangaMossPBR(): PbrSet {
-  return makePbrSet('manga-moss', 256, 2.4, (ac, hc, s) => {
-    ac.fillStyle = '#2d572a'; ac.fillRect(0, 0, s, s);
-    hc.fillStyle = '#6c6c6c'; hc.fillRect(0, 0, s, s);
-    for (let i = 0; i < 2200; i++) {
-      const x = h2(i * 4.7) * s, y = h2(i * 9.3) * s, r = 1.3 + h2(i * 15.1) * 4.2;
-      const g = Math.floor(76 + h2(i * 6.3) * 84);
-      ac.fillStyle = `rgba(${Math.floor(g * 0.46)},${g},${Math.floor(g * 0.38)},0.52)`;
-      ac.beginPath(); ac.arc(x, y, r, 0, Math.PI * 2); ac.fill();
-      const bv = Math.floor(70 + h2(i * 6.3) * 145);
-      hc.fillStyle = `rgba(${bv},${bv},${bv},0.48)`;
-      hc.beginPath(); hc.arc(x, y, r, 0, Math.PI * 2); hc.fill();
     }
   });
 }
@@ -262,44 +259,6 @@ function getMangaFeatherPBR(): PbrSet {
       }
     }
   });
-}
-
-/** 512px Glowing Japanese temple seal / kanji-inspired runic emissive map. */
-let cachedRuneTex: THREE.CanvasTexture | null = null;
-function getRuneEmissiveTex(): THREE.CanvasTexture {
-  if (cachedRuneTex) return cachedRuneTex;
-  const s = 512;
-  const c = document.createElement('canvas'); c.width = c.height = s;
-  const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, s, s);
-  ctx.strokeStyle = '#ffffff'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 14;
-  for (let row = 0; row < 2; row++) {
-    const y = 128 + row * 256;
-    ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(0, y - 46); ctx.lineTo(s, y - 46); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, y + 46); ctx.lineTo(s, y + 46); ctx.stroke();
-    ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(s, y); ctx.stroke();
-    for (let i = 0; i < 4; i++) {
-      const cx = 64 + i * 128;
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(cx, y - 40); ctx.lineTo(cx + 30, y); ctx.lineTo(cx, y + 40); ctx.lineTo(cx - 30, y); ctx.closePath();
-      ctx.stroke();
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(cx, y - 22); ctx.lineTo(cx, y + 22);
-      ctx.moveTo(cx - 16, y - 10); ctx.lineTo(cx + 16, y - 10);
-      ctx.moveTo(cx - 16, y + 10); ctx.lineTo(cx + 16, y + 10);
-      ctx.stroke();
-    }
-  }
-  const map = new THREE.CanvasTexture(c);
-  map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  map.needsUpdate = true;
-  cachedRuneTex = map;
-  return map;
 }
 
 /** Extruded zigzag Japanese paper shide talisman geometry. */
@@ -1040,50 +999,47 @@ function buildSkeleton(color: number): CompanionModel {
   };
 }
 
-// ============================================================ 5. GÓLEM DE PIEDRA (COLOSO NIŌ MANGA)
+// ============================================================ 5. GÓLEM DE PIEDRA (SANDSTONE BRUTE - REFERENCE FAITHFUL)
 const golemGeo = {
-  // Sculpted muscular Niō Temple-Guardian stone torso (NO crude boxes!)
+  // Massive hunched muscular rock torso with huge trapezius & barrel ribcage
   chest: loftMesh([
-    { z: -0.44, y: 0.42, rx: 0.56, ryTop: 0.44, ryBot: 0.28, square: 0.30, shadeTop: 0.88, shadeSide: 0.96, shadeBot: 0.70 },
-    { z: -0.18, y: 0.50, rx: 0.84, ryTop: 0.56, ryBot: 0.36, square: 0.36, shadeTop: 0.94, shadeSide: 1.00, shadeBot: 0.72 },
-    { z:  0.16, y: 0.53, rx: 0.88, ryTop: 0.58, ryBot: 0.36, square: 0.38, shadeTop: 0.96, shadeSide: 1.00, shadeBot: 0.74 },
-    { z:  0.42, y: 0.48, rx: 0.64, ryTop: 0.46, ryBot: 0.30, square: 0.34, shadeTop: 0.92, shadeSide: 0.98, shadeBot: 0.78 },
-  ], 14),
+    { z: -0.46, y: 0.44, rx: 0.56, ryTop: 0.52, ryBot: 0.28, square: 0.24, shadeTop: 0.94, shadeSide: 0.96, shadeBot: 0.72 },
+    { z: -0.16, y: 0.56, rx: 0.88, ryTop: 0.66, ryBot: 0.36, square: 0.30, shadeTop: 1.00, shadeSide: 1.00, shadeBot: 0.74 },
+    { z:  0.16, y: 0.54, rx: 0.90, ryTop: 0.62, ryBot: 0.36, square: 0.32, shadeTop: 0.98, shadeSide: 1.00, shadeBot: 0.76 },
+    { z:  0.42, y: 0.46, rx: 0.64, ryTop: 0.44, ryBot: 0.30, square: 0.28, shadeTop: 0.94, shadeSide: 0.96, shadeBot: 0.80 },
+  ], 16),
+  // Thick muscular stone waist & pelvis
   waist: loftMesh([
-    { z: -0.28, y: 0.12, rx: 0.36, ryTop: 0.16, ryBot: 0.14, square: 0.25 },
-    { z:  0.00, y: 0.12, rx: 0.46, ryTop: 0.18, ryBot: 0.16, square: 0.28 },
-    { z:  0.26, y: 0.12, rx: 0.38, ryTop: 0.16, ryBot: 0.14, square: 0.25 },
-  ], 12),
-  // Sculpted anatomical stone upper arm & muscular thigh
-  stoneArm: limbGeo(0.50, 0.22, 0.19, 0.17, 0.12),
-  stoneThigh: limbGeo(0.50, 0.25, 0.22, 0.18, 0.14),
-  stoneShin: limbGeo(0.42, 0.20, 0.22, 0.19, 0.12),
-  // Tapered beveled gauntlet forearm
-  gauntlet: loftMesh([
-    { z: -0.24, y: 0, rx: 0.22, ryTop: 0.22, ryBot: 0.22, square: 0.36 },
-    { z:  0.02, y: 0, rx: 0.33, ryTop: 0.33, ryBot: 0.33, square: 0.42 },
-    { z:  0.26, y: 0, rx: 0.29, ryTop: 0.29, ryBot: 0.29, square: 0.38 },
-  ], 10),
-  // Sculpted Niō / Hannya stone guardian face
-  head: loftMesh([
-    { z: -0.24, y: 0.14, rx: 0.24, ryTop: 0.24, ryBot: 0.18, square: 0.22 },
-    { z:  0.00, y: 0.15, rx: 0.32, ryTop: 0.29, ryBot: 0.21, square: 0.28 },
-    { z:  0.22, y: 0.14, rx: 0.28, ryTop: 0.24, ryBot: 0.17, square: 0.34 },
-    { z:  0.32, y: 0.12, rx: 0.18, ryTop: 0.15, ryBot: 0.12, square: 0.26 },
+    { z: -0.30, y: 0.14, rx: 0.42, ryTop: 0.20, ryBot: 0.16, square: 0.22 },
+    { z:  0.00, y: 0.14, rx: 0.52, ryTop: 0.24, ryBot: 0.19, square: 0.26 },
+    { z:  0.28, y: 0.14, rx: 0.42, ryTop: 0.20, ryBot: 0.16, square: 0.22 },
   ], 14),
-  hornL: taperTube([[0, 0, 0], [0.12, 0.14, -0.02], [0.18, 0.32, -0.10]], 0.085, 0.016, 7, 10),
-  hornR: taperTube([[0, 0, 0], [-0.12, 0.14, -0.02], [-0.18, 0.32, -0.10]], 0.085, 0.016, 7, 10),
+  // Massive brute limbs (long heavy gorilla-like arms & thick rocky legs)
+  bicep: limbGeo(0.56, 0.27, 0.24, 0.21, 0.16),
+  forearm: limbGeo(0.58, 0.24, 0.29, 0.23, 0.14),
+  thigh: limbGeo(0.54, 0.30, 0.26, 0.21, 0.18),
+  calf: limbGeo(0.46, 0.22, 0.26, 0.21, 0.14),
+  // Bald craggy brute head (sits forward & low between huge traps, just like reference!)
+  head: loftMesh([
+    { z: -0.22, y: 0.16, rx: 0.22, ryTop: 0.23, ryBot: 0.16, square: 0.14, shadeTop: 1.00, shadeSide: 0.96, shadeBot: 0.78 },
+    { z:  0.00, y: 0.17, rx: 0.26, ryTop: 0.26, ryBot: 0.19, square: 0.18, shadeTop: 1.00, shadeSide: 0.98, shadeBot: 0.80 },
+    { z:  0.18, y: 0.14, rx: 0.24, ryTop: 0.21, ryBot: 0.17, square: 0.26, shadeTop: 0.96, shadeSide: 0.98, shadeBot: 0.82 },
+    { z:  0.29, y: 0.10, rx: 0.18, ryTop: 0.13, ryBot: 0.13, square: 0.24, shadeTop: 0.92, shadeSide: 0.95, shadeBot: 0.84 },
+  ], 16),
+  // Huge bare rocky foot with arched instep
   foot: loftMesh([
-    { z: -0.18, y: 0.00, rx: 0.19, ryTop: 0.10, ryBot: 0.06, square: 0.30 },
-    { z:  0.06, y: 0.00, rx: 0.23, ryTop: 0.11, ryBot: 0.06, square: 0.34 },
-    { z:  0.28, y: -0.01, rx: 0.21, ryTop: 0.08, ryBot: 0.05, square: 0.32 },
-  ], 10),
-  finger: limbGeo(0.20, 0.052, 0.044, 0.036, 0.06),
+    { z: -0.20, y: 0.00, rx: 0.21, ryTop: 0.12, ryBot: 0.06, square: 0.26 },
+    { z:  0.06, y: 0.00, rx: 0.27, ryTop: 0.13, ryBot: 0.06, square: 0.30 },
+    { z:  0.26, y: -0.02, rx: 0.26, ryTop: 0.09, ryBot: 0.05, square: 0.28 },
+  ], 12),
+  // Thick curled rocky finger & stone toe
+  finger: taperTube([[0, 0, 0], [0, -0.14, 0.05], [0, -0.26, 0.01], [0, -0.34, -0.07]], 0.062, 0.044, 7, 8),
+  thumb: taperTube([[0, 0, 0], [0, -0.10, 0.08], [0, -0.22, 0.10]], 0.068, 0.048, 7, 7),
+  toe: taperTube([[0, 0, 0], [0, -0.01, 0.09], [0, -0.03, 0.16]], 0.048, 0.034, 6, 6),
 };
 
 function buildGolem(color: number): CompanionModel {
   const root = new THREE.Group();
-  // Full 12-joint articulated skeletal hierarchy
   const hips = new THREE.Group();
   const waist = new THREE.Group();
   const chest = new THREE.Group();
@@ -1091,206 +1047,155 @@ function buildGolem(color: number): CompanionModel {
   hips.add(waist);
   waist.add(chest);
 
-  const sPbr = getMangaStonePBR();
-  const bPbr = getMangaBronzePBR();
-  const mPbr = getMangaMossPBR();
-  const rTex = getRuneEmissiveTex();
-  const runeCol = new THREE.Color(color);
-
-  const stoneMat = M(0x7c8692, {
-    roughness: 0.84, metalness: 0.08, flatShading: true, vertexColors: true,
-    map: sPbr.map, normalMap: sPbr.normal,
+  const rock = getSandstoneGolemPBR();
+  const stoneMat = M(0xd2b889, {
+    roughness: 0.88, metalness: 0.04, vertexColors: true,
+    map: rock.map, normalMap: rock.normal,
   });
-  const darkStoneMat = M(0x363e48, {
-    roughness: 0.90, metalness: 0.12, flatShading: true,
-    map: sPbr.map, normalMap: sPbr.normal,
+  const darkRockMat = M(0x9a825c, {
+    roughness: 0.92, metalness: 0.05,
+    map: rock.map, normalMap: rock.normal,
   });
-  const runeStoneMat = M(0x4a5662, {
-    roughness: 0.78, metalness: 0.16, flatShading: true,
-    map: sPbr.map, normalMap: sPbr.normal,
-    emissive: runeCol, emissiveMap: rTex, emissiveIntensity: 1.45,
-  });
-  const bronzeMat = M(0xa27e42, {
-    roughness: 0.32, metalness: 0.86,
-    map: bPbr.map, normalMap: bPbr.normal,
-  });
-  const mossMat = M(0x3f7238, {
-    roughness: 0.92, flatShading: true,
-    map: mPbr.map, normalMap: mPbr.normal,
-  });
-  const jointGlowMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.86, toneMapped: false });
-  const runeMat = new THREE.MeshBasicMaterial({ color, toneMapped: false });
-  const coreHotMat = new THREE.MeshBasicMaterial({ color: 0xeafff4, toneMapped: false });
+  const creviceMat = M(0x3a2f22, { roughness: 0.96 });
+  const teethMat = M(0xf0e4c8, { roughness: 0.55 });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xfff4c2, toneMapped: false });
 
-  // ---- Pelvis, bronze shimenawa belt & curved carved stone kusazuri tassets
-  hips.position.set(0, 1.02, 0);
-  addMesh(hips, golemGeo.waist, darkStoneMat, 0, -0.06, 0).scale.set(1.18, 1.15, 1.12);
-  const beltGeo = new THREE.TorusGeometry(0.44, 0.055, 8, 22);
-  const belt = addMesh(hips, beltGeo, bronzeMat, 0, 0.12, 0, Math.PI / 2, 0, 0);
-  belt.scale.set(1.06, 0.76, 1.0);
-  part(hips, OCTA, runeMat, 0, 0.12, 0.34, 0.10, 0.10, 0.05).userData.noOutline = true;
-  part(hips, SPHERE, jointGlowMat, 0, 0.22, 0, 0.28, 0.10, 0.22).userData.noOutline = true;
+  // ---- Muscular stone pelvis & glutes
+  hips.position.set(0, 0.98, 0);
+  addMesh(hips, golemGeo.waist, stoneMat, 0, -0.06, 0).scale.set(1.16, 1.25, 1.15);
+  part(hips, DODECA, darkRockMat, 0, -0.16, 0.10, 0.24, 0.22, 0.24); // groin/pelvic stone mass
 
-  const tassetF = new THREE.Group(); tassetF.position.set(0, 0.08, 0.02); hips.add(tassetF);
-  tassetF.add(buildTassetPanel(0.36, 0.44, 0.44, -Math.PI * 0.22, Math.PI * 0.44, 0.08, runeStoneMat)).position.y = -0.22;
-  const tassetL = new THREE.Group(); tassetL.position.set(0, 0.08, 0); hips.add(tassetL);
-  tassetL.add(buildTassetPanel(0.38, 0.48, 0.42, Math.PI * 0.26, Math.PI * 0.46, 0.05, darkStoneMat)).position.y = -0.21;
-  const tassetR = new THREE.Group(); tassetR.position.set(0, 0.08, 0); hips.add(tassetR);
-  tassetR.add(buildTassetPanel(0.38, 0.48, 0.42, -Math.PI * 0.72, Math.PI * 0.46, 0.05, darkStoneMat)).position.y = -0.21;
+  // ---- Thick lower waist & sculpted abdominal rock slabs
+  waist.position.set(0, 0.16, 0);
+  addMesh(waist, golemGeo.waist, stoneMat, 0, 0, 0).scale.set(1.06, 1.15, 1.05);
+  for (let row = 0; row < 2; row++) {
+    for (const s of [-1, 1]) {
+      part(waist, DODECA, stoneMat, s * 0.16, 0.06 + row * 0.18, 0.28, 0.17, 0.12, 0.14);
+    }
+  }
 
-  // ---- Lower Waist (2-segment spine)
-  waist.position.set(0, 0.18, 0);
-  addMesh(waist, golemGeo.waist, darkStoneMat, 0, 0, 0);
-  part(waist, SPHERE, jointGlowMat, 0, 0.25, 0, 0.32, 0.10, 0.26).userData.noOutline = true;
-
-  // ---- Sculpted Muscular Niō Upper Chest
-  chest.position.set(0, 0.24, 0);
+  // ---- Massive hunched brute chest, high trapezius ridge & pectoral rock slabs
+  chest.position.set(0, 0.26, 0);
   addMesh(chest, golemGeo.chest, stoneMat);
+  // Towering hunched trapezius boulders flanking the head (signature Hulk/Golem silhouette!)
   for (const s of [-1, 1]) {
-    // Sculpted beveled pectoral plates & dorsal stone fins
-    const pec = part(chest, DODECA, darkStoneMat, s * 0.35, 0.54, 0.36, 0.26, 0.22, 0.16);
-    pec.rotation.y = -s * 0.25;
-    const collarTrim = buildTassetPanel(0.54, 0.62, 0.14, s > 0 ? 0.06 : -Math.PI * 0.46, Math.PI * 0.40, 0.02, bronzeMat);
-    collarTrim.position.y = 0.78;
-    chest.add(collarTrim);
+    part(chest, DODECA, stoneMat, s * 0.44, 0.94, -0.06, 0.44, 0.34, 0.42);
+    // Thick bulging pectoral slabs
+    const pec = part(chest, DODECA, stoneMat, s * 0.36, 0.54, 0.38, 0.36, 0.26, 0.24);
+    pec.rotation.y = -s * 0.20;
+    // Lat flanks
+    part(chest, DODECA, darkRockMat, s * 0.58, 0.38, -0.02, 0.28, 0.34, 0.32);
   }
-  part(chest, DODECA, mossMat, 0, 0.96, -0.22, 0.46, 0.18, 0.30);
+  part(chest, DODECA, stoneMat, 0, 0.98, -0.22, 0.50, 0.30, 0.38); // hunched upper back crown
 
-  // Gimbaled Ancient Temple Runic Heart Core
-  const coreRingGeo = new THREE.TorusGeometry(0.21, 0.034, 8, 22);
-  const coreRingOuter = addMesh(chest, coreRingGeo, bronzeMat, 0, 0.48, 0.50);
-  const coreRingInnerGeo = new THREE.TorusGeometry(0.145, 0.016, 6, 18);
-  const coreRingInner = addMesh(chest, coreRingInnerGeo, runeMat, 0, 0.48, 0.51);
-  coreRingInner.userData.noOutline = true;
-  const coreOuter = part(chest, OCTA, runeMat, 0, 0.48, 0.51, 0.14, 0.22, 0.10);
-  coreOuter.userData.noOutline = true;
-  const coreInner = part(chest, OCTA, coreHotMat, 0, 0.48, 0.52, 0.075, 0.12, 0.06);
-  coreInner.userData.noOutline = true;
-
-  // Iconic Floating Temple Halo Ring (Kōhai) + Orbiting Kanji Seal Stones behind the shoulders!
-  const haloGroup = new THREE.Group();
-  haloGroup.position.set(0, 0.92, -0.44);
-  chest.add(haloGroup);
-  const haloRingGeo = new THREE.TorusGeometry(0.82, 0.042, 8, 28);
-  addMesh(haloGroup, haloRingGeo, bronzeMat);
-  const orbitShards: THREE.Mesh[] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    const sh = part(haloGroup, OCTA, i % 2 === 0 ? runeMat : darkStoneMat, Math.cos(a) * 0.82, Math.sin(a) * 0.82, 0.02, 0.075, 0.14, 0.05);
-    sh.rotation.z = a;
-    if (i % 2 === 0) sh.userData.noOutline = true;
-    orbitShards.push(sh);
-  }
-
-  // ---- Articulated Neck, Sculpted Niō / Hannya Stone Head & Articulated Fang Jaw
+  // ---- Low-set, forward-thrust bald stone head (grimacing mouth + glowing white-gold eyes)
   const neck = new THREE.Group();
-  neck.position.set(0, 0.96, 0.10);
+  neck.position.set(0, 0.78, 0.30);
   chest.add(neck);
-  part(neck, SPHERE, jointGlowMat, 0, 0.04, 0, 0.18, 0.10, 0.18).userData.noOutline = true;
 
   const head = new THREE.Group();
-  head.position.set(0, 0.10, 0.04);
+  head.position.set(0, 0.08, 0.12);
   neck.add(head);
-  addMesh(head, golemGeo.head, darkStoneMat);
-  part(head, DODECA, mossMat, 0, 0.36, -0.06, 0.30, 0.13, 0.26);
-  addMesh(head, golemGeo.hornL, stoneMat, 0.16, 0.24, 0.02);
-  addMesh(head, golemGeo.hornR, stoneMat, -0.16, 0.24, 0.02);
-  // Fierce glowing anime slit eyes
+  addMesh(head, golemGeo.head, stoneMat);
+  // Heavy furrowed overhanging brow ridge
+  part(head, DODECA, stoneMat, 0, 0.23, 0.22, 0.23, 0.085, 0.14);
+  // Broad sculpted stone nose
+  part(head, DODECA, stoneMat, 0, 0.12, 0.29, 0.075, 0.068, 0.078);
+  // Deep-set glowing white-gold eyes under the brow
   for (const s of [-1, 1]) {
-    const eye = part(head, SPHERE, runeMat, s * 0.105, 0.15, 0.29, 0.062, 0.022, 0.024);
-    eye.rotation.z = -s * 0.26;
+    part(head, SPHERE, creviceMat, s * 0.085, 0.18, 0.245, 0.052, 0.030, 0.028).userData.noOutline = true;
+    const eye = part(head, SPHERE, eyeMat, s * 0.085, 0.18, 0.268, 0.032, 0.017, 0.018);
+    eye.rotation.z = -s * 0.22;
     eye.userData.noOutline = true;
-    const pupil = part(head, SPHERE, coreHotMat, s * 0.105, 0.15, 0.305, 0.032, 0.011, 0.015);
-    pupil.rotation.z = -s * 0.26;
-    pupil.userData.noOutline = true;
   }
+  // Articulated heavy square stone jaw + clenched gritted teeth grimace!
   const jaw = new THREE.Group();
-  jaw.position.set(0, 0.02, 0.08);
+  jaw.position.set(0, 0.04, 0.08);
   head.add(jaw);
-  part(jaw, DODECA, stoneMat, 0, -0.05, 0.10, 0.18, 0.09, 0.14);
-  for (const s of [-1, 1]) {
-    part(jaw, CONE, bronzeMat, s * 0.085, 0.01, 0.19, 0.024, 0.08, 0.024); // lower oni stone fangs!
-  }
+  part(jaw, DODECA, stoneMat, 0, -0.04, 0.12, 0.22, 0.10, 0.17);
+  // Grimacing clenched teeth strip recessed between lips
+  const teeth = part(jaw, DODECA, teethMat, 0, 0.015, 0.235, 0.135, 0.028, 0.04);
+  teeth.userData.noOutline = true;
 
-  // ---- Articulated Clavicle/Shoulder + Sculpted 3-Joint Arm + Curling Stone Gauntlet
+  // ---- Massive Gorilla-Proportioned Arms (huge boulder deltoids + long forearms + giant curled rocky hands)
   const makeArm = (sx: number) => {
     const clavicle = new THREE.Group();
-    clavicle.position.set(sx * 0.88, 0.78, 0);
+    clavicle.position.set(sx * 0.88, 0.74, 0.02);
     chest.add(clavicle);
 
-    // Sculpted layered boulder pauldron + curved bronze trim + twin runic crystal spires
-    part(clavicle, DODECA, stoneMat, sx * 0.04, 0.10, 0, 0.46, 0.38, 0.46);
-    const pauldronRim = buildTassetPanel(0.42, 0.48, 0.12, sx > 0 ? 0.1 : -Math.PI * 0.9, Math.PI * 0.8, 0.02, bronzeMat);
-    pauldronRim.position.set(sx * 0.04, -0.08, 0);
-    clavicle.add(pauldronRim);
-    part(clavicle, DODECA, mossMat, sx * 0.08, 0.32, -0.04, 0.33, 0.16, 0.31);
-    const c1 = part(clavicle, OCTA, runeMat, -sx * 0.10, 0.42, -0.04, 0.095, 0.28, 0.095);
-    c1.rotation.z = -sx * 0.32; c1.userData.noOutline = true;
-    part(clavicle, SPHERE, jointGlowMat, sx * 0.08, -0.10, 0, 0.16, 0.16, 0.16).userData.noOutline = true;
+    // Huge segmented rounded rock deltoid
+    part(clavicle, DODECA, stoneMat, sx * 0.08, 0.08, 0, 0.46, 0.42, 0.44);
+    part(clavicle, DODECA, darkRockMat, sx * 0.18, -0.14, 0.04, 0.34, 0.28, 0.34);
 
     const upper = new THREE.Group();
-    upper.position.set(sx * 0.14, -0.12, 0);
+    upper.position.set(sx * 0.20, -0.12, 0);
     clavicle.add(upper);
-    addMesh(upper, golemGeo.stoneArm, darkStoneMat);
-    part(upper, SPHERE, jointGlowMat, 0, -0.50, 0, 0.15, 0.15, 0.15).userData.noOutline = true;
+    addMesh(upper, golemGeo.bicep, stoneMat);
+    part(upper, DODECA, darkRockMat, sx * 0.06, -0.32, 0.04, 0.28, 0.26, 0.28);
 
     const fore = new THREE.Group();
-    fore.position.set(0, -0.52, 0);
+    fore.position.set(0, -0.54, 0);
     upper.add(fore);
-    const gauntlet = addMesh(fore, golemGeo.gauntlet, runeStoneMat, 0, -0.30, 0.03, Math.PI / 2, 0, 0);
-    gauntlet.scale.set(1.24, 1.32, 1.24);
-    const cuffGeo = new THREE.TorusGeometry(0.24, 0.036, 7, 16);
-    addMesh(fore, cuffGeo, bronzeMat, 0, -0.08, 0.02, Math.PI / 2, 0, 0);
-    part(fore, OCTA, runeMat, sx * 0.25, -0.30, 0.10, 0.085, 0.19, 0.075).userData.noOutline = true;
+    addMesh(fore, golemGeo.forearm, stoneMat);
+    part(fore, DODECA, stoneMat, sx * 0.06, -0.26, 0.04, 0.32, 0.30, 0.32);
 
     const wrist = new THREE.Group();
-    wrist.position.set(0, -0.54, 0.04);
+    wrist.position.set(0, -0.58, 0.04);
     fore.add(wrist);
-    part(wrist, DODECA, stoneMat, 0, -0.08, 0.04, 0.32, 0.22, 0.30);
+    // Colossal rocky palm / back of hand
+    part(wrist, DODECA, stoneMat, 0, -0.12, 0.04, 0.30, 0.25, 0.24);
 
+    // 4 thick curled stone fingers + opposing thumb (just like reference!)
     const fingers = new THREE.Group();
-    fingers.position.set(0, -0.16, 0.16);
+    fingers.position.set(0, -0.24, 0.08);
     wrist.add(fingers);
-    for (let k = -1; k <= 1; k++) {
-      addMesh(fingers, golemGeo.finger, darkStoneMat, k * 0.105, 0, 0);
+    for (let k = 0; k < 4; k++) {
+      const f = addMesh(fingers, golemGeo.finger, stoneMat, (k - 1.5) * 0.115, 0, 0, 0, 0, (k - 1.5) * 0.06);
+      f.scale.setScalar(k === 1 || k === 2 ? 1.06 : 0.94);
     }
-    const thumb = addMesh(wrist, golemGeo.finger, darkStoneMat, -sx * 0.22, -0.10, 0.10, 0, 0, sx * 0.55);
-    thumb.scale.setScalar(0.82);
+    const thumb = addMesh(wrist, golemGeo.thumb, stoneMat, -sx * 0.22, -0.16, 0.14, 0.18, sx * 0.35, sx * 0.55);
+    thumb.scale.setScalar(1.08);
 
-    return { clavicle, upper, fore, wrist, fingers, cuffGeo };
+    return { clavicle, upper, fore, wrist, fingers };
   };
   const armL = makeArm(1);
   const armR = makeArm(-1);
 
-  // ---- Full 3-Joint Articulated Sculpted Legs (Hip -> Knee/Shin -> Ankle/Foot)
+  // ---- Thick Muscular Bent-Knee Rock Legs & Wide 5-Toed Bare Stone Feet
   const makeLeg = (sx: number) => {
     const hip = new THREE.Group();
-    hip.position.set(sx * 0.36, -0.06, 0);
+    hip.position.set(sx * 0.40, -0.06, 0);
     hips.add(hip);
-    part(hip, SPHERE, jointGlowMat, 0, -0.02, 0, 0.15, 0.15, 0.15).userData.noOutline = true;
-    addMesh(hip, golemGeo.stoneThigh, darkStoneMat);
-    part(hip, DODECA, stoneMat, 0, -0.46, 0.16, 0.22, 0.19, 0.18); // sculpted knee guard
-    part(hip, SPHERE, jointGlowMat, 0, -0.50, 0, 0.14, 0.14, 0.14).userData.noOutline = true;
+    addMesh(hip, golemGeo.thigh, stoneMat);
+    part(hip, DODECA, stoneMat, sx * 0.04, -0.24, 0.08, 0.32, 0.28, 0.30); // bulky quad slab
+    part(hip, DODECA, darkRockMat, 0, -0.48, 0.14, 0.24, 0.20, 0.20);      // craggy kneecap
 
     const shin = new THREE.Group();
-    shin.position.set(0, -0.50, 0);
+    shin.position.set(0, -0.52, 0);
     hip.add(shin);
-    addMesh(shin, golemGeo.stoneShin, runeStoneMat);
-    part(shin, DODECA, mossMat, 0, -0.06, 0.20, 0.18, 0.10, 0.10);
+    addMesh(shin, golemGeo.calf, stoneMat);
+    part(shin, DODECA, darkRockMat, 0, -0.24, -0.08, 0.26, 0.26, 0.24);    // bulky calf rock
 
     const ankle = new THREE.Group();
-    ankle.position.set(0, -0.42, 0.04);
+    ankle.position.set(0, -0.44, 0.04);
     shin.add(ankle);
     addMesh(ankle, golemGeo.foot, stoneMat);
+    // 5 individual sculpted stone toes!
+    for (let t = 0; t < 5; t++) {
+      const tx = (t - 2) * 0.092;
+      const toe = addMesh(ankle, golemGeo.toe, stoneMat, tx, -0.03, 0.22);
+      toe.scale.setScalar(t === 0 || t === 4 ? 0.88 : 1.05);
+    }
     return { hip, shin, ankle };
   };
   const legL = makeLeg(1);
   const legR = makeLeg(-1);
 
   mangaFinish(root);
-  const ui = finalizeCompanionRoot(root, color, 3.16, 1.52, 1.032);
+  const ui = finalizeCompanionRoot(root, color, 3.05, 1.52, 1.028);
   let stompT = 0;
   let moveBlend = 0;
+  let sprintBlend = 0;
 
   const easeOutCubic = (x: number) => 1 - Math.pow(1 - THREE.MathUtils.clamp(x, 0, 1), 3);
   const easeInOutSine = (x: number) => 0.5 - 0.5 * Math.cos(Math.PI * THREE.MathUtils.clamp(x, 0, 1));
@@ -1300,107 +1205,131 @@ function buildGolem(color: number): CompanionModel {
     ring: ui.ring,
     hpBarGroup: ui.hpBarGroup,
     hpFill: ui.hpFill,
-    hpBarY: 3.16,
+    hpBarY: 3.05,
     update(dt, o) {
-      moveBlend = damp(moveBlend, o.moving, 7.5, dt);
-      stompT += dt * (1.6 + moveBlend * (1.4 + o.speed * 0.78));
+      moveBlend = damp(moveBlend, o.moving, 8.5, dt);
+      sprintBlend = damp(sprintBlend, (o.sprinting ?? 0) * o.moving, 7.5, dt);
+      // Stride cadence scales directly with actual ground speed so feet match travel velocity!
+      const cadence = 1.65 + moveBlend * (1.35 + o.speed * 0.62);
+      stompT += dt * cadence;
 
       const windup = o.state === 'windup';
       const strike = o.state === 'strike';
-      const style = (o.attackStyle ?? 2) % 3;
+      const style = (o.attackStyle ?? 0) % 4; // 0=right hook, 1=left uppercut, 2=brute charge, 3=leaping earth slam
       const p = THREE.MathUtils.clamp(o.attackProg ?? 0.5, 0, 1);
 
+      // Speed-scaled stride amplitude: heavy stomp at walk -> explosive pumping brute sprint when running!
+      const strideAmp = (0.48 + sprintBlend * 0.42) * moveBlend;
+      const kneeAmp = (0.58 + sprintBlend * 0.52) * moveBlend;
       const phL = stompT, phR = stompT + Math.PI;
-      const walkHipL = Math.sin(phL) * 0.52 * moveBlend;
-      const walkHipR = Math.sin(phR) * 0.52 * moveBlend;
-      const walkKneeL = Math.max(0, -Math.cos(phL)) * 0.64 * moveBlend;
-      const walkKneeR = Math.max(0, -Math.cos(phR)) * 0.64 * moveBlend;
-      const walkAnkleL = -walkHipL * 0.55 - walkKneeL * 0.45;
-      const walkAnkleR = -walkHipR * 0.55 - walkKneeR * 0.45;
+      const walkHipL = Math.sin(phL) * strideAmp;
+      const walkHipR = Math.sin(phR) * strideAmp;
+      const walkKneeL = 0.22 * (1 - moveBlend) + Math.max(0, -Math.cos(phL)) * kneeAmp;
+      const walkKneeR = 0.22 * (1 - moveBlend) + Math.max(0, -Math.cos(phR)) * kneeAmp;
+      const walkAnkleL = -walkHipL * 0.55 - walkKneeL * 0.42;
+      const walkAnkleR = -walkHipR * 0.55 - walkKneeR * 0.42;
 
-      let hipsY = 1.02 + Math.abs(Math.sin(stompT)) * 0.085 * moveBlend + Math.sin(stompT * 1.1) * 0.018 * (1 - moveBlend);
-      let hipsX = -Math.sin(stompT) * 0.065 * moveBlend;
-      let hipsRoll = Math.sin(stompT) * 0.075 * moveBlend + THREE.MathUtils.clamp(-(o.turnRate ?? 0) * 0.05, -0.14, 0.14);
-      let hipsPitch = 0.05 * moveBlend;
+      // Natural hunched brute idle/walk/sprint baseline (just like the reference stance!)
+      let hipsY = 0.96 + Math.abs(Math.sin(stompT)) * (0.09 + sprintBlend * 0.11) * moveBlend + Math.sin(stompT * 1.1) * 0.018 * (1 - moveBlend);
+      let hipsX = -Math.sin(stompT) * (0.07 + sprintBlend * 0.04) * moveBlend;
+      let hipsRoll = Math.sin(stompT) * (0.08 + sprintBlend * 0.06) * moveBlend + THREE.MathUtils.clamp(-(o.turnRate ?? 0) * 0.06, -0.18, 0.18);
+      let hipsPitch = 0.10 + 0.08 * moveBlend + 0.18 * sprintBlend;
 
-      let waistYaw = Math.sin(stompT) * 0.12 * moveBlend;
-      let waistPitch = 0.04 * moveBlend;
-      let chestYaw = Math.sin(stompT) * 0.16 * moveBlend;
-      let chestPitch = 0.04 * moveBlend + Math.sin(stompT * 1.1) * 0.025 * (1 - moveBlend);
+      let waistYaw = Math.sin(stompT) * (0.14 + sprintBlend * 0.14) * moveBlend;
+      let waistPitch = 0.08 + 0.10 * sprintBlend;
+      let chestYaw = Math.sin(stompT) * (0.18 + sprintBlend * 0.16) * moveBlend;
+      let chestPitch = 0.10 + 0.12 * sprintBlend + Math.sin(stompT * 1.1) * 0.022 * (1 - moveBlend);
 
       let clavLY = 0, clavRY = 0, clavLZ = 0, clavRZ = 0;
-      let armLX = -walkHipL * 0.72 - 0.12, armLZ = 0.12, foreLX = -0.34 - Math.max(0, walkHipL) * 0.3, wristLX = 0;
-      let armRX = -walkHipR * 0.72 - 0.12, armRZ = -0.12, foreRX = -0.34 - Math.max(0, walkHipR) * 0.3, wristRX = 0;
-      let fingerCurlL = 0.32, fingerCurlR = 0.32;
-      let legHipL = walkHipL, legHipR = walkHipR, legKneeL = walkKneeL, legKneeR = walkKneeR;
+      const armSwing = 0.68 + sprintBlend * 0.55;
+      let armLX = -walkHipL * armSwing - 0.14 - sprintBlend * 0.28, armLZ = 0.16 + sprintBlend * 0.08, foreLX = -0.38 - sprintBlend * 0.48 - Math.max(0, walkHipL) * 0.35, wristLX = 0;
+      let armRX = -walkHipR * armSwing - 0.14 - sprintBlend * 0.28, armRZ = -0.16 - sprintBlend * 0.08, foreRX = -0.38 - sprintBlend * 0.48 - Math.max(0, walkHipR) * 0.35, wristRX = 0;
+      let fingerCurlL = 0.42 + sprintBlend * 0.5, fingerCurlR = 0.42 + sprintBlend * 0.5;
+      let legHipL = walkHipL - 0.10 * (1 - moveBlend), legHipR = walkHipR - 0.10 * (1 - moveBlend);
+      let legKneeL = walkKneeL, legKneeR = walkKneeR;
       let legAnkleL = walkAnkleL, legAnkleR = walkAnkleR;
       let jawOpen = 0.02;
 
       if (windup) {
         const e = easeOutCubic(p);
-        fingerCurlL = 1.15; fingerCurlR = 1.15; jawOpen = 0.22 * e;
+        fingerCurlL = 1.25; fingerCurlR = 1.25; jawOpen = 0.24 * e;
         if (style === 0) {
-          hipsY = 1.02 - 0.14 * e; hipsPitch = 0.12 * e; hipsRoll = -0.14 * e;
-          waistYaw = -0.38 * e; chestYaw = -0.58 * e; chestPitch = 0.14 * e;
-          clavRZ = -0.22 * e; clavLZ = 0.14 * e;
-          armRX = 0.65 * e; armRZ = -0.95 * e; foreRX = -1.05 * e; wristRX = 0.25 * e;
-          armLX = -1.05 * e; armLZ = 0.40 * e; foreLX = -0.65 * e;
-          legHipL = -0.34 * e; legKneeL = 0.42 * e; legAnkleL = -0.08 * e;
-          legHipR = 0.32 * e; legKneeR = 0.28 * e; legAnkleR = -0.50 * e;
+          // Move 0: Right Heavy Haymaker coil
+          hipsY = 0.96 - 0.16 * e; hipsPitch = 0.18 * e; hipsRoll = -0.16 * e;
+          waistYaw = -0.42 * e; chestYaw = -0.62 * e; chestPitch = 0.16 * e;
+          clavRZ = -0.24 * e; clavLZ = 0.16 * e;
+          armRX = 0.72 * e; armRZ = -0.98 * e; foreRX = -1.12 * e; wristRX = 0.25 * e;
+          armLX = -1.10 * e; armLZ = 0.42 * e; foreLX = -0.72 * e;
+          legHipL = -0.36 * e; legKneeL = 0.48 * e; legHipR = 0.34 * e; legKneeR = 0.32 * e;
         } else if (style === 1) {
-          hipsY = 1.02 - 0.20 * e; hipsPitch = 0.22 * e; hipsRoll = 0.16 * e;
-          waistYaw = 0.36 * e; chestYaw = 0.52 * e; chestPitch = 0.24 * e;
-          clavLZ = 0.24 * e; clavRZ = -0.14 * e;
-          armLX = 0.78 * e; armLZ = 0.72 * e; foreLX = -1.18 * e; wristLX = 0.30 * e;
-          armRX = -1.15 * e; armRZ = -0.38 * e; foreRX = -0.52 * e;
-          legHipL = 0.34 * e; legKneeL = 0.36 * e; legAnkleL = -0.52 * e;
-          legHipR = -0.36 * e; legKneeR = 0.44 * e; legAnkleR = -0.08 * e;
+          // Move 1: Left Crushing Uppercut coil
+          hipsY = 0.96 - 0.22 * e; hipsPitch = 0.26 * e; hipsRoll = 0.18 * e;
+          waistYaw = 0.40 * e; chestYaw = 0.56 * e; chestPitch = 0.26 * e;
+          clavLZ = 0.26 * e; clavRZ = -0.16 * e;
+          armLX = 0.82 * e; armLZ = 0.74 * e; foreLX = -1.24 * e; wristLX = 0.30 * e;
+          armRX = -1.18 * e; armRZ = -0.40 * e; foreRX = -0.58 * e;
+          legHipL = 0.36 * e; legKneeL = 0.40 * e; legHipR = -0.38 * e; legKneeR = 0.48 * e;
+        } else if (style === 2) {
+          // Move 2: Brute Double-Arm Charge Lunge coil (hunch low like a battering ram!)
+          hipsY = 0.96 - 0.22 * e; hipsPitch = 0.36 * e;
+          waistPitch = 0.18 * e; chestPitch = 0.26 * e;
+          clavLZ = 0.20 * e; clavRZ = -0.20 * e;
+          armLX = 0.95 * e; armLZ = 0.52 * e; foreLX = -1.05 * e;
+          armRX = 0.95 * e; armRZ = -0.52 * e; foreRX = -1.05 * e;
+          legHipL = -0.42 * e; legKneeL = 0.56 * e; legHipR = 0.36 * e; legKneeR = 0.42 * e;
+          jawOpen = 0.34 * e;
         } else {
-          hipsY = 1.02 + 0.10 * e; hipsPitch = -0.12 * e;
-          waistPitch = -0.16 * e; chestPitch = -0.28 * e;
-          clavLY = 0.14 * e; clavRY = 0.14 * e; clavLZ = 0.26 * e; clavRZ = -0.26 * e;
-          armLX = -2.85 * e; armLZ = -0.24 * e; foreLX = -0.48 * e;
-          armRX = -2.85 * e; armRZ = 0.24 * e; foreRX = -0.48 * e;
-          legHipL = -0.22 * e; legKneeL = 0.30 * e; legAnkleL = -0.08 * e;
-          legHipR = -0.22 * e; legKneeR = 0.30 * e; legAnkleR = -0.08 * e;
-          jawOpen = 0.38 * e;
+          // Move 3: Leaping Colossal Ground Smash (leaps up into the air raising both boulders!)
+          const leap = Math.sin(p * Math.PI * 0.65) * 0.58;
+          hipsY = 0.96 + leap; hipsPitch = -0.14 * e;
+          waistPitch = -0.18 * e; chestPitch = -0.30 * e;
+          clavLY = 0.16 * e; clavRY = 0.16 * e; clavLZ = 0.28 * e; clavRZ = -0.28 * e;
+          armLX = -2.90 * e; armLZ = -0.22 * e; foreLX = -0.45 * e;
+          armRX = -2.90 * e; armRZ = 0.22 * e; foreRX = -0.45 * e;
+          legHipL = -0.36 * e; legKneeL = 0.62 * e; legHipR = -0.36 * e; legKneeR = 0.62 * e;
+          jawOpen = 0.42 * e;
         }
       } else if (strike) {
-        const snap = p < 0.38 ? easeOutCubic(p / 0.38) : 1 - 0.18 * easeInOutSine((p - 0.38) / 0.62);
-        fingerCurlL = 1.25; fingerCurlR = 1.25; jawOpen = 0.30 * (1 - p * 0.6);
+        const snap = p < 0.36 ? easeOutCubic(p / 0.36) : 1 - 0.20 * easeInOutSine((p - 0.36) / 0.64);
+        fingerCurlL = 1.32; fingerCurlR = 1.32; jawOpen = 0.32 * (1 - p * 0.6);
         if (style === 0) {
-          hipsY = 1.02 - 0.06 * snap; hipsRoll = 0.18 * snap; hipsPitch = 0.14 * snap;
-          waistYaw = 0.44 * snap; chestYaw = 0.64 * snap; chestPitch = 0.20 * snap;
-          clavRY = 0.06 * snap; clavRZ = 0.20 * snap;
-          armRX = -1.52 * snap; armRZ = 0.88 * snap; foreRX = -0.18 * snap; wristRX = -0.20 * snap;
-          armLX = 0.58 * snap; armLZ = 0.28 * snap; foreLX = -0.62 * snap;
-          legHipL = 0.36 * snap; legKneeL = 0.22 * snap; legAnkleL = -0.48 * snap;
-          legHipR = -0.32 * snap; legKneeR = 0.44 * snap; legAnkleR = -0.12 * snap;
+          hipsY = 0.96 - 0.08 * snap; hipsRoll = 0.20 * snap; hipsPitch = 0.18 * snap;
+          waistYaw = 0.46 * snap; chestYaw = 0.68 * snap; chestPitch = 0.24 * snap;
+          clavRY = 0.08 * snap; clavRZ = 0.24 * snap;
+          armRX = -1.58 * snap; armRZ = 0.92 * snap; foreRX = -0.18 * snap; wristRX = -0.22 * snap;
+          armLX = 0.62 * snap; armLZ = 0.30 * snap; foreLX = -0.66 * snap;
+          legHipL = 0.38 * snap; legKneeL = 0.24 * snap; legHipR = -0.34 * snap; legKneeR = 0.46 * snap;
         } else if (style === 1) {
-          hipsY = 1.02 + 0.10 * snap; hipsRoll = -0.18 * snap; hipsPitch = -0.10 * snap;
-          waistYaw = -0.42 * snap; chestYaw = -0.56 * snap; chestPitch = -0.18 * snap;
-          clavLY = 0.14 * snap; clavLZ = -0.18 * snap;
-          armLX = -2.35 * snap; armLZ = -0.34 * snap; foreLX = -0.14 * snap; wristLX = -0.25 * snap;
-          armRX = 0.56 * snap; armRZ = -0.26 * snap; foreRX = -0.62 * snap;
-          legHipL = -0.30 * snap; legKneeL = 0.38 * snap; legAnkleL = -0.10 * snap;
-          legHipR = 0.34 * snap; legKneeR = 0.20 * snap; legAnkleR = -0.46 * snap;
+          hipsY = 0.96 + 0.12 * snap; hipsRoll = -0.20 * snap; hipsPitch = -0.08 * snap;
+          waistYaw = -0.46 * snap; chestYaw = -0.60 * snap; chestPitch = -0.16 * snap;
+          clavLY = 0.16 * snap; clavLZ = -0.20 * snap;
+          armLX = -2.42 * snap; armLZ = -0.36 * snap; foreLX = -0.14 * snap; wristLX = -0.25 * snap;
+          armRX = 0.60 * snap; armRZ = -0.28 * snap; foreRX = -0.64 * snap;
+          legHipL = -0.32 * snap; legKneeL = 0.40 * snap; legHipR = 0.36 * snap; legKneeR = 0.22 * snap;
+        } else if (style === 2) {
+          // Double-arm crushing clap/ram smash forward!
+          hipsY = 0.96 - 0.12 * snap; hipsPitch = 0.30 * snap;
+          waistPitch = 0.16 * snap; chestPitch = 0.28 * snap;
+          armLX = -1.65 * snap; armLZ = -0.52 * snap; foreLX = -0.25 * snap;
+          armRX = -1.65 * snap; armRZ = 0.52 * snap; foreRX = -0.25 * snap;
+          legHipL = 0.42 * snap; legKneeL = 0.26 * snap; legHipR = -0.38 * snap; legKneeR = 0.52 * snap;
         } else {
-          hipsY = 1.02 - 0.24 * snap; hipsPitch = 0.22 * snap;
-          waistPitch = 0.24 * snap; chestPitch = 0.36 * snap;
-          clavLY = -0.10 * snap; clavRY = -0.10 * snap; clavLZ = -0.16 * snap; clavRZ = 0.16 * snap;
-          armLX = 0.86 * snap; armLZ = -0.16 * snap; foreLX = -0.12 * snap;
-          armRX = 0.86 * snap; armRZ = 0.16 * snap; foreRX = -0.12 * snap;
-          legHipL = -0.38 * snap; legKneeL = 0.62 * snap; legAnkleL = -0.22 * snap;
-          legHipR = -0.38 * snap; legKneeR = 0.62 * snap; legAnkleR = -0.22 * snap;
-          jawOpen = 0.44 * (1 - p * 0.5);
+          // Crashing earth-shattering ground smash!
+          hipsY = 0.96 - 0.28 * snap; hipsPitch = 0.28 * snap;
+          waistPitch = 0.28 * snap; chestPitch = 0.40 * snap;
+          clavLY = -0.12 * snap; clavRY = -0.12 * snap; clavLZ = -0.18 * snap; clavRZ = 0.18 * snap;
+          armLX = 0.88 * snap; armLZ = -0.18 * snap; foreLX = -0.10 * snap;
+          armRX = 0.88 * snap; armRZ = 0.18 * snap; foreRX = -0.10 * snap;
+          legHipL = -0.42 * snap; legKneeL = 0.68 * snap; legHipR = -0.42 * snap; legKneeR = 0.68 * snap;
+          jawOpen = 0.46 * (1 - p * 0.5);
         }
       }
 
-      const kBody = strike ? 22 : windup ? 15 : 10;
-      const kArm = strike ? 26 : windup ? 16 : 11;
+      const kBody = strike ? 24 : windup ? 16 : 11;
+      const kArm = strike ? 28 : windup ? 17 : 12;
 
       hips.position.y = damp(hips.position.y, hipsY, kBody, dt);
-      hips.position.x = damp(hips.position.x, hipsX, 10, dt);
+      hips.position.x = damp(hips.position.x, hipsX, 11, dt);
       hips.rotation.z = damp(hips.rotation.z, hipsRoll, kBody, dt);
       hips.rotation.x = damp(hips.rotation.x, hipsPitch, kBody, dt);
 
@@ -1409,8 +1338,8 @@ function buildGolem(color: number): CompanionModel {
       chest.rotation.y = damp(chest.rotation.y, chestYaw, kBody, dt);
       chest.rotation.x = damp(chest.rotation.x, chestPitch, kBody, dt);
 
-      armL.clavicle.position.y = damp(armL.clavicle.position.y, 0.78 + clavLY, kArm, dt);
-      armR.clavicle.position.y = damp(armR.clavicle.position.y, 0.78 + clavRY, kArm, dt);
+      armL.clavicle.position.y = damp(armL.clavicle.position.y, 0.74 + clavLY, kArm, dt);
+      armR.clavicle.position.y = damp(armR.clavicle.position.y, 0.74 + clavRY, kArm, dt);
       armL.clavicle.rotation.z = damp(armL.clavicle.rotation.z, clavLZ, kArm, dt);
       armR.clavicle.rotation.z = damp(armR.clavicle.rotation.z, clavRZ, kArm, dt);
 
@@ -1434,40 +1363,20 @@ function buildGolem(color: number): CompanionModel {
       legR.shin.rotation.x = damp(legR.shin.rotation.x, legKneeR, kBody, dt);
       legR.ankle.rotation.x = damp(legR.ankle.rotation.x, legAnkleR, kBody, dt);
 
+      // Head counters hunched torso pitch & swing twist to glare straight ahead!
       const totalTwist = waist.rotation.y + chest.rotation.y;
       const totalPitch = hips.rotation.x + waist.rotation.x + chest.rotation.x;
       neck.rotation.y = damp(neck.rotation.y, -totalTwist * 0.45, 13, dt);
-      head.rotation.y = damp(head.rotation.y, -totalTwist * 0.35 + Math.sin(stompT * 0.35) * 0.06 * (1 - moveBlend), 13, dt);
-      head.rotation.x = damp(head.rotation.x, -totalPitch * 0.55, 12, dt);
+      head.rotation.y = damp(head.rotation.y, -totalTwist * 0.35 + Math.sin(stompT * 0.35) * 0.05 * (1 - moveBlend), 13, dt);
+      head.rotation.x = damp(head.rotation.x, -totalPitch * 0.72, 12, dt);
       jaw.rotation.x = damp(jaw.rotation.x, jawOpen, 14, dt);
-
-      tassetF.rotation.x = damp(tassetF.rotation.x, -Math.abs(walkHipL) * 0.45 - (strike ? 0.32 : 0), 11, dt);
-      tassetL.rotation.z = damp(tassetL.rotation.z, walkHipL * 0.28 + hipsRoll * 0.4, 11, dt);
-      tassetR.rotation.z = damp(tassetR.rotation.z, -walkHipR * 0.28 + hipsRoll * 0.4, 11, dt);
-
-      const combatEnergy = windup || strike ? 1 : 0;
-      coreRingOuter.rotation.z += dt * (combatEnergy ? 2.4 : 0.65);
-      coreRingInner.rotation.x += dt * (combatEnergy ? 3.6 : 1.1);
-      coreRingInner.rotation.y += dt * (combatEnergy ? 2.8 : 0.9);
-      coreOuter.rotation.y += dt * (combatEnergy ? 4.8 : 1.6);
-      coreInner.rotation.y -= dt * 3.0;
-      const pulse = (1 + Math.sin(stompT * 2.6) * 0.08) * (combatEnergy ? 1.32 : 1.0);
-      coreOuter.scale.set(0.14 * pulse, 0.22 * pulse, 0.10 * pulse);
-      runeStoneMat.emissiveIntensity = damp(runeStoneMat.emissiveIntensity, combatEnergy ? 2.6 : 1.45, 10, dt);
-
-      haloGroup.rotation.z += dt * (combatEnergy ? 2.8 : 0.65);
-      for (let i = 0; i < orbitShards.length; i++) {
-        orbitShards[i].rotation.y += dt * 2.2;
-      }
     },
     setFlash(v) {
-      for (const m of [stoneMat, darkStoneMat, mossMat, bronzeMat]) m.emissive.setScalar(v);
+      for (const m of [stoneMat, darkRockMat]) m.emissive.setScalar(v);
     },
     setHpFrac: ui.setHpFrac,
     dispose() {
-      for (const m of [stoneMat, darkStoneMat, runeStoneMat, bronzeMat, mossMat, jointGlowMat, runeMat, coreHotMat]) m.dispose();
-      beltGeo.dispose(); coreRingGeo.dispose(); coreRingInnerGeo.dispose(); haloRingGeo.dispose();
-      armL.cuffGeo.dispose(); armR.cuffGeo.dispose();
+      for (const m of [stoneMat, darkRockMat, creviceMat, teethMat, eyeMat]) m.dispose();
       ui.disposeUi();
     },
   };
