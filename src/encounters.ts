@@ -71,7 +71,7 @@ const REINFORCEMENTS: { kind: EnemyKind; rank: number; tier: number }[] = [
 
 function prepareRoster(c: Camp) {
   const gear = equipmentThreat(), lv = level();
-  const lvRank = lv >= 60 ? 3 : lv >= 35 ? 2 : lv >= 15 ? 1 : 0;
+  const lvRank = lv >= 70 ? 3 : lv >= 45 ? 2 : lv >= 20 ? 1 : 0;
   const threat = { offense: gear.offense, defense: gear.defense, rank: Math.max(gear.rank, lvRank) };
   const previous = c.threat;
   // A squad that has taken casualties keeps its survivors and stats until it is cleared.

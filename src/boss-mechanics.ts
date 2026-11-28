@@ -48,10 +48,10 @@ export function affixesOf(en: Enemy): Affix[] {
   if (en.affixes) return en.affixes;
   const tier = en.camp.tier, colossal = !!KINDS[en.kind].boss?.phase3, temple = !!en.camp.templeGuard, lv = level();
   const n = rank === 'elite'
-    ? (lv >= 35 ? 2 : 1)
+    ? (lv >= 45 ? 2 : 1)
     : colossal
-      ? Math.min(4, 3 + (lv >= 70 ? 1 : 0))
-      : Math.min(3, Math.max(temple ? 2 : 1, 1 + (tier > 0.45 ? 1 : 0) + (tier > 0.78 ? 1 : 0) + (lv >= 50 ? 1 : 0)));
+      ? Math.min(4, 3 + (lv >= 80 ? 1 : 0))
+      : Math.min(3, Math.max(temple ? 2 : 1, 1 + (tier > 0.45 ? 1 : 0) + (tier > 0.78 ? 1 : 0) + (lv >= 55 ? 1 : 0)));
   const pool = ALL.slice(), out: Affix[] = [];
   while (out.length < n && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   en.affixes = out;

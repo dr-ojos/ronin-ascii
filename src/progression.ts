@@ -163,23 +163,23 @@ export const maxStreak = () => hasPerk('tigre') ? 6 : 5;
 /** the oni of the world grow proportionally with you: more life, damage, speed and faster attack cadence per level */
 export const foeHpAt = (lv: number) => {
   const n = Math.max(0, lv - 1);
-  return 1 + 0.035 * n + 0.00025 * n * n;
+  return 1 + 0.024 * n + 0.00014 * n * n;
 };
 export const foeDmgAt = (lv: number) => {
   const n = Math.max(0, lv - 1);
-  return 1 + 0.024 * n + 0.00012 * n * n;
+  return 1 + 0.016 * n + 0.00007 * n * n;
 };
 export const foeSpeedAt = (lv: number) => {
   const n = Math.max(0, lv - 1);
-  return 1 + Math.min(0.35, 0.0035 * n);
+  return 1 + Math.min(0.24, 0.0024 * n);
 };
 export const foeWindupAt = (lv: number) => {
   const n = Math.max(0, lv - 1);
-  return Math.max(0.68, 1 - 0.0032 * n);
+  return Math.max(0.76, 1 - 0.0024 * n);
 };
 export const foeRecoveryAt = (lv: number) => {
   const n = Math.max(0, lv - 1);
-  return Math.max(0.62, 1 - 0.0038 * n);
+  return Math.max(0.72, 1 - 0.0028 * n);
 };
 export const foeHp = () => foeHpAt(prof.level);
 export const foeDmg = () => foeDmgAt(prof.level);

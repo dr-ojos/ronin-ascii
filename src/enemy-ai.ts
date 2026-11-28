@@ -167,7 +167,7 @@ export function clearEnemyHazards() {
 const MARK = new THREE.RingGeometry(0.15, 1.8, 32).rotateX(-Math.PI / 2);
 const marks: { m: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>; t: number; max: number; dmg: number }[] = [];
 function callThunder(en: Enemy) {
-  const n = (en.camp.tier > 0.6 ? 5 : 3) + (level() >= 45 ? 1 : 0);
+  const n = (en.camp.tier > 0.6 ? 5 : 3) + (level() >= 55 ? 1 : 0);
   for (let i = 0; i < n; i++) {
     // the first one right where you are, the others around it
     const a = Math.random() * Math.PI * 2, r = i === 0 ? 0 : rnd(2.2, 4.5);

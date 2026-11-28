@@ -62,7 +62,7 @@ export function freeAgent(en: Enemy) {
 function maxStrikers() {
   const crowd = enemies.filter(e => !freeAgent(e) && e.state !== 'idle' && e.state !== 'return').length;
   const lv = level();
-  return 2 + (crowd >= 4 ? 1 : 0) + (battle.t > 30 ? 1 : 0) + (lv >= 25 ? 1 : 0) + (lv >= 60 ? 1 : 0);
+  return 2 + (crowd >= 4 ? 1 : 0) + (battle.t > 30 ? 1 : 0) + (lv >= 35 ? 1 : 0) + (lv >= 75 ? 1 : 0);
 }
 function releaseTokens() {
   for (const [e, turn] of tokens) {
