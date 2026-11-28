@@ -28,7 +28,7 @@ import { gainWeaponXp } from './weapon-upgrades';
 import { CLS, markCombatFx, tagMat } from './materials';
 import { player, state } from './state';
 import { angDiff, rnd } from './utils';
-import type { Camp, Enemy, Wildlife } from './types';
+import type { Camp, Enemy, EnemyAnimStyle, Wildlife } from './types';
 
 const nav = { x: 0, z: 0 };
 const WILDLIFE_NAMES: Record<Wildlife, string> = {
@@ -596,7 +596,32 @@ export function updateEnemies(dt: number) {
     if (en.model) {
       en.move += ((walk > 0 ? 1 : 0) - en.move) * Math.min(1, dt * 8);
       const strike = def.moves ? en.strikeT > 0 || en.state === 'charge' : en.state === 'recover' && en.t > 0.45;
-      en.model.update(dt, { moving: en.move, speed: Math.max(walk, 1), state: wind ? 'windup' : strike ? 'strike' : 'idle' });
+      // derive fluid choreography style from the active attack shape & boss weapon
+      let style: EnemyAnimStyle | undefined;
+      if (en.attack) {
+        const mv = en.attack.move;
+        if (mv.shape === 'charge') style = 'charge';
+        else if (mv.shape === 'zones' || mv.shape === 'wave' || (mv.shape === 'arc' && mv.heal)) style = 'cast';
+        else if (mv.shape === 'arc' && mv.angle >= Math.PI * 0.95 && (!def.beast && (def.look.weapon === 'sword' || def.look.weapon === 'scythe'))) style = 'spin';
+        else if (mv.shape === 'arc' && mv.angle < Math.PI * 0.95 && (!def.beast && (def.look.weapon === 'sword' || def.look.weapon === 'scythe' || def.look.weapon === 'spear'))) style = 'sweep';
+        else style = 'overhead';
+      } else if (!def.beast && (def.look.weapon === 'sword' || def.look.weapon === 'scythe')) {
+        style = 'sweep';
+      }
+      const progress = wind
+        ? 1 - Math.max(0, en.t) / Math.max(0.01, en.attack ? en.attack.windup : en.windup)
+        : strike ? 1 - Math.max(0, en.strikeT) / 0.24 : 0;
+      const lookYaw = fighting ? angDiff(Math.atan2(tmp.x, tmp.z), g.rotation.y) : 0;
+      en.model.update(dt, {
+        moving: en.move,
+        speed: Math.max(walk, 1),
+        state: wind ? 'windup' : strike ? 'strike' : 'idle',
+        progress,
+        style,
+        phase: en.phase ?? (en.enraged ? 2 : 1),
+        dazed: (en.dazedT ?? 0) > 0,
+        look: lookYaw
+      });
     } else {
       g.position.y = gy + 0.08 + Math.sin(state.time * 3 + en.seed) * 0.07;
       g.rotation.x = wind ? -0.25 : (en.state === 'recover' ? 0.15 : 0);

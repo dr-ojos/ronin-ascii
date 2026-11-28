@@ -73,10 +73,20 @@ export type EnemyKind = 'oni' | 'ashigaru' | 'arquero' | 'bruto' | 'escudero' | 
 export type Affix = 'acorazado' | 'regenerador' | 'furioso' | 'gelido' | 'invocador' | 'errante' | 'espinoso';
 export type EnemyState = 'idle' | 'chase' | 'windup' | 'charge' | 'recover' | 'return';
 
+export type EnemyAnimStyle = 'overhead' | 'sweep' | 'charge' | 'spin' | 'cast';
 export interface EnemyModel {
   root: THREE.Object3D;
   ring: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-  update(dt: number, o: { moving: number; speed: number; state: 'windup' | 'strike' | 'idle' }): void;
+  update(dt: number, o: {
+    moving: number;
+    speed: number;
+    state: 'windup' | 'strike' | 'idle';
+    progress?: number;
+    style?: EnemyAnimStyle;
+    phase?: number;
+    dazed?: boolean;
+    look?: number;
+  }): void;
   setFlash(v: number): void;
   dispose?(): void;
 }

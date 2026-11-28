@@ -1031,19 +1031,35 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
   // demon skin on the arms and chest, a tiger-skin loincloth, hakama in the oni's own colour
   const skinC = new THREE.Color(look.mask).multiplyScalar(0.92), legC = new THREE.Color(look.tint).multiplyScalar(1.8);
   paintBody(rig.skinned.material, { kind: 'oni', skin: skinC.getHex(), hakama: legC.getHex(), trim: 0xc09a50, under: 0xd99a2b, wrap: 0x2c2422 });
-  const { head: mask, chest, belt } = oniCostume(look);
+  const { head: mask, chest, belt, backDrums, backCape } = oniCostume(look);
   const headSize = top.y - head.y;
   // the costume head (mask and helmet) is sized to the skull, not to the whole head bone span
   mask.scale.setScalar(headSize / 0.215 * 0.86);
   mask.position.set(head.x, head.y + headSize * 0.4, head.z + 0.01);
   attach('Head', mask);
 
+  if (backDrums) chest.add(backDrums);
+  if (backCape) chest.add(backCape);
   chest.scale.set(sw / 0.2, 1, Math.max(0.96, sw / 0.2));
   chest.position.set(neck.x, neck.y - 0.04, neck.z);
   attach('Spine2', chest);
   belt.scale.set(sw / 0.2, 1, sw / 0.2);
   belt.position.set(hips.x, hips.y + 0.03, hips.z);
   attach('Hips', belt);
+
+  // glowing weapon slash aura for major & colossal bosses (flares on windup & strike)
+  let weaponGlow: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null = null;
+  const makeWeaponGlow = (parent: THREE.Object3D, len: number, y: number, z: number, rotX = 0) => {
+    if (!look.big && !look.colossal) return;
+    const mat = new THREE.MeshBasicMaterial({
+      color: look.eye ?? 0xffb84d, transparent: true, opacity: 0,
+      depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(look.colossal ? 0.24 : 0.16, len), mat);
+    m.position.set(0, y, z); m.rotation.x = rotX;
+    parent.add(m);
+    weaponGlow = m;
+  };
 
   if (look.weapon === 'club' || look.weapon === 'bigclub') {
     // kanabo (studded iron club) in the right hand
@@ -1061,6 +1077,7 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
         glowBand.rotation.x = Math.PI / 2;
       }
     }
+    makeWeaponGlow(club, 0.88, 0.55, 0);
     club.rotation.x = Math.PI / 2; // points forward from the fist
     club.position.set(rHand.x - side * 0.05, rHand.y - 0.02, rHand.z - 0.12);
     attach('RightHand', club);
@@ -1084,6 +1101,7 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
       mesh(new THREE.TorusGeometry(0.092, 0.012, 6, 20), mEye, sword, 0, 0, 0.15).rotation.x = Math.PI / 2;
       mesh(new THREE.BoxGeometry(0.012, 0.016, 0.92), mEye, sword, 0, 0.012, 0.65);
     }
+    makeWeaponGlow(sword, 1.05, 0.02, 0.68, Math.PI / 2);
     sword.position.copy(rHand);
     attach('RightHand', sword);
   } else if (look.weapon === 'staff') {
@@ -1100,6 +1118,7 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
       mesh(new THREE.TorusGeometry(0.11, 0.015, 6, 18), mEye, scythe, 0, 1.32, 0);
       mesh(new THREE.OctahedronGeometry(0.085), mEye, scythe, 0, 1.52, 0);
     }
+    makeWeaponGlow(scythe, 0.95, 1.32, 0);
     scythe.position.copy(rHand);
     scythe.rotation.x = Math.PI / 2;
     attach('RightHand', scythe);
@@ -1152,43 +1171,164 @@ export function createOniWarrior(gltf: GLTF, look: OniLook): EnemyModel {
     part.material = material;
   });
   mangaFinish(root);
-  const pole = new V(), bq = new Q(), tgt = new V();
-  let lift = 0;
+  const pole = new V(), bq = new Q(), tgt = new V(), axisX = new V(), axisY = new V(), axisZ = new V();
+  let windW = 0, strikeW = 0, dazeW = 0, lookSm = 0, spinAng = 0, animT = Math.random() * 10;
+  let lastStyle: NonNullable<Parameters<EnemyModel['update']>[1]['style']> = 'overhead';
   act.Run && (act.Run.time = Math.random() * 2);
   mixer.update(0);  // show the idle pose from the first visible frame
+  const easeOut = (t: number) => 1 - (1 - clamp(t, 0, 1)) ** 3;
+  const smooth = (cur: number, dst: number, rate: number, dt: number) => cur + (dst - cur) * (1 - Math.exp(-dt * rate));
   function update(dt: number, s: Parameters<EnemyModel['update']>[1]) {
-    const run = clamp(s.moving, 0, 1);
+    animT += dt;
+    const phase = s.phase ?? 1, dazed = !!s.dazed;
+    const run = dazed ? 0 : clamp(s.moving, 0, 1);
     act.Idle?.setEffectiveWeight(1 - run);
     act.Run?.setEffectiveWeight(run);
-    if (act.Run) act.Run.timeScale = s.speed / 4.2;
+    // colossal bosses take weightier, longer strides so their footsteps feel massive
+    const strideScale = look.colossal ? 5.6 : big ? 4.8 : 4.2;
+    if (act.Run) act.Run.timeScale = s.speed / strideScale;
     mixer.update(dt);
     root.updateMatrixWorld(true);
-    // overhead wind-up, then smash down in front
-    const want = s.state === 'windup' ? 1 : (s.state === 'strike' ? 2 : 0);
-    lift += ((want === 1 ? 1 : 0) - lift) * (1 - Math.exp(-dt * 10));
+
+    const want = dazed ? 0 : (s.state === 'windup' ? 1 : (s.state === 'strike' ? 2 : 0));
+    if (s.style) lastStyle = s.style;
+    const style = lastStyle;
+    const prog = clamp(s.progress ?? 0.5, 0, 1);
+    windW = smooth(windW, want === 1 ? 1 : 0, want === 1 ? 9 : 14, dt);
+    strikeW = smooth(strikeW, want === 2 ? 1 : 0, want === 2 ? 22 : 8.5, dt);
+    dazeW = smooth(dazeW, dazed ? 1 : 0, 8, dt);
+    lookSm = smooth(lookSm, clamp(s.look ?? 0, -0.7, 0.7), 7, dt);
+
+    // full 360° fluid whirlwind spin on spin strikes
+    if (want === 2 && style === 'spin') spinAng = smooth(spinAng, TAU, 13, dt);
+    else if (spinAng > 0.01) spinAng = want === 1 && style === 'spin' ? smooth(spinAng, -0.55, 8, dt) : smooth(spinAng, 0, 10, dt);
+
     root.getWorldQuaternion(bq);
+    axisX.set(1, 0, 0).applyQuaternion(bq);
+    axisY.set(0, 1, 0).applyQuaternion(bq);
+    axisZ.set(0, 0, 1).applyQuaternion(bq);
+    const sc = root.scale.x;
+
+    // 1. Living breathing & menacing posture (stronger in Phase II / III)
+    const breathFreq = phase === 3 ? 3.8 : phase === 2 ? 2.9 : 2.1;
+    const breathAmp = (look.colossal ? 0.055 : big ? 0.04 : 0.025) * (1 + 0.25 * (phase - 1));
+    const breath = Math.sin(animT * breathFreq) * breathAmp;
+    if (B.Spine) rotateBoneWorld(B.Spine, axisX, breath * (1 - run * 0.5));
+    if (B.Spine2) rotateBoneWorld(B.Spine2, axisX, -breath * 0.5);
+    if (B.Head && Math.abs(lookSm) > 0.01 && !dazed) rotateBoneWorld(B.Head, axisY, lookSm * 0.65);
+
+    // 2. Staggered / dazed hunched posture
+    if (dazeW > 0.01) {
+      const sway = Math.sin(animT * 3.4) * 0.14 * dazeW;
+      if (B.Spine) { rotateBoneWorld(B.Spine, axisX, 0.48 * dazeW); rotateBoneWorld(B.Spine, axisZ, sway); }
+      if (B.Head) rotateBoneWorld(B.Head, axisX, 0.35 * dazeW);
+      tgt.set(-side * 0.36, 0.72, 0.34).multiplyScalar(sc).applyQuaternion(bq).add(root.position);
+      ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, -0.6, -0.2).applyQuaternion(bq), dazeW * 0.85);
+    }
+
+    // 3. Shield & bow handling
     if (look.shield) {
-      tgt.set(side * 0.16, 1.13, 0.42).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
-      ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, tgt, pole.set(side, -0.5, 0).applyQuaternion(bq), want === 0 ? 0.85 : 0.3);
+      tgt.set(side * 0.16, 1.13, 0.42).multiplyScalar(sc).applyQuaternion(bq).add(root.position);
+      ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, tgt, pole.set(side, -0.5, 0).applyQuaternion(bq), want === 0 ? 0.85 : 0.35);
     }
     if (look.weapon === 'bow') {
-      if (lift > 0.02 || want === 2) {
-        tgt.set(side * 0.21, 1.48, 0.64).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
-        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, tgt, pole.set(side, -0.5, 0).applyQuaternion(bq), want === 2 ? 1 : lift);
-        tgt.set(-side * 0.17, 1.49, want === 2 ? -0.17 : 0.1).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
-        ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, 0, -0.5).applyQuaternion(bq), want === 2 ? 1 : lift);
+      if (windW > 0.02 || strikeW > 0.02) {
+        const w = Math.max(windW, strikeW);
+        tgt.set(side * 0.21, 1.48, 0.64).multiplyScalar(sc).applyQuaternion(bq).add(root.position);
+        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, tgt, pole.set(side, -0.5, 0).applyQuaternion(bq), w);
+        tgt.set(-side * 0.17, 1.49, strikeW > 0.3 ? -0.17 : 0.1).multiplyScalar(sc).applyQuaternion(bq).add(root.position);
+        ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, 0, -0.5).applyQuaternion(bq), w);
       }
-      return;
+    } else if (!dazed) {
+      // 4. Choreographed fluid attack animations (anticipation coil -> snap-through -> follow-through)
+      const coil = easeOut(prog);
+      const actW = Math.max(windW, strikeW);
+      let rx = -side * 0.34, ry = 1.18, rz = 0.22;
+      let lx = side * 0.34, ly = 1.16, lz = 0.24, leftIK = 0;
+      let spinePitch = 0, spineTwist = 0;
+
+      if (style === 'sweep') {
+        // Wide samurai horizontal cleave: coil torso right -> whip across to left
+        const wX = -side * (0.64 + 0.12 * coil), wY = 1.38 + 0.16 * coil, wZ = -0.32 - 0.12 * coil;
+        const sX = side * 0.48, sY = 1.12, sZ = 0.72;
+        rx = THREE.MathUtils.lerp(wX, sX, strikeW);
+        ry = THREE.MathUtils.lerp(wY, sY, strikeW);
+        rz = THREE.MathUtils.lerp(wZ, sZ, strikeW);
+        spineTwist = -side * (0.58 * windW * (0.5 + 0.5 * coil) - 0.82 * strikeW);
+        spinePitch = -0.14 * windW + 0.28 * strikeW;
+        lx = side * (0.38 - 0.2 * strikeW); ly = 1.24; lz = 0.42 - 0.35 * strikeW; leftIK = actW * 0.65;
+      } else if (style === 'charge') {
+        // Low predatory iai dash: crouch low with weapon drawn back -> spear/blade thrust forward
+        rx = THREE.MathUtils.lerp(-side * 0.46, -side * 0.1, strikeW);
+        ry = THREE.MathUtils.lerp(0.95, 1.26, strikeW);
+        rz = THREE.MathUtils.lerp(-0.42, 0.96, strikeW);
+        spinePitch = 0.32 * windW + 0.46 * strikeW;
+        spineTwist = -side * (0.42 * windW - 0.34 * strikeW);
+        lx = side * 0.32; ly = 1.12; lz = 0.52 * windW - 0.22 * strikeW; leftIK = actW * 0.7;
+      } else if (style === 'spin') {
+        // 360° whirlwind: tight coil -> sweeping horizontal extension + body spin
+        rx = THREE.MathUtils.lerp(-side * 0.58, -side * 0.68, strikeW);
+        ry = THREE.MathUtils.lerp(1.32, 1.18, strikeW);
+        rz = THREE.MathUtils.lerp(-0.28, 0.58, strikeW);
+        spineTwist = spinAng;
+        spinePitch = -0.1 * windW + 0.22 * strikeW;
+        lx = side * 0.52; ly = 1.22; lz = -0.18; leftIK = actW * 0.6;
+      } else if (style === 'cast') {
+        // Imperious skyward invocation: both arms raised high -> thrust forward on release
+        rx = THREE.MathUtils.lerp(-side * 0.42, -side * 0.24, strikeW);
+        ry = THREE.MathUtils.lerp(2.08 + 0.12 * coil, 1.32, strikeW);
+        rz = THREE.MathUtils.lerp(0.08, 0.84, strikeW);
+        lx = THREE.MathUtils.lerp(side * 0.44, side * 0.28, strikeW);
+        ly = THREE.MathUtils.lerp(1.96 + 0.1 * coil, 1.28, strikeW);
+        lz = THREE.MathUtils.lerp(0.14, 0.76, strikeW);
+        leftIK = actW * 0.92;
+        spinePitch = -0.34 * windW * (0.5 + 0.5 * coil) + 0.26 * strikeW;
+      } else {
+        // Overhead heavy smash: deep heroic back-arch -> crushing full-body slam
+        const wY = 2.08 + 0.16 * coil, wZ = -0.18 - 0.12 * coil;
+        rx = THREE.MathUtils.lerp(-side * 0.24, -side * 0.08, strikeW);
+        ry = THREE.MathUtils.lerp(wY, 0.66, strikeW);
+        rz = THREE.MathUtils.lerp(wZ, 0.92, strikeW);
+        spinePitch = -0.32 * windW * (0.5 + 0.5 * coil) + 0.48 * strikeW;
+        spineTwist = -side * (0.24 * windW - 0.22 * strikeW);
+        lx = side * 0.28; ly = THREE.MathUtils.lerp(1.62, 1.05, strikeW); lz = THREE.MathUtils.lerp(0.28, -0.18, strikeW);
+        leftIK = actW * 0.55;
+      }
+
+      if (actW > 0.015) {
+        if (B.Spine) {
+          rotateBoneWorld(B.Spine, axisX, spinePitch);
+          if (Math.abs(spineTwist) > 0.001) rotateBoneWorld(B.Spine, axisY, spineTwist * 0.65);
+        }
+        if (B.Spine2 && Math.abs(spineTwist) > 0.001) rotateBoneWorld(B.Spine2, axisY, spineTwist * 0.35);
+        tgt.set(rx, ry, rz).multiplyScalar(sc).applyQuaternion(bq).add(root.position);
+        ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, strikeW > 0.4 ? -0.45 : 0.1, -0.5).applyQuaternion(bq), actW);
+        if (!look.shield && leftIK > 0.02) {
+          tgt.set(lx, ly, lz).multiplyScalar(sc).applyQuaternion(bq).add(root.position);
+          ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, tgt, pole.set(side, -0.35, -0.35).applyQuaternion(bq), leftIK);
+        }
+      }
     }
-    if (want === 1 || lift > 0.02) {
-      tgt.set(-side * 0.25, 2.05, -0.05).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
-      ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, 0, -0.5).applyQuaternion(bq), lift);
-      rotateBoneWorld(B.Spine, new V(1, 0, 0).applyQuaternion(bq), -0.25 * lift);
+
+    // 5. Living secondary motion on colossal regalia (floating storm-drums & warlord cape)
+    if (backDrums) {
+      const pulse = 1 + (0.025 + 0.03 * (phase - 1) + 0.05 * windW) * Math.sin(animT * (2.6 + phase));
+      backDrums.position.y = Math.sin(animT * 2.2) * 0.028;
+      backDrums.rotation.z = Math.sin(animT * 1.4) * 0.04 + (want === 2 ? 0.08 * Math.sin(animT * 18) : 0);
+      backDrums.scale.setScalar(pulse);
     }
-    if (want === 2) {
-      tgt.set(-side * 0.1, 0.8, 0.85).multiplyScalar(root.scale.x).applyQuaternion(bq).add(root.position);
-      ik2(B.RightArm, B.RightForeArm, B.RightHand, tgt, pole.set(-side, -0.5, 0).applyQuaternion(bq), 1);
-      rotateBoneWorld(B.Spine, new V(1, 0, 0).applyQuaternion(bq), 0.4);
+    if (backCape) {
+      const billow = 0.08 + run * 0.34 + strikeW * 0.28 + Math.sin(animT * (3.2 + run * 5.5)) * (0.06 + run * 0.09);
+      backCape.rotation.x = billow;
+      backCape.rotation.z = Math.sin(animT * 2.3) * 0.05;
+    }
+
+    // 6. Boss glowing weapon trail / charge flare
+    if (weaponGlow) {
+      const basePhaseGlow = look.colossal && phase >= 2 ? 0.16 * (phase - 1) : 0;
+      const targetOp = dazed ? 0 : Math.max(basePhaseGlow, windW * 0.42 + strikeW * 0.88);
+      weaponGlow.material.opacity = targetOp;
+      weaponGlow.scale.set(1 + strikeW * 1.9, 1 + strikeW * 0.35, 1);
     }
   }
   function setFlash(f: number) { for (const m of flashMats.values()) m.emissive.setScalar(f * 0.9); }

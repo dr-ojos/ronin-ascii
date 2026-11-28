@@ -29,11 +29,79 @@ export interface OniLook {
 
 const TAU = Math.PI * 2;
 type XYZ = [number, number, number];
-const bone = new THREE.MeshStandardMaterial({ color: 0xc9baa1, roughness: 0.63 });
-const iron = new THREE.MeshStandardMaterial({ color: 0x4a4e54, metalness: 0.62, roughness: 0.49 });
-const brass = new THREE.MeshStandardMaterial({ color: 0xb19868, metalness: 0.51, roughness: 0.48 });
-const cord = new THREE.MeshStandardMaterial({ color: 0x9b8768, roughness: 0.94 });
-const recess = new THREE.MeshStandardMaterial({ color: 0x130e12, roughness: 0.87 });
+
+// High-resolution procedural PBR bump map: fine urushi lacquer woodgrain, hammered metal & micro-scratches
+const lacquerBump = (() => {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 2) {
+    const v = 122 + Math.round(Math.sin(y * 0.27) * 8 + Math.sin(y * 0.09) * 5);
+    ctx.fillStyle = `rgb(${v},${v},${v})`; ctx.fillRect(0, y, 256, 2);
+  }
+  // hammered dimples & fine battle wear
+  for (let i = 0; i < 180; i++) {
+    const x = (i * 73) % 256, y = (i * 137) % 256, r = 4 + (i % 7);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, i % 2 ? 'rgba(205,205,205,0.22)' : 'rgba(55,55,55,0.24)');
+    g.addColorStop(1, 'rgba(128,128,128,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(42,42,42,0.32)'; ctx.lineWidth = 1;
+  for (let i = 0; i < 36; i++) {
+    const x = (i * 59) % 256, y = (i * 97) % 256;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 14 + (i % 18), y + ((i % 3) - 1) * 5); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 4;
+  return tex;
+})();
+
+// High-resolution Japanese imperial brocade (kikko hexagonal & gold-threaded damask) for robes & capes
+const [brocadeTex, brocadeBump] = (() => {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d')!;
+  const b = document.createElement('canvas'); b.width = 256; b.height = 256;
+  const bctx = b.getContext('2d')!;
+  ctx.fillStyle = '#c8c4be'; ctx.fillRect(0, 0, 256, 256);
+  bctx.fillStyle = '#787878'; bctx.fillRect(0, 0, 256, 256);
+  // fine woven silk warp/weft
+  for (let i = 0; i < 256; i += 4) {
+    ctx.fillStyle = i % 8 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)';
+    ctx.fillRect(0, i, 256, 1.5); ctx.fillRect(i, 0, 1.5, 256);
+    bctx.fillStyle = i % 8 ? 'rgba(170,170,170,0.18)' : 'rgba(90,90,90,0.18)';
+    bctx.fillRect(0, i, 256, 1.5);
+  }
+  // traditional diamond-kikko gilded motif
+  const step = 32;
+  ctx.strokeStyle = 'rgba(242,216,152,0.52)'; ctx.lineWidth = 1.6;
+  bctx.strokeStyle = 'rgba(235,235,235,0.55)'; bctx.lineWidth = 2;
+  for (let y = -step; y < 256 + step; y += step) {
+    for (let x = -step; x < 256 + step; x += step) {
+      const ox = x + ((Math.round(y / step) & 1) ? step * 0.5 : 0);
+      for (const g of [ctx, bctx]) {
+        g.beginPath();
+        g.moveTo(ox, y - 12); g.lineTo(ox + 12, y); g.lineTo(ox, y + 12); g.lineTo(ox - 12, y); g.closePath();
+        g.stroke();
+      }
+      ctx.fillStyle = 'rgba(255,228,162,0.42)';
+      ctx.beginPath(); ctx.arc(ox, y, 2.4, 0, TAU); ctx.fill();
+      bctx.fillStyle = 'rgba(245,245,245,0.65)';
+      bctx.beginPath(); bctx.arc(ox, y, 2.8, 0, TAU); bctx.fill();
+    }
+  }
+  const color = new THREE.CanvasTexture(c); color.colorSpace = THREE.SRGBColorSpace;
+  color.wrapS = color.wrapT = THREE.RepeatWrapping; color.repeat.set(2, 2); color.anisotropy = 4;
+  const bump = new THREE.CanvasTexture(b);
+  bump.wrapS = bump.wrapT = THREE.RepeatWrapping; bump.repeat.set(2, 2); bump.anisotropy = 4;
+  return [color, bump] as const;
+})();
+
+const bone = new THREE.MeshStandardMaterial({ color: 0xd4c6ad, roughness: 0.52, bumpMap: lacquerBump, bumpScale: 0.006 });
+const iron = new THREE.MeshPhysicalMaterial({ color: 0x3b4048, metalness: 0.82, roughness: 0.34, clearcoat: 0.28, bumpMap: lacquerBump, bumpScale: 0.009 });
+const brass = new THREE.MeshPhysicalMaterial({ color: 0xcfa95c, metalness: 0.86, roughness: 0.26, clearcoat: 0.5, clearcoatRoughness: 0.2, bumpMap: lacquerBump, bumpScale: 0.007 });
+const cord = new THREE.MeshStandardMaterial({ color: 0x9b8768, roughness: 0.92, bumpMap: brocadeBump, bumpScale: 0.005 });
+const recess = new THREE.MeshStandardMaterial({ color: 0x100c10, roughness: 0.86 });
 const stud = new THREE.SphereGeometry(0.009, 6, 4);
 const tessellate = new TessellateModifier(0.013, 5);
 
@@ -42,7 +110,10 @@ const eyes = new Map<number, THREE.MeshBasicMaterial>();
 export function oniMask(color: number) {
   let material = masks.get(color);
   if (!material) {
-    material = new THREE.MeshPhysicalMaterial({ color, clearcoat: 0.48, roughness: 0.46, clearcoatRoughness: 0.28 });
+    material = new THREE.MeshPhysicalMaterial({
+      color, clearcoat: 0.72, roughness: 0.36, metalness: 0.14, clearcoatRoughness: 0.18,
+      bumpMap: lacquerBump, bumpScale: 0.008
+    });
     masks.set(color, material);
   }
   return material;
@@ -122,8 +193,11 @@ function inlay(g: THREE.Group, material: THREE.Material, points: [number, number
 }
 
 const coat = (look: OniLook) => new THREE.MeshStandardMaterial({
-  color: new THREE.Color(look.tint).lerp(new THREE.Color(look.mask), 0.22),
-  side: THREE.DoubleSide, roughness: 0.93
+  color: new THREE.Color(look.tint).lerp(new THREE.Color(look.mask), 0.24),
+  map: look.big || look.colossal || look.cape ? brocadeTex : undefined,
+  bumpMap: look.big || look.colossal || look.cape ? brocadeBump : undefined,
+  bumpScale: 0.012,
+  side: THREE.DoubleSide, roughness: 0.82, metalness: look.colossal ? 0.14 : 0.04
 });
 
 function carveHead(look: OniLook, mask: THREE.Material, eye: THREE.Material, cloth: THREE.Material, bright: THREE.Material) {
@@ -272,24 +346,49 @@ function carveHead(look: OniLook, mask: THREE.Material, eye: THREE.Material, clo
   return g;
 }
 
-const scales = (() => {
-  const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 128;
+// High-resolution 512x256 Japanese ō-yoroi kozane lamellar armor (color + bump relief)
+const [scales, scalesBump] = (() => {
+  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
+  const bump = document.createElement('canvas'); bump.width = 512; bump.height = 256;
+  const bctx = bump.getContext('2d')!;
+  bctx.fillStyle = '#555555'; bctx.fillRect(0, 0, 512, 256);
   for (let row = 0; row < 4; row++) {
-    const y = row * 32, wash = ctx.createLinearGradient(0, y, 0, y + 32);
-    wash.addColorStop(0, '#cac4bb'); wash.addColorStop(0.23, '#918679'); wash.addColorStop(0.87, '#524c48'); wash.addColorStop(1, '#302c2f');
-    ctx.fillStyle = wash; ctx.fillRect(0, y, 256, 32);
-    for (let x = 0; x < 256; x += 16) {
-      ctx.fillStyle = '#383334'; ctx.fillRect(x, y + 2, 1.5, 27);
-      ctx.fillStyle = '#d0ba91'; ctx.fillRect(x + 4, y + 5, 2.3, 15); ctx.fillRect(x + 9, y + 5, 2.3, 15);
+    const y = row * 64;
+    const wash = ctx.createLinearGradient(0, y, 0, y + 64);
+    wash.addColorStop(0, '#ebe3d5'); wash.addColorStop(0.14, '#bdb2a2');
+    wash.addColorStop(0.72, '#5a524e'); wash.addColorStop(0.92, '#2d282c'); wash.addColorStop(1, '#1a171b');
+    ctx.fillStyle = wash; ctx.fillRect(0, y, 512, 64);
+    // beveled plate relief in bump map
+    const bwash = bctx.createLinearGradient(0, y, 0, y + 64);
+    bwash.addColorStop(0, '#f0f0f0'); bwash.addColorStop(0.16, '#c8c8c8');
+    bwash.addColorStop(0.84, '#929292'); bwash.addColorStop(1, '#242424');
+    bctx.fillStyle = bwash; bctx.fillRect(0, y, 512, 64);
+    // gilded top rim of each lamellar row
+    ctx.fillStyle = 'rgba(236,204,132,0.58)'; ctx.fillRect(0, y + 1, 512, 3);
+    for (let x = 0; x < 512; x += 24) {
+      // deep vertical seam between kozane plates
+      ctx.fillStyle = '#241f22'; ctx.fillRect(x, y + 3, 2.5, 58);
+      bctx.fillStyle = '#1d1d1d'; bctx.fillRect(x, y + 2, 3, 60);
+      // subtle specular bevel next to seam
+      ctx.fillStyle = 'rgba(255,248,232,0.22)'; ctx.fillRect(x + 3, y + 4, 2, 52);
+      // braided silk odoshi lacing cords (twin vertical gold/cream bands + cross-tie)
+      ctx.fillStyle = '#dfca96'; ctx.fillRect(x + 7, y + 12, 3.6, 30); ctx.fillRect(x + 14, y + 12, 3.6, 30);
+      ctx.fillStyle = '#8b6a38'; ctx.fillRect(x + 7, y + 25, 10.6, 3);
+      bctx.fillStyle = '#ededed'; bctx.fillRect(x + 7, y + 12, 3.6, 30); bctx.fillRect(x + 14, y + 12, 3.6, 30);
+      // brass rivet at the top of each plate
+      ctx.fillStyle = '#f2d388'; ctx.beginPath(); ctx.arc(x + 12.5, y + 7, 2.3, 0, TAU); ctx.fill();
+      bctx.fillStyle = '#ffffff'; bctx.beginPath(); bctx.arc(x + 12.5, y + 7, 2.6, 0, TAU); bctx.fill();
     }
   }
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-  return tex;
+  const btex = new THREE.CanvasTexture(bump); btex.anisotropy = 4;
+  return [tex, btex] as const;
 })();
 
 function bodyArmor(look: OniLook, cloth: THREE.Material, lacquer: THREE.Material, lames: THREE.Material, eye: THREE.Material) {
   const chest = new THREE.Group(), belt = new THREE.Group();
+  let backDrums: THREE.Group | undefined, backCape: THREE.Group | undefined;
   const heavy = look.big || look.plated || look.colossal, bound = heavy || look.shield || look.weapon === 'spear' || look.crest === 'crescent';
   if (bound) {
     const dō = mesh(openCyl(0.248, 0.204, 0.35, -1.84, 3.68, 26), lames, chest, 0, -0.24, 0.029);
@@ -329,31 +428,33 @@ function bodyArmor(look: OniLook, cloth: THREE.Material, lacquer: THREE.Material
     }
   }
   if (look.drums) {
-    // iconic Raijin/war-god arch of 6 lacquered taiko drums suspended behind the shoulders
+    // iconic Raijin/war-god arch of 6 lacquered taiko drums suspended behind the shoulders (animated in rig.ts)
+    backDrums = new THREE.Group();
     const archR = 0.46;
-    mesh(new THREE.TorusGeometry(archR, 0.013, 6, 36, Math.PI * 1.18), brass, chest, 0, 0.06, -0.24).rotation.z = -Math.PI * 0.09;
+    mesh(new THREE.TorusGeometry(archR, 0.014, 6, 36, Math.PI * 1.18), brass, backDrums, 0, 0.06, -0.24).rotation.z = -Math.PI * 0.09;
     for (let i = 0; i < 6; i++) {
       const a = -0.14 + (i / 5) * (Math.PI + 0.28);
       const dx = Math.cos(a) * archR, dy = 0.06 + Math.sin(a) * archR;
-      const dGrp = grp(chest, dx, dy, -0.24);
+      const dGrp = grp(backDrums, dx, dy, -0.24);
       dGrp.rotation.z = a - Math.PI / 2;
-      mesh(new THREE.CylinderGeometry(0.082, 0.082, 0.072, 14), lacquer, dGrp).rotation.x = Math.PI / 2;
-      mesh(new THREE.CircleGeometry(0.074, 14), bone, dGrp, 0, 0, 0.038);
-      mesh(new THREE.CircleGeometry(0.074, 14), bone, dGrp, 0, 0, -0.038).rotation.y = Math.PI;
-      mesh(new THREE.TorusGeometry(0.082, 0.011, 5, 16), brass, dGrp, 0, 0, 0.034);
-      mesh(new THREE.OctahedronGeometry(0.024), eye, dGrp, 0, 0, 0.042).scale.z = 0.35;
+      mesh(new THREE.CylinderGeometry(0.084, 0.084, 0.074, 14), lacquer, dGrp).rotation.x = Math.PI / 2;
+      mesh(new THREE.CircleGeometry(0.076, 14), bone, dGrp, 0, 0, 0.039);
+      mesh(new THREE.CircleGeometry(0.076, 14), bone, dGrp, 0, 0, -0.039).rotation.y = Math.PI;
+      mesh(new THREE.TorusGeometry(0.084, 0.012, 5, 16), brass, dGrp, 0, 0, 0.035);
+      mesh(new THREE.OctahedronGeometry(0.025), eye, dGrp, 0, 0, 0.043).scale.z = 0.35;
     }
   }
   if (look.cape) {
-    // layered regal warlord back banners / tattered jimbaori panels flowing from the shoulders
+    // layered regal warlord back banners / tattered jimbaori panels flowing from the shoulders (animated in rig.ts)
+    backCape = new THREE.Group();
     for (let i = -2; i <= 2; i++) {
-      const w = i === 0 ? 0.14 : 0.095, len = i === 0 ? 0.95 : 0.78 - Math.abs(i) * 0.08;
+      const w = i === 0 ? 0.145 : 0.098, len = i === 0 ? 0.98 : 0.80 - Math.abs(i) * 0.08;
       const panel = new THREE.Shape();
       panel.moveTo(-w * 0.5, 0); panel.lineTo(w * 0.5, 0);
       panel.quadraticCurveTo(w * 0.65, -len * 0.55, w * 0.45, -len);
       panel.lineTo(0, -len * 0.86); panel.lineTo(-w * 0.45, -len);
       panel.quadraticCurveTo(-w * 0.65, -len * 0.55, -w * 0.5, 0);
-      const strip = mesh(new THREE.ShapeGeometry(panel), Math.abs(i) % 2 === 0 ? cloth : lacquer, chest, i * 0.105, -0.04, -0.19 - Math.abs(i) * 0.012);
+      const strip = mesh(new THREE.ShapeGeometry(panel), Math.abs(i) % 2 === 0 ? cloth : lacquer, backCape, i * 0.105, -0.04, -0.19 - Math.abs(i) * 0.012);
       strip.rotation.set(0.22 + Math.abs(i) * 0.03, i * 0.14, i * 0.06);
     }
   }
@@ -374,7 +475,7 @@ function bodyArmor(look: OniLook, cloth: THREE.Material, lacquer: THREE.Material
       flap.rotation.set(-0.19, side * 0.61, side * -0.16);
     }
   }
-  return { chest, belt };
+  return { chest, belt, backDrums, backCape };
 }
 
 // The plates are rigid relative to their bone. Merge by material so adding detail does not
@@ -400,24 +501,41 @@ function packed(group: THREE.Group) {
   return batch;
 }
 
-const costumes = new Map<string, { head: THREE.Group; chest: THREE.Group; belt: THREE.Group }>();
+const costumes = new Map<string, { head: THREE.Group; chest: THREE.Group; belt: THREE.Group; backDrums?: THREE.Group; backCape?: THREE.Group }>();
 export function oniCostume(look: OniLook) {
   const key = JSON.stringify(look);
   let outfit = costumes.get(key);
   if (!outfit) {
     const lacquer = oniMask(look.mask);
     const cloth = coat(look);
-    const bright = new THREE.MeshStandardMaterial({
+    const bright = new THREE.MeshPhysicalMaterial({
       color: lacquer.color.clone().lerp(new THREE.Color(0xcac3af), 0.23),
-      metalness: 0.26, roughness: 0.51, side: THREE.DoubleSide
+      metalness: 0.34, roughness: 0.4, clearcoat: 0.45, clearcoatRoughness: 0.24,
+      bumpMap: lacquerBump, bumpScale: 0.007, side: THREE.DoubleSide
     });
-    const lames = new THREE.MeshStandardMaterial({ map: scales, color: bright.color, side: THREE.DoubleSide, metalness: 0.24, roughness: 0.55 });
+    const lames = new THREE.MeshPhysicalMaterial({
+      map: scales, bumpMap: scalesBump, bumpScale: 0.022,
+      color: bright.color, side: THREE.DoubleSide,
+      metalness: 0.34, roughness: 0.44, clearcoat: 0.38, clearcoatRoughness: 0.26
+    });
     const eyeMat = oniEye(look.eye ?? 0xffd040);
-    const { chest, belt } = bodyArmor(look, cloth, bright, lames, eyeMat);
-    outfit = { head: packed(carveHead(look, lacquer, eyeMat, cloth, bright)), chest: packed(chest), belt: packed(belt) };
+    const { chest, belt, backDrums, backCape } = bodyArmor(look, cloth, bright, lames, eyeMat);
+    outfit = {
+      head: packed(carveHead(look, lacquer, eyeMat, cloth, bright)),
+      chest: packed(chest),
+      belt: packed(belt),
+      backDrums: backDrums ? packed(backDrums) : undefined,
+      backCape: backCape ? packed(backCape) : undefined
+    };
     costumes.set(key, outfit);
   }
-  return { head: outfit.head.clone(), chest: outfit.chest.clone(), belt: outfit.belt.clone() };
+  return {
+    head: outfit.head.clone(),
+    chest: outfit.chest.clone(),
+    belt: outfit.belt.clone(),
+    backDrums: outfit.backDrums?.clone(),
+    backCape: outfit.backCape?.clone()
+  };
 }
 
 const bow = (() => {
