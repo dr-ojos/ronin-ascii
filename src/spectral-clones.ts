@@ -1,5 +1,5 @@
 // Clones Espectrales (分身): summons 3 translucent spectral copies of the player character
-// that autonomously hunt, flank, and slash enemies for 4 seconds before dissolving into spirit embers.
+// that autonomously hunt, flank, and slash enemies for 8 seconds before dissolving into spirit embers.
 import * as THREE from 'three';
 import { rigGltf } from './assets';
 import { createRealSamurai } from './rig';
@@ -26,7 +26,7 @@ import { makeCrescentSlashMat, mandalaTex, vfxTime } from './vfx-art';
 import type { Avatar, Enemy } from './types';
 
 const COUNT = 3;
-const DURATION = 4.0;
+const DURATION = 8.0;
 const SEEK_RANGE = 18;
 const RUN_SPEED = 11.5;
 const ATTACK_DUR = 0.42;
@@ -337,7 +337,7 @@ export function updateSpectralClones(dt: number) {
   if (!active || !pool) return;
   activeTime -= dt;
 
-  // Dissolve cleanly when the 4 seconds are over
+  // Dissolve cleanly when the 8 seconds are over
   if (activeTime <= 0 || state.dead) {
     for (const c of pool) {
       c.avatar.root.visible = false;
